@@ -17,7 +17,7 @@ import lombok.EqualsAndHashCode;
 @Schema(description = "用户")
 public class User extends BaseEntity {
     
-    @ExcelProperty(value = "用户名", index = 0)
+    @ExcelProperty("用户名")
     @Schema(description = "用户名")
     private String username;
     
@@ -25,19 +25,19 @@ public class User extends BaseEntity {
     @Schema(description = "密码")
     private String password;
     
-    @ExcelProperty(value = "真实姓名", index = 1)
+    @ExcelProperty("真实姓名")
     @Schema(description = "真实姓名")
     private String realName;
     
-    @ExcelProperty(value = "身份证号", index = 2)
+    @ExcelProperty("身份证号")
     @Schema(description = "身份证号")
     private String idCard;
     
-    @ExcelProperty(value = "手机号", index = 3)
+    @ExcelProperty("手机号")
     @Schema(description = "手机号")
     private String phone;
     
-    @ExcelProperty(value = "邮箱", index = 4)
+    @ExcelProperty("邮箱")
     @Schema(description = "邮箱")
     private String email;
     
@@ -45,7 +45,7 @@ public class User extends BaseEntity {
     @Schema(description = "状态：0-禁用，1-启用")
     private Integer status;
     
-    @ExcelProperty(value = "状态", index = 5)
+    @ExcelProperty("状态")
     @TableField(exist = false)
     private String statusText;
     

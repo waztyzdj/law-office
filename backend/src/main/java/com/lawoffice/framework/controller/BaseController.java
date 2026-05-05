@@ -699,23 +699,231 @@ public class BaseController<S extends IBaseService<E>, E extends BaseEntity> {
                 return BaseResult.error("上传文件不能为空");
             }
             
-            List<E> dataList = EasyExcel.read(file.getInputStream())
-                    .head(entityClass)
-                    .sheet()
-                    .doReadSync();
+            Map<Integer, String> headMap = readExcelHeader(file);
+            List<Map<Integer, String>> dataList = readExcelData(file);
+            List<E> entities = convertMapsToEntities(dataList, headMap);
+            
+            log.info("Excel导入：读取{}行数据，成功转换{}条记录", dataList.size(), entities.size());
             
             BaseDTO<?> importDTO = new BaseDTO<>();
             importDTO.setContext(buildContext(httpRequest));
             importDTO.setRequest(httpRequest);
             importDTO.setResponse(httpResponse);
             
-            BaseResult<Integer> result = baseService.importExcel(dataList, importDTO);
+            BaseResult<Integer> result = baseService.importExcel(entities, importDTO);
             
             doAfterImport(file, result, httpRequest, httpResponse);
             return result;
         } catch (Exception e) {
             log.error("导入失败", e);
             return BaseResult.error("导入失败: " + e.getMessage());
+        }
+    }
+
+    /**
+     * 读取Excel表头（第一行）
+     */
+    private Map<Integer, String> readExcelHeader(MultipartFile file) {
+        try {
+            List<Map<Integer, String>> allData = EasyExcel.read(file.getInputStream())
+                    .sheet()
+                    .headRowNumber(0)
+                    .doReadSync();
+            
+            return allData.isEmpty() ? new java.util.HashMap<>() : allData.get(0);
+        } catch (Exception e) {
+            log.error("读取Excel表头失败", e);
+            throw new RuntimeException("读取Excel表头失败: " + e.getMessage());
+        }
+    }
+
+    /**
+     * 读取Excel数据（跳过表头）
+     */
+    private List<Map<Integer, String>> readExcelData(MultipartFile file) {
+        try {
+            return EasyExcel.read(file.getInputStream())
+                    .sheet()
+                    .headRowNumber(1)
+                    .doReadSync();
+        } catch (Exception e) {
+            log.error("读取Excel数据失败", e);
+            throw new RuntimeException("读取Excel数据失败: " + e.getMessage());
+        }
+    }
+
+    /**
+     * 将Map数据转换为实体列表
+     */
+    private List<E> convertMapsToEntities(List<Map<Integer, String>> dataList, Map<Integer, String> headMap) {
+        List<E> result = new java.util.ArrayList<>();
+        
+        if (dataList == null || dataList.isEmpty()) {
+            return result;
+        }
+        
+        Map<Integer, java.lang.reflect.Field> columnFieldMap = buildColumnFieldMap(headMap);
+        
+        for (Map<Integer, String> row : dataList) {
+            try {
+                E entity = createEntityFromRow(row, columnFieldMap);
+                if (entity != null) {
+                    result.add(entity);
+                }
+            } catch (Exception e) {
+                log.error("转换行数据失败，跳过该行", e);
+            }
+        }
+        
+        return result;
+    }
+
+    /**
+     * 从单行数据创建实体对象
+     */
+    private E createEntityFromRow(Map<Integer, String> row, Map<Integer, java.lang.reflect.Field> columnFieldMap) {
+        try {
+            E entity = entityClass.getDeclaredConstructor().newInstance();
+            
+            for (Map.Entry<Integer, java.lang.reflect.Field> entry : columnFieldMap.entrySet()) {
+                String value = row.get(entry.getKey());
+                if (value != null && !value.trim().isEmpty()) {
+                    setFieldValue(entity, entry.getValue(), value.trim());
+                }
+            }
+            
+            return entity;
+        } catch (Exception e) {
+            log.error("创建实体对象失败", e);
+            return null;
+        }
+    }
+
+    /**
+     * 构建列索引到字段的映射
+     * 支持：@ExcelProperty注解值、字段名（英文）、模糊匹配
+     */
+    private Map<Integer, java.lang.reflect.Field> buildColumnFieldMap(Map<Integer, String> headMap) {
+        Map<Integer, java.lang.reflect.Field> columnFieldMap = new java.util.HashMap<>();
+        Map<String, java.lang.reflect.Field> fieldLookupMap = buildFieldLookupMap();
+        
+        for (Map.Entry<Integer, String> entry : headMap.entrySet()) {
+            String headerName = entry.getValue();
+            if (headerName == null || headerName.trim().isEmpty()) {
+                continue;
+            }
+            
+            java.lang.reflect.Field field = matchField(headerName, fieldLookupMap);
+            if (field != null) {
+                columnFieldMap.put(entry.getKey(), field);
+            } else {
+                log.warn("列[{}]未匹配到任何字段", headerName);
+            }
+        }
+        
+        return columnFieldMap;
+    }
+
+    /**
+     * 构建字段查找表
+     */
+    private Map<String, java.lang.reflect.Field> buildFieldLookupMap() {
+        Map<String, java.lang.reflect.Field> lookupMap = new java.util.HashMap<>();
+        
+        getAllFields(entityClass).forEach(field -> {
+            field.setAccessible(true);
+            
+            String fieldNameLower = field.getName().toLowerCase();
+            lookupMap.put(fieldNameLower, field);
+            
+            if (field.isAnnotationPresent(com.alibaba.excel.annotation.ExcelProperty.class)) {
+                com.alibaba.excel.annotation.ExcelProperty excelProperty = 
+                    field.getAnnotation(com.alibaba.excel.annotation.ExcelProperty.class);
+                for (String name : excelProperty.value()) {
+                    lookupMap.put(name.toLowerCase(), field);
+                }
+            }
+        });
+        
+        return lookupMap;
+    }
+
+    /**
+     * 匹配字段（优先精确匹配，其次模糊匹配）
+     */
+    private java.lang.reflect.Field matchField(String headerName, Map<String, java.lang.reflect.Field> lookupMap) {
+        String headerLower = headerName.toLowerCase().trim();
+        
+        java.lang.reflect.Field field = lookupMap.get(headerLower);
+        
+        if (field == null) {
+            String normalizedHeader = normalizeFieldName(headerLower);
+            for (Map.Entry<String, java.lang.reflect.Field> entry : lookupMap.entrySet()) {
+                if (normalizeFieldName(entry.getKey()).equals(normalizedHeader)) {
+                    field = entry.getValue();
+                    break;
+                }
+            }
+        }
+        
+        return field;
+    }
+
+    /**
+     * 获取类的所有字段（包括父类）
+     */
+    private java.util.List<java.lang.reflect.Field> getAllFields(Class<?> clazz) {
+        java.util.List<java.lang.reflect.Field> fields = new java.util.ArrayList<>();
+        
+        Class<?> currentClass = clazz;
+        while (currentClass != null && currentClass != Object.class) {
+            for (java.lang.reflect.Field field : currentClass.getDeclaredFields()) {
+                fields.add(field);
+            }
+            currentClass = currentClass.getSuperclass();
+        }
+        
+        return fields;
+    }
+
+    /**
+     * 标准化字段名（去除特殊字符）
+     */
+    private String normalizeFieldName(String fieldName) {
+        if (fieldName == null) {
+            return "";
+        }
+        return fieldName.toLowerCase()
+                .replace("_", "")
+                .replace("-", "")
+                .replace(" ", "")
+                .trim();
+    }
+
+    /**
+     * 设置字段值（支持常见类型自动转换）
+     */
+    private void setFieldValue(Object entity, java.lang.reflect.Field field, String value) {
+        try {
+            Class<?> fieldType = field.getType();
+            
+            if (fieldType.equals(String.class)) {
+                field.set(entity, value);
+            } else if (fieldType.equals(Integer.class) || fieldType.equals(int.class)) {
+                field.set(entity, Integer.parseInt(value));
+            } else if (fieldType.equals(Long.class) || fieldType.equals(long.class)) {
+                field.set(entity, Long.parseLong(value));
+            } else if (fieldType.equals(Double.class) || fieldType.equals(double.class)) {
+                field.set(entity, Double.parseDouble(value));
+            } else if (fieldType.equals(Float.class) || fieldType.equals(float.class)) {
+                field.set(entity, Float.parseFloat(value));
+            } else if (fieldType.equals(Boolean.class) || fieldType.equals(boolean.class)) {
+                field.set(entity, Boolean.parseBoolean(value));
+            } else {
+                field.set(entity, value);
+            }
+        } catch (Exception e) {
+            log.debug("字段[{}]设置值[{}]失败: {}", field.getName(), value, e.getMessage());
         }
     }
 
