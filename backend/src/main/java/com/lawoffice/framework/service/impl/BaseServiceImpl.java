@@ -1,7 +1,5 @@
 package com.lawoffice.framework.service.impl;
 
-import com.alibaba.excel.EasyExcel;
-import com.alibaba.excel.write.style.column.LongestMatchColumnWidthStyleStrategy;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
@@ -11,40 +9,59 @@ import com.lawoffice.framework.dto.BaseResult;
 import com.lawoffice.framework.dto.RequestContext;
 import com.lawoffice.framework.entity.*;
 import com.lawoffice.framework.service.IBaseService;
-import com.lawoffice.framework.annotation.ModuleInfo;
-import io.swagger.v3.oas.annotations.media.Schema;
+import com.lawoffice.framework.util.BeanConvertUtils;
+import com.lawoffice.framework.util.EntityFillUtils;
+import com.lawoffice.framework.util.ExcelUtils;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.extern.slf4j.Slf4j;
 
-import java.io.IOException;
-import java.net.URLEncoder;
-import java.nio.charset.StandardCharsets;
-import java.time.LocalDateTime;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+/**
+ * 基础服务实现类
+ * 提供通用的 CRUD 操作实现，子类继承后可自动获得以下功能：
+ * - 列表查询（不分页）
+ * - 分页查询
+ * - 根据ID查询
+ * - 保存数据（新增或修改）
+ * - 批量保存
+ * - 删除数据（逻辑删除）
+ * - 批量删除
+ * - 导出 Excel
+ * - 导入 Excel
+ *
+ * @param <E> 实体类型，需继承 BaseEntity
+ */
 @Slf4j
 public class BaseServiceImpl<E extends BaseEntity> implements IBaseService<E> {
 
     protected final BaseMapper<E> baseMapper;
     protected Class<E> entityClass;
 
-    public BaseServiceImpl(BaseMapper<E> baseMapper, 
-                          Class<E> entityClass) {
+    /**
+     * 构造函数
+     *
+     * @param baseMapper MyBatis Mapper
+     * @param entityClass 实体类类型
+     */
+    public BaseServiceImpl(BaseMapper<E> baseMapper, Class<E> entityClass) {
         this.baseMapper = baseMapper;
         this.entityClass = entityClass;
     }
 
     /**
      * 列表查询前处理（钩子方法，子类可重写）
+     *
      * @param baseDTO 请求参数
      */
     protected void doBeforeList(BaseDTO<E> baseDTO) {
     }
-    
+
     /**
      * 查询列表（不分页）
+     *
      * @param baseDTO 请求参数，包含 queryWrapper
      * @return 查询结果列表
      */
@@ -53,16 +70,16 @@ public class BaseServiceImpl<E extends BaseEntity> implements IBaseService<E> {
     public BaseResult<List<E>> list(BaseDTO<E> baseDTO) {
         try {
             doBeforeList(baseDTO);
-            
+
             QueryWrapper<E> wrapper = (QueryWrapper<E>) baseDTO.getQueryWrapper();
             if (wrapper == null) {
                 wrapper = new QueryWrapper<>();
             }
-            
+
             wrapper.eq("delete_flag", 0);
-            
+
             List<E> list = baseMapper.selectList(wrapper);
-            
+
             doAfterList(baseDTO, list);
             return BaseResult.success(list);
         } catch (Exception e) {
@@ -73,6 +90,7 @@ public class BaseServiceImpl<E extends BaseEntity> implements IBaseService<E> {
 
     /**
      * 列表查询后处理（钩子方法，子类可重写）
+     *
      * @param baseDTO 请求参数
      * @param list 查询结果列表
      */
@@ -81,6 +99,7 @@ public class BaseServiceImpl<E extends BaseEntity> implements IBaseService<E> {
 
     /**
      * 分页查询前处理（钩子方法，子类可重写）
+     *
      * @param basePageDTO 分页请求参数
      */
     protected void doBeforePage(BasePageDTO<E> basePageDTO) {
@@ -88,6 +107,7 @@ public class BaseServiceImpl<E extends BaseEntity> implements IBaseService<E> {
 
     /**
      * 分页查询列表
+     *
      * @param basePageDTO 分页请求参数
      * @return 查询结果，包含 records 和 total
      */
@@ -96,22 +116,21 @@ public class BaseServiceImpl<E extends BaseEntity> implements IBaseService<E> {
     public BaseResult<Map<String, Object>> page(BasePageDTO<E> basePageDTO) {
         try {
             doBeforePage(basePageDTO);
-            
+
             QueryWrapper<E> wrapper = (QueryWrapper<E>) basePageDTO.getQueryWrapper();
             if (wrapper == null) {
                 wrapper = new QueryWrapper<>();
             }
-            
-            // 在已有条件基础上添加 delete_flag
+
             wrapper.eq("delete_flag", 0);
-            
+
             Page<E> page = new Page<>(basePageDTO.getPageNum(), basePageDTO.getPageSize());
             Page<E> resultPage = baseMapper.selectPage(page, wrapper);
-            
+
             Map<String, Object> data = new HashMap<>();
             data.put("records", resultPage.getRecords());
             data.put("total", resultPage.getTotal());
-            
+
             doAfterPage(basePageDTO, data);
             return BaseResult.success(data);
         } catch (Exception e) {
@@ -122,6 +141,7 @@ public class BaseServiceImpl<E extends BaseEntity> implements IBaseService<E> {
 
     /**
      * 分页查询后处理（钩子方法，子类可重写）
+     *
      * @param basePageDTO 分页请求参数
      * @param data 查询结果数据
      */
@@ -130,6 +150,7 @@ public class BaseServiceImpl<E extends BaseEntity> implements IBaseService<E> {
 
     /**
      * 保存前处理（钩子方法，子类可重写）
+     *
      * @param saveDTO 保存请求参数
      */
     protected void doBeforeSave(BaseDTO<E> saveDTO) {
@@ -137,6 +158,7 @@ public class BaseServiceImpl<E extends BaseEntity> implements IBaseService<E> {
 
     /**
      * 保存数据（新增或修改）
+     *
      * @param saveDTO 保存请求参数，包含数据和上下文信息
      * @return 保存后的实体对象
      */
@@ -146,18 +168,18 @@ public class BaseServiceImpl<E extends BaseEntity> implements IBaseService<E> {
             doBeforeSave(saveDTO);
             E requestData = saveDTO.getEntity();
             RequestContext context = saveDTO.getContext();
-            
-            E entity = convertToEntity(requestData);
-            
+
+            E entity = BeanConvertUtils.convert(requestData, entityClass);
+
             boolean isCreate = entity.getId() == null || entity.getId().isEmpty();
-            fillEntity(entity, context, isCreate);
-            
+            EntityFillUtils.fillAuditFields(entity, context, isCreate);
+
             if (isCreate) {
                 baseMapper.insert(entity);
             } else {
                 baseMapper.updateById(entity);
             }
-            
+
             doAfterSave(saveDTO, entity);
             return BaseResult.success(entity);
         } catch (Exception e) {
@@ -168,6 +190,7 @@ public class BaseServiceImpl<E extends BaseEntity> implements IBaseService<E> {
 
     /**
      * 保存后处理（钩子方法，子类可重写）
+     *
      * @param saveDTO 保存请求参数
      * @param entity 保存后的实体对象
      */
@@ -176,6 +199,7 @@ public class BaseServiceImpl<E extends BaseEntity> implements IBaseService<E> {
 
     /**
      * 根据ID查询前处理（钩子方法，子类可重写）
+     *
      * @param idDTO 包含ID的请求参数
      */
     protected void doBeforeGetById(BaseDTO<E> idDTO) {
@@ -183,6 +207,7 @@ public class BaseServiceImpl<E extends BaseEntity> implements IBaseService<E> {
 
     /**
      * 根据ID查询单个实体
+     *
      * @param idDTO 包含ID的请求参数
      * @return 查询到的实体对象
      */
@@ -190,22 +215,22 @@ public class BaseServiceImpl<E extends BaseEntity> implements IBaseService<E> {
     public BaseResult<E> getById(BaseDTO<E> idDTO) {
         try {
             doBeforeGetById(idDTO);
-            
+
             String id = idDTO.getId();
             if (id == null || id.isEmpty()) {
                 return BaseResult.error("ID不能为空");
             }
-            
+
             E entity = baseMapper.selectById(id);
-            
+
             if (entity == null) {
                 return BaseResult.error("数据不存在");
             }
-            
+
             if (entity.getDeleteFlag() != null && entity.getDeleteFlag() == 1) {
                 return BaseResult.error("数据已被删除");
             }
-            
+
             doAfterGetById(idDTO, entity);
             return BaseResult.success(entity);
         } catch (Exception e) {
@@ -216,6 +241,7 @@ public class BaseServiceImpl<E extends BaseEntity> implements IBaseService<E> {
 
     /**
      * 根据ID查询后处理（钩子方法，子类可重写）
+     *
      * @param idDTO 包含ID的请求参数
      * @param entity 查询到的实体对象
      */
@@ -224,6 +250,7 @@ public class BaseServiceImpl<E extends BaseEntity> implements IBaseService<E> {
 
     /**
      * 批量保存前处理（钩子方法，子类可重写）
+     *
      * @param batchSaveDTO 批量保存请求参数
      */
     protected void doBeforeBatchSave(BaseDTO<E> batchSaveDTO) {
@@ -231,6 +258,7 @@ public class BaseServiceImpl<E extends BaseEntity> implements IBaseService<E> {
 
     /**
      * 批量保存数据
+     *
      * @param batchSaveDTO 批量保存请求参数，包含实体列表和上下文信息
      * @return 保存后的实体列表
      */
@@ -238,30 +266,30 @@ public class BaseServiceImpl<E extends BaseEntity> implements IBaseService<E> {
     public BaseResult<List<E>> batchSave(BaseDTO<E> batchSaveDTO) {
         try {
             doBeforeBatchSave(batchSaveDTO);
-            
+
             List<E> dataList = batchSaveDTO.getEntityList();
             if (dataList == null || dataList.isEmpty()) {
                 return BaseResult.error("保存数据不能为空");
             }
-            
+
             RequestContext context = batchSaveDTO.getContext();
             List<E> savedEntities = new java.util.ArrayList<>();
-            
+
             for (E requestData : dataList) {
-                E entity = convertToEntity(requestData);
-                
+                E entity = BeanConvertUtils.convert(requestData, entityClass);
+
                 boolean isCreate = entity.getId() == null || entity.getId().isEmpty();
-                fillEntity(entity, context, isCreate);
-                
+                EntityFillUtils.fillAuditFields(entity, context, isCreate);
+
                 if (isCreate) {
                     baseMapper.insert(entity);
                 } else {
                     baseMapper.updateById(entity);
                 }
-                
+
                 savedEntities.add(entity);
             }
-            
+
             doAfterBatchSave(batchSaveDTO, savedEntities);
             return BaseResult.success(savedEntities);
         } catch (Exception e) {
@@ -272,6 +300,7 @@ public class BaseServiceImpl<E extends BaseEntity> implements IBaseService<E> {
 
     /**
      * 批量保存后处理（钩子方法，子类可重写）
+     *
      * @param batchSaveDTO 批量保存请求参数
      * @param entities 保存后的实体列表
      */
@@ -280,13 +309,15 @@ public class BaseServiceImpl<E extends BaseEntity> implements IBaseService<E> {
 
     /**
      * 删除前处理（钩子方法，子类可重写）
+     *
      * @param deleteDTO 删除请求参数
      */
     protected void doBeforeDelete(BaseDTO<E> deleteDTO) {
     }
-    
+
     /**
      * 删除单个数据（逻辑删除）
+     *
      * @param deleteDTO 删除请求参数，包含ID和上下文信息
      * @return 删除结果
      */
@@ -299,17 +330,15 @@ public class BaseServiceImpl<E extends BaseEntity> implements IBaseService<E> {
                 return BaseResult.error("ID不能为空");
             }
 
-            String deleteBy = deleteDTO.getContext() != null ? 
+            String deleteBy = deleteDTO.getContext() != null ?
                     deleteDTO.getContext().getUsername() : "system";
-            
+
             E entity = entityClass.getDeclaredConstructor().newInstance();
             entity.setId(id);
-            entity.setDeleteFlag(1);
-            entity.setDeleteTime(LocalDateTime.now());
-            entity.setDeleteBy(deleteBy);
-            
+            EntityFillUtils.fillDeleteFields(entity, deleteBy);
+
             baseMapper.updateById(entity);
-            
+
             doAfterDelete(deleteDTO);
             return BaseResult.success();
         } catch (Exception e) {
@@ -317,16 +346,18 @@ public class BaseServiceImpl<E extends BaseEntity> implements IBaseService<E> {
             return BaseResult.error("删除失败: " + e.getMessage());
         }
     }
-    
+
     /**
      * 删除后处理（钩子方法，子类可重写）
+     *
      * @param deleteDTO 删除请求参数
      */
     protected void doAfterDelete(BaseDTO<E> deleteDTO) {
     }
-    
+
     /**
      * 批量删除数据（逻辑删除）
+     *
      * @param deleteDTO 批量删除请求参数，包含ID列表和上下文信息
      * @return 删除结果
      */
@@ -338,23 +369,21 @@ public class BaseServiceImpl<E extends BaseEntity> implements IBaseService<E> {
             if (ids == null || ids.isEmpty()) {
                 return BaseResult.error("删除ID列表不能为空");
             }
-            
-            String deleteBy = deleteDTO.getContext() != null ? 
+
+            String deleteBy = deleteDTO.getContext() != null ?
                     deleteDTO.getContext().getUsername() : "system";
-            
+
             for (String id : ids) {
                 try {
                     E entity = entityClass.getDeclaredConstructor().newInstance();
                     entity.setId(id);
-                    entity.setDeleteFlag(1);
-                    entity.setDeleteTime(LocalDateTime.now());
-                    entity.setDeleteBy(deleteBy);
+                    EntityFillUtils.fillDeleteFields(entity, deleteBy);
                     baseMapper.updateById(entity);
                 } catch (Exception e) {
                     log.error("删除ID {} 失败", id, e);
                 }
             }
-            
+
             doAfterDelete(deleteDTO);
             return BaseResult.success();
         } catch (Exception e) {
@@ -365,6 +394,7 @@ public class BaseServiceImpl<E extends BaseEntity> implements IBaseService<E> {
 
     /**
      * 导出前处理（钩子方法，子类可重写）
+     *
      * @param response HTTP 响应对象
      * @param baseDTO 查询条件
      */
@@ -373,6 +403,7 @@ public class BaseServiceImpl<E extends BaseEntity> implements IBaseService<E> {
 
     /**
      * 导出数据为 Excel
+     *
      * @param response HTTP 响应对象
      * @param baseDTO 查询条件
      */
@@ -385,62 +416,23 @@ public class BaseServiceImpl<E extends BaseEntity> implements IBaseService<E> {
             if (queryWrapper == null) {
                 queryWrapper = new QueryWrapper<>();
             }
-            
+
             queryWrapper.eq("delete_flag", 0);
 
             List<E> list = baseMapper.selectList(queryWrapper);
-            
-            // 获取导出文件名
-            String fileName = getExportFileName();
 
-            // 先设置响应头，再写入数据
-            response.setContentType("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
-            response.setCharacterEncoding("utf-8");
-            response.setHeader("Content-Disposition", "attachment;filename=" + java.net.URLEncoder.encode(fileName, "UTF-8") + ".xlsx");
-            response.setHeader("Access-Control-Expose-Headers", "Content-Disposition");
-
-            // 使用 EasyExcel 导出，只导出有 @ExcelProperty 注解的字段
-            EasyExcel.write(response.getOutputStream(), entityClass)
-                    .registerWriteHandler(new LongestMatchColumnWidthStyleStrategy())
-                    .excludeColumnFieldNames(getExcludedFields())  // 排除没有 @ExcelProperty 的字段
-                    .sheet("数据")
-                    .doWrite(list);
-            
-            // 刷新输出流
-            response.getOutputStream().flush();
+            ExcelUtils.export(response, list, entityClass);
 
             doAfterExport(response, baseDTO, list.size());
-        } catch (IOException e) {
+        } catch (Exception e) {
             log.error("导出Excel失败", e);
             throw new RuntimeException("导出Excel失败: " + e.getMessage());
         }
     }
 
     /**
-     * 获取需要排除的字段列表（没有 @ExcelProperty 注解的字段）
-     * @return 需要排除的字段名列表
-     */
-    protected java.util.Set<String> getExcludedFields() {
-        java.util.Set<String> excludedFields = new java.util.HashSet<>();
-        
-        // 遍历实体类及其父类的所有字段
-        Class<?> clazz = entityClass;
-        while (clazz != null && clazz != Object.class) {
-            java.lang.reflect.Field[] fields = clazz.getDeclaredFields();
-            for (java.lang.reflect.Field field : fields) {
-                // 如果字段没有 @ExcelProperty 注解，则添加到排除列表
-                if (!field.isAnnotationPresent(com.alibaba.excel.annotation.ExcelProperty.class)) {
-                    excludedFields.add(field.getName());
-                }
-            }
-            clazz = clazz.getSuperclass();
-        }
-        
-        return excludedFields;
-    }
-
-    /**
      * 导出后处理（钩子方法，子类可重写）
+     *
      * @param response HTTP 响应对象
      * @param baseDTO 查询条件
      * @param count 导出数量
@@ -449,26 +441,8 @@ public class BaseServiceImpl<E extends BaseEntity> implements IBaseService<E> {
     }
 
     /**
-     * 获取导出文件名（子类可重写）
-     * 默认从实体类的 @Schema 注解中获取描述作为文件名
-     * @return 文件名
-     */
-    protected String getExportFileName() {
-        Schema schema = entityClass.getAnnotation(Schema.class);
-        if (schema != null && !schema.description().isEmpty()) {
-            return schema.description();
-        }
-        
-        ModuleInfo moduleInfo = entityClass.getAnnotation(ModuleInfo.class);
-        if (moduleInfo != null && !moduleInfo.name().isEmpty()) {
-            return moduleInfo.name();
-        }
-        
-        return "export";
-    }
-
-    /**
      * 导入前处理（钩子方法，子类可重写）
+     *
      * @param dataList 导入的数据列表
      * @param importDTO 导入请求参数
      */
@@ -477,6 +451,7 @@ public class BaseServiceImpl<E extends BaseEntity> implements IBaseService<E> {
 
     /**
      * 从 Excel 导入数据
+     *
      * @param dataList Excel 中的数据列表
      * @param importDTO 导入请求参数
      * @return 成功导入的数量
@@ -491,9 +466,9 @@ public class BaseServiceImpl<E extends BaseEntity> implements IBaseService<E> {
 
             for (E requestData : dataList) {
                 try {
-                    E entity = convertToEntity(requestData);
+                    E entity = BeanConvertUtils.convert(requestData, entityClass);
                     boolean isCreate = entity.getId() == null || entity.getId().isEmpty();
-                    fillEntity(entity, context, isCreate);
+                    EntityFillUtils.fillAuditFields(entity, context, isCreate);
 
                     if (isCreate) {
                         baseMapper.insert(entity);
@@ -516,70 +491,11 @@ public class BaseServiceImpl<E extends BaseEntity> implements IBaseService<E> {
 
     /**
      * 导入后处理（钩子方法，子类可重写）
+     *
      * @param dataList 导入的数据列表
      * @param importDTO 导入请求参数
      * @param successCount 成功导入数量
      */
     protected void doAfterImport(List<E> dataList, BaseDTO<?> importDTO, int successCount) {
-    }
-
-    /**
-     * 将实体列表转换为 DTO 列表
-     * @param entities 实体列表
-     * @return DTO 列表
-     */
-    protected List<E> convertToDTOList(List<E> entities) {
-        return entities.stream()
-                .map(this::convertToDTO)
-                .toList();
-    }
-
-    /**
-     * 将实体转换为 DTO
-     * @param entity 实体对象
-     * @return DTO 对象
-     */
-    protected E convertToDTO(E entity) {
-        try {
-            E dto = entityClass.getDeclaredConstructor().newInstance();
-            org.springframework.beans.BeanUtils.copyProperties(entity, dto);
-            return dto;
-        } catch (Exception e) {
-            throw new RuntimeException("DTO转换失败", e);
-        }
-    }
-
-    /**
-     * 将请求DTO转换为实体对象
-     * @param requestData 请求数据
-     * @return 实体对象
-     */
-    protected E convertToEntity(E requestData) {
-        try {
-            E entity = entityClass.getDeclaredConstructor().newInstance();
-            org.springframework.beans.BeanUtils.copyProperties(requestData, entity);
-            return entity;
-        } catch (Exception e) {
-            throw new RuntimeException("实体转换失败", e);
-        }
-    }
-
-    /**
-     * 填充实体对象的审计字段
-     * @param entity 实体对象
-     * @param context 请求上下文
-     * @param isCreate 是否为新增操作
-     */
-    protected void fillEntity(E entity, RequestContext context, boolean isCreate) {
-        if (isCreate) {
-            entity.setCreateTime(LocalDateTime.now());
-            entity.setCreateBy(context.getUsername());
-        } else {
-            entity.setUpdateTime(LocalDateTime.now());
-            entity.setUpdateBy(context.getUsername());
-        }
-        if (entity.getDeleteFlag() == null) {
-            entity.setDeleteFlag(0);
-        }
     }
 }

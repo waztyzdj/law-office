@@ -2,7 +2,6 @@ package com.lawoffice.system.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.lawoffice.framework.dto.BaseDTO;
-import com.lawoffice.framework.dto.RequestContext;
 import com.lawoffice.framework.service.impl.BaseServiceImpl;
 import com.lawoffice.system.entity.User;
 import com.lawoffice.system.mapper.UserMapper;
@@ -29,31 +28,12 @@ public class UserServiceImpl extends BaseServiceImpl<User> implements IUserServi
     }
 
     @Override
-    protected void fillEntity(User entity, RequestContext context, boolean isCreate) {
-        if (isCreate) {
-            entity.setCreateTime(java.time.LocalDateTime.now());
-            entity.setCreateBy(context.getUsername());
-            if (StringUtils.hasText(entity.getPassword())) {
-                entity.setPassword(passwordEncoder.encode(entity.getPassword()));
-            }
-            if (entity.getStatus() == null) {
-                entity.setStatus(1);
-            }
-        } else {
-            entity.setUpdateTime(java.time.LocalDateTime.now());
-            entity.setUpdateBy(context.getUsername());
-            if (StringUtils.hasText(entity.getPassword())) {
-                entity.setPassword(passwordEncoder.encode(entity.getPassword()));
-            }
-        }
-        if (entity.getDeleteFlag() == null) {
-            entity.setDeleteFlag(0);
-        }
-    }
-
-    @Override
     protected void doBeforeSave(BaseDTO<User> saveDTO) {
         User user = saveDTO.getEntity();
+        
+        if (user == null) {
+            return;
+        }
         
         if (user.getId() == null || user.getId().isEmpty()) {
             log.info("新增用户，用户名: {}", user.getUsername());
@@ -82,8 +62,20 @@ public class UserServiceImpl extends BaseServiceImpl<User> implements IUserServi
                     throw new RuntimeException("身份证号已被使用");
                 }
             }
+            
+            if (StringUtils.hasText(user.getPassword())) {
+                user.setPassword(passwordEncoder.encode(user.getPassword()));
+            }
+            
+            if (user.getStatus() == null) {
+                user.setStatus(1);
+            }
         } else {
             log.info("修改用户，用户ID: {}", user.getId());
+            
+            if (StringUtils.hasText(user.getPassword())) {
+                user.setPassword(passwordEncoder.encode(user.getPassword()));
+            }
         }
     }
 
