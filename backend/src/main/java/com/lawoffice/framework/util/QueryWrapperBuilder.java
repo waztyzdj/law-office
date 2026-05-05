@@ -1,125 +1,127 @@
 package com.lawoffice.framework.util;
 
+import cn.hutool.core.util.StrUtil;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
-import com.lawoffice.framework.util.StringConvertUtils;
+import lombok.extern.slf4j.Slf4j;
 
-import java.util.List;
 import java.util.Map;
 
 /**
- * QueryWrapper构建工具类
- * 支持从Map参数自动构建查询条件
+ * MyBatis Plus QueryWrapper 构建工具类
  */
+@Slf4j
 public class QueryWrapperBuilder {
 
     /**
-     * 根据queryParams构建QueryWrapper
-     * 支持的操作符后缀：_like, _eq, _ne, _gt, _ge, _lt, _le, _in, _between
-     * 
-     * @param queryParams 查询参数Map（驼峰命名）
-     * @param <T> 实体类型
-     * @return QueryWrapper
+     * 根据查询参数构建 QueryWrapper
      */
     public static <T> QueryWrapper<T> build(Map<String, Object> queryParams) {
-        QueryWrapper<T> wrapper = new QueryWrapper<>();
-        
         if (queryParams == null || queryParams.isEmpty()) {
-            return wrapper;
+            return new QueryWrapper<>();
         }
-        
-        String orderByField = null;
-        String orderDirection = null;
-        
+
+        QueryWrapper<T> wrapper = new QueryWrapper<>();
+
         for (Map.Entry<String, Object> entry : queryParams.entrySet()) {
             String key = entry.getKey();
             Object value = entry.getValue();
-            
-            if (value == null || (value instanceof String && ((String) value).isEmpty())) {
+
+            if (value == null || (value instanceof String && StrUtil.isBlank((String) value))) {
                 continue;
             }
-            
-            if ("_orderBy".equals(key)) {
-                orderByField = value.toString();
+
+            if ("orderBy".equals(key)) {
+                applyOrderBy(wrapper, value);
                 continue;
             }
-            
-            if ("_orderDirection".equals(key)) {
-                orderDirection = value.toString();
-                continue;
+
+            if (key.contains("_")) {
+                int lastUnderscore = key.lastIndexOf('_');
+                String fieldName = key.substring(0, lastUnderscore);
+                String operator = key.substring(lastUnderscore + 1);
+                
+                String dbFieldName = camelToSnake(fieldName);
+                
+                applyCondition(wrapper, dbFieldName, operator, value);
+            } else {
+                String dbFieldName = camelToSnake(key);
+                wrapper.eq(dbFieldName, value);
             }
-            
-            applyCondition(wrapper, key, value);
         }
-        
-        applyOrderBy(wrapper, orderByField, orderDirection);
-        
+
         return wrapper;
     }
 
     /**
-     * 应用单个查询条件
+     * 应用排序
      */
-    @SuppressWarnings("unchecked")
-    private static <T> void applyCondition(QueryWrapper<T> wrapper, String key, Object value) {
-        if (key.endsWith("_like")) {
-            String field = StringConvertUtils.camelToSnake(key.substring(0, key.length() - 5));
-            wrapper.like(field, value);
-        } else if (key.endsWith("_eq")) {
-            String field = StringConvertUtils.camelToSnake(key.substring(0, key.length() - 3));
-            wrapper.eq(field, value);
-        } else if (key.endsWith("_ne")) {
-            String field = StringConvertUtils.camelToSnake(key.substring(0, key.length() - 3));
-            wrapper.ne(field, value);
-        } else if (key.endsWith("_gt")) {
-            String field = StringConvertUtils.camelToSnake(key.substring(0, key.length() - 3));
-            wrapper.gt(field, value);
-        } else if (key.endsWith("_ge")) {
-            String field = StringConvertUtils.camelToSnake(key.substring(0, key.length() - 3));
-            wrapper.ge(field, value);
-        } else if (key.endsWith("_lt")) {
-            String field = StringConvertUtils.camelToSnake(key.substring(0, key.length() - 3));
-            wrapper.lt(field, value);
-        } else if (key.endsWith("_le")) {
-            String field = StringConvertUtils.camelToSnake(key.substring(0, key.length() - 3));
-            wrapper.le(field, value);
-        } else if (key.endsWith("_in")) {
-            String field = StringConvertUtils.camelToSnake(key.substring(0, key.length() - 3));
-            if (value instanceof List) {
-                wrapper.in(field, (List<?>) value);
-            }
-        } else if (key.endsWith("_between")) {
-            String field = StringConvertUtils.camelToSnake(key.substring(0, key.length() - 8));
-            if (value instanceof List && ((List<?>) value).size() == 2) {
-                List<?> values = (List<?>) value;
-                wrapper.between(field, values.get(0), values.get(1));
+    private static <T> void applyOrderBy(QueryWrapper<T> wrapper, Object orderByValue) {
+        if (orderByValue instanceof String) {
+            String orderBy = (String) orderByValue;
+            if (orderBy.startsWith("-")) {
+                String field = camelToSnake(orderBy.substring(1));
+                wrapper.orderByDesc(field);
+            } else {
+                String field = camelToSnake(orderBy);
+                wrapper.orderByAsc(field);
             }
         }
     }
 
     /**
-     * 应用排序条件
+     * 应用查询条件
      */
-    public static <T> void applyOrderBy(QueryWrapper<T> wrapper, String orderByField, String orderDirection) {
-        if (orderByField == null || orderByField.isEmpty()) {
-            return;
+    @SuppressWarnings("unchecked")
+    private static <T> void applyCondition(QueryWrapper<T> wrapper, String field, String operator, Object value) {
+        switch (operator.toLowerCase()) {
+            case "like":
+                wrapper.like(field, value);
+                break;
+            case "eq":
+                wrapper.eq(field, value);
+                break;
+            case "ne":
+                wrapper.ne(field, value);
+                break;
+            case "gt":
+                wrapper.gt(field, value);
+                break;
+            case "ge":
+                wrapper.ge(field, value);
+                break;
+            case "lt":
+                wrapper.lt(field, value);
+                break;
+            case "le":
+                wrapper.le(field, value);
+                break;
+            case "in":
+                if (value instanceof String) {
+                    String[] values = ((String) value).split(",");
+                    wrapper.in(field, (Object[]) values);
+                }
+                break;
+            case "between":
+                if (value instanceof String) {
+                    String[] values = ((String) value).split(",");
+                    if (values.length == 2) {
+                        wrapper.between(field, values[0], values[1]);
+                    }
+                }
+                break;
+            default:
+                wrapper.eq(field, value);
+                break;
         }
-        
-        String[] fields = orderByField.split(",");
-        String[] directions = orderDirection != null ? orderDirection.split(",") : new String[]{"ASC"};
-        
-        for (int i = 0; i < fields.length; i++) {
-            String field = StringConvertUtils.camelToSnake(fields[i].trim());
-            String direction = i < directions.length ? directions[i].trim().toUpperCase() : "ASC";
-            
-            if (!"ASC".equals(direction) && !"DESC".equals(direction)) {
-                direction = "ASC";
-            }
-            
-            if ("DESC".equals(direction)) {
-                wrapper.orderByDesc(field);
-            } else {
-                wrapper.orderByAsc(field);
-            }
+    }
+
+    /**
+     * 驼峰转蛇形命名
+     */
+    private static String camelToSnake(String camelCase) {
+        if (StrUtil.isBlank(camelCase)) {
+            return camelCase;
         }
+        return StrUtil.toUnderlineCase(camelCase);
     }
 }

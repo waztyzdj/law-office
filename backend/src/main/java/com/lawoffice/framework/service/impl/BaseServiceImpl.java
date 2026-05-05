@@ -1,5 +1,6 @@
 package com.lawoffice.framework.service.impl;
 
+import cn.hutool.core.bean.BeanUtil;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
@@ -9,7 +10,6 @@ import com.lawoffice.framework.dto.BaseResult;
 import com.lawoffice.framework.dto.RequestContext;
 import com.lawoffice.framework.entity.*;
 import com.lawoffice.framework.service.IBaseService;
-import com.lawoffice.framework.util.BeanConvertUtils;
 import com.lawoffice.framework.util.EntityFillUtils;
 import com.lawoffice.framework.util.ExcelUtils;
 import jakarta.servlet.http.HttpServletResponse;
@@ -168,18 +168,18 @@ public class BaseServiceImpl<E extends BaseEntity> implements IBaseService<E> {
             doBeforeSave(saveDTO);
             E requestData = saveDTO.getEntity();
             RequestContext context = saveDTO.getContext();
-
-            E entity = BeanConvertUtils.convert(requestData, entityClass);
-
+            
+            E entity = BeanUtil.copyProperties(requestData, entityClass);
+            
             boolean isCreate = entity.getId() == null || entity.getId().isEmpty();
             EntityFillUtils.fillAuditFields(entity, context, isCreate);
-
+            
             if (isCreate) {
                 baseMapper.insert(entity);
             } else {
                 baseMapper.updateById(entity);
             }
-
+            
             doAfterSave(saveDTO, entity);
             return BaseResult.success(entity);
         } catch (Exception e) {
@@ -266,30 +266,30 @@ public class BaseServiceImpl<E extends BaseEntity> implements IBaseService<E> {
     public BaseResult<List<E>> batchSave(BaseDTO<E> batchSaveDTO) {
         try {
             doBeforeBatchSave(batchSaveDTO);
-
+            
             List<E> dataList = batchSaveDTO.getEntityList();
             if (dataList == null || dataList.isEmpty()) {
                 return BaseResult.error("保存数据不能为空");
             }
-
+            
             RequestContext context = batchSaveDTO.getContext();
             List<E> savedEntities = new java.util.ArrayList<>();
-
+            
             for (E requestData : dataList) {
-                E entity = BeanConvertUtils.convert(requestData, entityClass);
-
+                E entity = BeanUtil.copyProperties(requestData, entityClass);
+                
                 boolean isCreate = entity.getId() == null || entity.getId().isEmpty();
                 EntityFillUtils.fillAuditFields(entity, context, isCreate);
-
+                
                 if (isCreate) {
                     baseMapper.insert(entity);
                 } else {
                     baseMapper.updateById(entity);
                 }
-
+                
                 savedEntities.add(entity);
             }
-
+            
             doAfterBatchSave(batchSaveDTO, savedEntities);
             return BaseResult.success(savedEntities);
         } catch (Exception e) {
@@ -466,7 +466,7 @@ public class BaseServiceImpl<E extends BaseEntity> implements IBaseService<E> {
 
             for (E requestData : dataList) {
                 try {
-                    E entity = BeanConvertUtils.convert(requestData, entityClass);
+                    E entity = BeanUtil.copyProperties(requestData, entityClass);
                     boolean isCreate = entity.getId() == null || entity.getId().isEmpty();
                     EntityFillUtils.fillAuditFields(entity, context, isCreate);
 
