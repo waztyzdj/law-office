@@ -77,15 +77,14 @@ public class AuthController {
 
             Map<String, Object> claims = new HashMap<>();
             claims.put("userId", user.getId());
-            claims.put("realName", user.getRealName());
-            claims.put("tenantId", user.getTenantId());
+            claims.put("realName", user.getRealname());
 
             String token = jwtUtil.generateToken(username, claims);
 
             Map<String, Object> result = new HashMap<>();
             result.put("token", token);
             result.put("username", user.getUsername());
-            result.put("realName", user.getRealName());
+            result.put("realName", user.getRealname());
 
             log.info("用户登录成功：{}", username);
             return BaseResult.success(result);
