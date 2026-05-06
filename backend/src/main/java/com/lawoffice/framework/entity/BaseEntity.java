@@ -9,8 +9,6 @@ import java.time.LocalDateTime;
 public class BaseEntity implements Serializable {
     
     private String id;
-
-    private String tenantId;
     
     private LocalDateTime createTime;
     
