@@ -5,7 +5,7 @@ import org.jasypt.encryption.pbe.config.SimpleStringPBEConfig;
 
 import java.util.Scanner;
 
-public class PasswordEncryptorUtil {
+public class PasswordEncryptorUtils {
 
     public static void main(String[] args) {
         Scanner scanner = new Scanner(System.in);

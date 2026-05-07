@@ -7,8 +7,8 @@ import com.lawoffice.framework.dto.QueryParams;
 import com.lawoffice.framework.entity.*;
 import com.lawoffice.framework.service.IBaseService;
 import com.lawoffice.framework.annotation.ModuleInfo;
-import com.lawoffice.framework.util.ExcelUtils;
-import com.lawoffice.framework.util.QueryWrapperBuilder;
+import com.lawoffice.util.ExcelUtils;
+import com.lawoffice.framework.util.QueryWrapperBuilderUtils;
 import com.lawoffice.framework.util.RequestContextUtils;
 import io.swagger.v3.oas.annotations.Operation;
 import lombok.Setter;
@@ -139,7 +139,7 @@ public class BaseController<S extends IBaseService<E>, E extends BaseEntity> {
             initBaseDTO(baseDTO, httpRequest, httpResponse);
 
             if (queryParams != null && queryParams.getQueryParams() != null && !queryParams.getQueryParams().isEmpty()) {
-                baseDTO.setQueryWrapper(QueryWrapperBuilder.build(queryParams.getQueryParams()));
+                baseDTO.setQueryWrapper(QueryWrapperBuilderUtils.build(queryParams.getQueryParams()));
             }
 
             doBeforeList(baseDTO, httpRequest, httpResponse);
@@ -201,7 +201,7 @@ public class BaseController<S extends IBaseService<E>, E extends BaseEntity> {
             initBaseDTO(basePageDTO, httpRequest, httpResponse);
 
             if (queryParams != null && queryParams.getQueryParams() != null && !queryParams.getQueryParams().isEmpty()) {
-                basePageDTO.setQueryWrapper(QueryWrapperBuilder.build(queryParams.getQueryParams()));
+                basePageDTO.setQueryWrapper(QueryWrapperBuilderUtils.build(queryParams.getQueryParams()));
             }
 
             doBeforePage(basePageDTO, httpRequest, httpResponse);
@@ -584,7 +584,7 @@ public class BaseController<S extends IBaseService<E>, E extends BaseEntity> {
             initBaseDTO(baseDTO, httpRequest, httpResponse);
 
             if (queryParams != null && queryParams.getQueryParams() != null && !queryParams.getQueryParams().isEmpty()) {
-                baseDTO.setQueryWrapper(QueryWrapperBuilder.build(queryParams.getQueryParams()));
+                baseDTO.setQueryWrapper(QueryWrapperBuilderUtils.build(queryParams.getQueryParams()));
             }
 
             doBeforeExport(baseDTO, httpRequest, httpResponse);

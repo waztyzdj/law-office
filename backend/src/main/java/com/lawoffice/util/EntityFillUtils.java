@@ -1,4 +1,4 @@
-package com.lawoffice.framework.util;
+package com.lawoffice.util;
 
 import com.lawoffice.framework.dto.RequestContext;
 import com.lawoffice.framework.entity.BaseEntity;

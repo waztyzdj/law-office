@@ -1,4 +1,4 @@
-package com.lawoffice.framework.util;
+package com.lawoffice.util;
 
 import com.alibaba.excel.EasyExcel;
 import com.alibaba.excel.annotation.ExcelProperty;

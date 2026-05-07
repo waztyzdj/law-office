@@ -11,8 +11,8 @@ import com.lawoffice.framework.dto.BaseResult;
 import com.lawoffice.framework.dto.RequestContext;
 import com.lawoffice.framework.entity.BaseEntity;
 import com.lawoffice.framework.service.IBaseService;
-import com.lawoffice.framework.util.EntityFillUtils;
-import com.lawoffice.framework.util.ExcelUtils;
+import com.lawoffice.util.EntityFillUtils;
+import com.lawoffice.util.ExcelUtils;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.extern.slf4j.Slf4j;
 

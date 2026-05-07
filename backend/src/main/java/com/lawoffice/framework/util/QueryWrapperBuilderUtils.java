@@ -11,7 +11,7 @@ import java.util.Set;
  * MyBatis Plus QueryWrapper 构建工具类
  */
 @Slf4j
-public class QueryWrapperBuilder {
+public class QueryWrapperBuilderUtils {
 
     /**
      * 需要忽略的参数名（分页和排序参数）
