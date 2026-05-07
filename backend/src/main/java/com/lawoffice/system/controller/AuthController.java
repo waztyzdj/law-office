@@ -9,14 +9,13 @@ import com.lawoffice.system.dto.AuthUser;
 import com.lawoffice.system.entity.User;
 import com.lawoffice.system.mapper.UserMapper;
 import com.lawoffice.system.service.IUserService;
-import com.lawoffice.system.util.JwtUtil;
+import com.lawoffice.system.service.ITokenService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.shiro.SecurityUtils;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.util.StringUtils;
 import org.springframework.web.bind.annotation.*;
 
@@ -36,12 +35,8 @@ public class AuthController {
     @Autowired
     private UserMapper userMapper;
 
-    private JwtUtil jwtUtil;
-
-    @Value("${jwt.secret}")
-    public void setJwtSecret(String secret) {
-        this.jwtUtil = new JwtUtil(secret);
-    }
+    @Autowired
+    private ITokenService tokenService;
 
     /**
      * 用户登录
@@ -78,12 +73,6 @@ public class AuthController {
                 return BaseResult.error(401, "用户名或密码错误");
             }
 
-            Map<String, Object> claims = new HashMap<>();
-            claims.put("userId", user.getId());
-            claims.put("realName", user.getRealname());
-
-            String token = jwtUtil.generateToken(username, claims);
-
             // 获取用户权限列表
             List<String> permissionCodes = userService.getUserPermissionCodes(user.getId());
             
@@ -93,6 +82,15 @@ public class AuthController {
                     .map(com.lawoffice.system.entity.Role::getRoleCode)
                     .toList();
 
+            // 使用TokenService生成并存储Token到Redis
+            String token = tokenService.generateAndStoreToken(
+                    username, 
+                    user.getId(), 
+                    user.getRealname(),
+                    permissionCodes,
+                    roleCodes
+            );
+
             Map<String, Object> result = new HashMap<>();
             result.put("token", token);
             result.put("username", user.getUsername());
@@ -100,6 +98,7 @@ public class AuthController {
             result.put("userId", user.getId());
             result.put("permissions", permissionCodes);
             result.put("roles", roleCodes);
+            result.put("expireTime", 24); // 24小时
 
             log.info("用户登录成功：{}, 权限数量: {}, 角色数量: {}", username, permissionCodes.size(), roleCodes.size());
             return BaseResult.success(result);
@@ -149,12 +148,18 @@ public class AuthController {
     @AutoLog(value = "用户登出", logType = LogType.OPERATION, operateType = OperateType.CUSTOM)
     public BaseResult<Void> logout(HttpServletRequest request) {
         try {
-            // 从Shiro SecurityUtils获取当前用户
-            String username = (String) SecurityUtils.getSubject().getPrincipal();
+            // 从请求头获取Token
+            String authHeader = request.getHeader("Authorization");
+            if (authHeader != null && authHeader.startsWith("Bearer ")) {
+                String token = authHeader.substring(7);
+                // 删除Redis中的Token和权限信息
+                tokenService.removeToken(token);
+            }
             
             // 登出Shiro会话
             SecurityUtils.getSubject().logout();
             
+            String username = (String) SecurityUtils.getSubject().getPrincipal();
             log.info("用户登出：{}", username);
 
             return BaseResult.success();

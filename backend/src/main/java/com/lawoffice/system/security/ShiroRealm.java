@@ -1,11 +1,9 @@
 package com.lawoffice.system.security;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
-import com.lawoffice.system.entity.Permission;
 import com.lawoffice.system.entity.User;
-import com.lawoffice.system.mapper.PermissionMapper;
 import com.lawoffice.system.mapper.UserMapper;
-import com.lawoffice.system.service.IUserService;
+import com.lawoffice.system.service.ITokenService;
 import com.lawoffice.system.util.JwtUtil;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.shiro.authc.AuthenticationException;
@@ -37,10 +35,7 @@ public class ShiroRealm extends AuthorizingRealm {
     private UserMapper userMapper;
 
     @Autowired
-    private IUserService userService;
-
-    @Autowired
-    private PermissionMapper permissionMapper;
+    private ITokenService tokenService;
 
     private JwtUtil jwtUtil;
 
@@ -58,7 +53,7 @@ public class ShiroRealm extends AuthorizingRealm {
     }
 
     /**
-     * 授权 - 获取用户的角色和权限
+     * 授权 - 从 Redis 获取用户的角色和权限（提升性能）
      */
     @Override
     protected AuthorizationInfo doGetAuthorizationInfo(PrincipalCollection principals) {
@@ -68,38 +63,25 @@ public class ShiroRealm extends AuthorizingRealm {
             return null;
         }
 
-        // 查询用户信息
-        LambdaQueryWrapper<User> wrapper = new LambdaQueryWrapper<>();
-        wrapper.eq(User::getUsername, username)
-               .eq(User::getDeleteFlag, 0);
-        User user = userMapper.selectOne(wrapper);
-
-        if (user == null) {
-            log.warn("授权失败：用户不存在 - {}", username);
-            return null;
-        }
+        // 从 Redis 获取用户权限和角色（避免频繁查询数据库）
+        List<String> permissionCodes = tokenService.getPermissionsFromRedis(username);
+        List<String> roleCodes = tokenService.getRolesFromRedis(username);
 
         SimpleAuthorizationInfo authorizationInfo = new SimpleAuthorizationInfo();
-
-        // 获取用户角色
-        List<com.lawoffice.system.entity.Role> roles = userService.getUserRoles(user.getId());
-        Set<String> roleCodes = new HashSet<>();
-        if (roles != null && !roles.isEmpty()) {
-            for (com.lawoffice.system.entity.Role role : roles) {
-                roleCodes.add(role.getRoleCode());
-            }
+        
+        // 设置角色
+        if (roleCodes != null && !roleCodes.isEmpty()) {
+            authorizationInfo.setRoles(new HashSet<>(roleCodes));
         }
-        authorizationInfo.setRoles(roleCodes);
-
-        // 获取用户权限
-        List<String> permissionCodes = userService.getUserPermissionCodes(user.getId());
-        Set<String> permissions = new HashSet<>();
+        
+        // 设置权限
         if (permissionCodes != null && !permissionCodes.isEmpty()) {
-            permissions.addAll(permissionCodes);
+            authorizationInfo.setStringPermissions(new HashSet<>(permissionCodes));
         }
-        authorizationInfo.setStringPermissions(permissions);
 
-        log.debug("用户 {} 授权成功，角色数: {}, 权限数: {}", username, roleCodes.size(), permissions.size());
+        log.debug("用户 {} 授权成功，角色数: {}, 权限数: {}", username, 
+                roleCodes != null ? roleCodes.size() : 0, 
+                permissionCodes != null ? permissionCodes.size() : 0);
         return authorizationInfo;
     }
 

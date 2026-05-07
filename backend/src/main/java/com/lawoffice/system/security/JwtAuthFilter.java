@@ -1,5 +1,6 @@
 package com.lawoffice.system.security;
 
+import com.lawoffice.system.service.ITokenService;
 import com.lawoffice.system.util.JwtUtil;
 import jakarta.servlet.*;
 import jakarta.servlet.http.HttpServletRequest;
@@ -7,6 +8,7 @@ import jakarta.servlet.http.HttpServletResponse;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.shiro.SecurityUtils;
 import org.apache.shiro.subject.Subject;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
@@ -22,6 +24,9 @@ import java.util.List;
 @Slf4j
 @Component
 public class JwtAuthFilter extends OncePerRequestFilter {
+
+    @Autowired
+    private ITokenService tokenService;
 
     private JwtUtil jwtUtil;
 
@@ -79,8 +84,8 @@ public class JwtAuthFilter extends OncePerRequestFilter {
         String token = authHeader.substring(7);
         
         try {
-            // 验证Token
-            if (!jwtUtil.isTokenValid(token)) {
+            // 验证Token（检查JWT格式和Redis中是否存在）
+            if (!tokenService.validateToken(token)) {
                 response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
                 response.setContentType("application/json;charset=UTF-8");
                 response.getWriter().write("{\"code\":401,\"message\":\"Token无效或已过期\"}");
