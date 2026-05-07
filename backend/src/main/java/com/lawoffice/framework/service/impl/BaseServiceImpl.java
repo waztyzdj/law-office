@@ -4,11 +4,12 @@ import cn.hutool.core.bean.BeanUtil;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.lawoffice.framework.dto.BaseDTO;
 import com.lawoffice.framework.dto.BasePageDTO;
 import com.lawoffice.framework.dto.BaseResult;
 import com.lawoffice.framework.dto.RequestContext;
-import com.lawoffice.framework.entity.*;
+import com.lawoffice.framework.entity.BaseEntity;
 import com.lawoffice.framework.service.IBaseService;
 import com.lawoffice.framework.util.EntityFillUtils;
 import com.lawoffice.framework.util.ExcelUtils;
@@ -21,35 +22,25 @@ import java.util.Map;
 
 /**
  * 基础服务实现类
- * 提供通用的 CRUD 操作实现，子类继承后可自动获得以下功能：
+ * 继承 MyBatis Plus 的 ServiceImpl，提供通用的 CRUD 操作实现
+ * 子类继承后可自动获得以下功能：
+ * - MyBatis Plus 的所有 CRUD 方法（save, saveBatch, getById, list, page 等）
  * - 列表查询（不分页）
  * - 分页查询
  * - 根据ID查询
- * - 保存数据（新增或修改）
+ * - 保存数据（新增或修改，带审计字段填充）
  * - 批量保存
  * - 删除数据（逻辑删除）
  * - 批量删除
  * - 导出 Excel
  * - 导入 Excel
  *
+ * @param <M> Mapper 类型
  * @param <E> 实体类型，需继承 BaseEntity
  */
 @Slf4j
-public class BaseServiceImpl<E extends BaseEntity> implements IBaseService<E> {
-
-    protected final BaseMapper<E> baseMapper;
-    protected Class<E> entityClass;
-
-    /**
-     * 构造函数
-     *
-     * @param baseMapper MyBatis Mapper
-     * @param entityClass 实体类类型
-     */
-    public BaseServiceImpl(BaseMapper<E> baseMapper, Class<E> entityClass) {
-        this.baseMapper = baseMapper;
-        this.entityClass = entityClass;
-    }
+public class BaseServiceImpl<M extends BaseMapper<E>, E extends BaseEntity>
+    extends ServiceImpl<M, E> implements IBaseService<E> {
 
     /**
      * 列表查询前处理（钩子方法，子类可重写）
@@ -78,6 +69,7 @@ public class BaseServiceImpl<E extends BaseEntity> implements IBaseService<E> {
 
             wrapper.eq("delete_flag", 0);
 
+            // 使用 ServiceImpl 提供的 baseMapper
             List<E> list = baseMapper.selectList(wrapper);
 
             doAfterList(baseDTO, list);
@@ -124,8 +116,9 @@ public class BaseServiceImpl<E extends BaseEntity> implements IBaseService<E> {
 
             wrapper.eq("delete_flag", 0);
 
+            // 使用 ServiceImpl 提供的 page 方法
             Page<E> page = new Page<>(basePageDTO.getPageNum(), basePageDTO.getPageSize());
-            Page<E> resultPage = baseMapper.selectPage(page, wrapper);
+            Page<E> resultPage = this.page(page, wrapper);
 
             Map<String, Object> data = new HashMap<>();
             data.put("records", resultPage.getRecords());
@@ -169,16 +162,14 @@ public class BaseServiceImpl<E extends BaseEntity> implements IBaseService<E> {
             E requestData = saveDTO.getEntity();
             RequestContext context = saveDTO.getContext();
             
-            E entity = BeanUtil.copyProperties(requestData, entityClass);
+            // 使用 ServiceImpl 提供的 getEntityClass() 方法
+            E entity = BeanUtil.copyProperties(requestData, getEntityClass());
             
             boolean isCreate = entity.getId() == null || entity.getId().isEmpty();
             EntityFillUtils.fillAuditFields(entity, context, isCreate);
             
-            if (isCreate) {
-                baseMapper.insert(entity);
-            } else {
-                baseMapper.updateById(entity);
-            }
+            // 使用 ServiceImpl 提供的 saveOrUpdate 方法
+            this.saveOrUpdate(entity);
             
             doAfterSave(saveDTO, entity);
             return BaseResult.success(entity);
@@ -221,7 +212,8 @@ public class BaseServiceImpl<E extends BaseEntity> implements IBaseService<E> {
                 return BaseResult.error("ID不能为空");
             }
 
-            E entity = baseMapper.selectById(id);
+            // 使用 ServiceImpl 提供的 getById 方法
+            E entity = this.getById(id);
 
             if (entity == null) {
                 return BaseResult.error("数据不存在");
@@ -276,16 +268,14 @@ public class BaseServiceImpl<E extends BaseEntity> implements IBaseService<E> {
             List<E> savedEntities = new java.util.ArrayList<>();
             
             for (E requestData : dataList) {
-                E entity = BeanUtil.copyProperties(requestData, entityClass);
+                // 使用 ServiceImpl 提供的 getEntityClass() 方法
+                E entity = BeanUtil.copyProperties(requestData, getEntityClass());
                 
                 boolean isCreate = entity.getId() == null || entity.getId().isEmpty();
                 EntityFillUtils.fillAuditFields(entity, context, isCreate);
                 
-                if (isCreate) {
-                    baseMapper.insert(entity);
-                } else {
-                    baseMapper.updateById(entity);
-                }
+                // 使用 ServiceImpl 提供的 saveOrUpdate 方法
+                this.saveOrUpdate(entity);
                 
                 savedEntities.add(entity);
             }
@@ -333,11 +323,13 @@ public class BaseServiceImpl<E extends BaseEntity> implements IBaseService<E> {
             String deleteBy = deleteDTO.getContext() != null ?
                     deleteDTO.getContext().getUsername() : "system";
 
-            E entity = entityClass.getDeclaredConstructor().newInstance();
+            // 使用 ServiceImpl 提供的 getEntityClass() 方法
+            E entity = getEntityClass().getDeclaredConstructor().newInstance();
             entity.setId(id);
             EntityFillUtils.fillDeleteFields(entity, deleteBy);
 
-            baseMapper.updateById(entity);
+            // 使用 ServiceImpl 提供的 updateById 方法
+            this.updateById(entity);
 
             doAfterDelete(deleteDTO);
             return BaseResult.success();
@@ -375,10 +367,12 @@ public class BaseServiceImpl<E extends BaseEntity> implements IBaseService<E> {
 
             for (String id : ids) {
                 try {
-                    E entity = entityClass.getDeclaredConstructor().newInstance();
+                    // 使用 ServiceImpl 提供的 getEntityClass() 方法
+                    E entity = getEntityClass().getDeclaredConstructor().newInstance();
                     entity.setId(id);
                     EntityFillUtils.fillDeleteFields(entity, deleteBy);
-                    baseMapper.updateById(entity);
+                    // 使用 ServiceImpl 提供的 updateById 方法
+                    this.updateById(entity);
                 } catch (Exception e) {
                     log.error("删除ID {} 失败", id, e);
                 }
@@ -419,9 +413,11 @@ public class BaseServiceImpl<E extends BaseEntity> implements IBaseService<E> {
 
             queryWrapper.eq("delete_flag", 0);
 
-            List<E> list = baseMapper.selectList(queryWrapper);
+            // 使用 ServiceImpl 提供的 list 方法
+            List<E> list = this.list(queryWrapper);
 
-            ExcelUtils.export(response, list, entityClass);
+            // 使用 ServiceImpl 提供的 getEntityClass() 方法
+            ExcelUtils.export(response, list, getEntityClass());
 
             doAfterExport(response, baseDTO, list.size());
         } catch (Exception e) {
@@ -466,15 +462,13 @@ public class BaseServiceImpl<E extends BaseEntity> implements IBaseService<E> {
 
             for (E requestData : dataList) {
                 try {
-                    E entity = BeanUtil.copyProperties(requestData, entityClass);
+                    // 使用 ServiceImpl 提供的 getEntityClass() 方法
+                    E entity = BeanUtil.copyProperties(requestData, getEntityClass());
                     boolean isCreate = entity.getId() == null || entity.getId().isEmpty();
                     EntityFillUtils.fillAuditFields(entity, context, isCreate);
 
-                    if (isCreate) {
-                        baseMapper.insert(entity);
-                    } else {
-                        baseMapper.updateById(entity);
-                    }
+                    // 使用 ServiceImpl 提供的 saveOrUpdate 方法
+                    this.saveOrUpdate(entity);
                     successCount++;
                 } catch (Exception e) {
                     log.error("导入单条数据失败", e);

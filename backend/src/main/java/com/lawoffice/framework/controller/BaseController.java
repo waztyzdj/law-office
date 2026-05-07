@@ -3,6 +3,7 @@ package com.lawoffice.framework.controller;
 import com.lawoffice.framework.dto.BaseDTO;
 import com.lawoffice.framework.dto.BasePageDTO;
 import com.lawoffice.framework.dto.BaseResult;
+import com.lawoffice.framework.dto.QueryParams;
 import com.lawoffice.framework.entity.*;
 import com.lawoffice.framework.service.IBaseService;
 import com.lawoffice.framework.annotation.ModuleInfo;
@@ -122,23 +123,23 @@ public class BaseController<S extends IBaseService<E>, E extends BaseEntity> {
     /**
      * 列表查询（不分页）
      *
-     * @param queryParams 查询条件Map（驼峰命名）
+     * @param queryParams 查询请求（包含查询条件）
      * @param httpRequest HTTP 请求对象
      * @param httpResponse HTTP 响应对象
      * @return 查询结果列表
      */
     @PostMapping("/list")
-    @Operation(summary = "列表查询", description = "查询{moduleName}列表（不分页）")
+    @Operation(summary = "列表查询", description = "查询列表数据（不分页），支持动态查询条件")
     public BaseResult<List<E>> list(
-            @RequestBody(required = false) Map<String, Object> queryParams,
+            @RequestBody(required = false) QueryParams queryParams,
             HttpServletRequest httpRequest,
             HttpServletResponse httpResponse) {
         try {
             BaseDTO<E> baseDTO = new BaseDTO<>();
             initBaseDTO(baseDTO, httpRequest, httpResponse);
 
-            if (queryParams != null && !queryParams.isEmpty()) {
-                baseDTO.setQueryWrapper(QueryWrapperBuilder.build(queryParams));
+            if (queryParams != null && queryParams.getQueryParams() != null && !queryParams.getQueryParams().isEmpty()) {
+                baseDTO.setQueryWrapper(QueryWrapperBuilder.build(queryParams.getQueryParams()));
             }
 
             doBeforeList(baseDTO, httpRequest, httpResponse);
@@ -179,17 +180,17 @@ public class BaseController<S extends IBaseService<E>, E extends BaseEntity> {
      *
      * @param pageNum 页码
      * @param pageSize 每页数量
-     * @param queryParams 查询条件Map（驼峰命名）
+     * @param queryParams 查询请求（包含查询条件）
      * @param httpRequest HTTP 请求对象
      * @param httpResponse HTTP 响应对象
      * @return 查询结果，包含 records（数据列表）和 total（总数）
      */
     @PostMapping("/page")
-    @Operation(summary = "分页查询", description = "分页查询{moduleName}列表")
+    @Operation(summary = "分页查询", description = "分页查询列表数据，支持动态查询条件")
     public BaseResult<Map<String, Object>> page(
             @RequestParam(defaultValue = "1") Integer pageNum,
             @RequestParam(defaultValue = "10") Integer pageSize,
-            @RequestBody(required = false) Map<String, Object> queryParams,
+            @RequestBody(required = false) QueryParams queryParams,
             HttpServletRequest httpRequest,
             HttpServletResponse httpResponse) {
         try {
@@ -199,8 +200,8 @@ public class BaseController<S extends IBaseService<E>, E extends BaseEntity> {
 
             initBaseDTO(basePageDTO, httpRequest, httpResponse);
 
-            if (queryParams != null && !queryParams.isEmpty()) {
-                basePageDTO.setQueryWrapper(QueryWrapperBuilder.build(queryParams));
+            if (queryParams != null && queryParams.getQueryParams() != null && !queryParams.getQueryParams().isEmpty()) {
+                basePageDTO.setQueryWrapper(QueryWrapperBuilder.build(queryParams.getQueryParams()));
             }
 
             doBeforePage(basePageDTO, httpRequest, httpResponse);
@@ -245,7 +246,7 @@ public class BaseController<S extends IBaseService<E>, E extends BaseEntity> {
      * @return 查询到的实体对象
      */
     @PostMapping("/getById")
-    @Operation(summary = "根据ID查询", description = "根据ID查询单个{moduleName}")
+    @Operation(summary = "根据ID查询")
     public BaseResult<E> getById(
             @RequestBody BaseDTO<E> idDTO,
             HttpServletRequest httpRequest,
@@ -296,7 +297,7 @@ public class BaseController<S extends IBaseService<E>, E extends BaseEntity> {
      * @return 保存后的实体对象
      */
     @PostMapping("/save")
-    @Operation(summary = "保存数据", description = "新增或修改{moduleName}")
+    @Operation(summary = "保存数据")
     public BaseResult<E> save(
             @RequestBody E entity,
             HttpServletRequest httpRequest,
@@ -349,7 +350,7 @@ public class BaseController<S extends IBaseService<E>, E extends BaseEntity> {
      * @return 保存后的实体列表
      */
     @PostMapping("/batchSave")
-    @Operation(summary = "批量保存", description = "批量保存{moduleName}数据")
+    @Operation(summary = "批量保存")
     public BaseResult<List<E>> batchSave(
             @RequestBody List<E> entityList,
             HttpServletRequest httpRequest,
@@ -402,7 +403,7 @@ public class BaseController<S extends IBaseService<E>, E extends BaseEntity> {
      * @return 删除结果
      */
     @PostMapping("/delete")
-    @Operation(summary = "删除数据", description = "删除单个{moduleName}")
+    @Operation(summary = "删除数据")
     public BaseResult<Void> delete(
             @RequestBody E entity,
             HttpServletRequest httpRequest,
@@ -458,7 +459,7 @@ public class BaseController<S extends IBaseService<E>, E extends BaseEntity> {
      * @return 删除结果
      */
     @PostMapping("/batchDelete")
-    @Operation(summary = "批量删除", description = "批量删除{moduleName}")
+    @Operation(summary = "批量删除")
     public BaseResult<Void> batchDelete(
             @RequestBody List<String> ids,
             HttpServletRequest httpRequest,
@@ -511,7 +512,7 @@ public class BaseController<S extends IBaseService<E>, E extends BaseEntity> {
      * @return 成功导入的数量
      */
     @PostMapping("/import")
-    @Operation(summary = "导入Excel", description = "从Excel导入{moduleName}数据")
+    @Operation(summary = "导入Excel")
     public BaseResult<Integer> importExcel(
             @RequestParam("file") MultipartFile file,
             HttpServletRequest httpRequest,
@@ -568,22 +569,22 @@ public class BaseController<S extends IBaseService<E>, E extends BaseEntity> {
     /**
      * 导出 Excel
      *
-     * @param queryParams 查询条件Map（驼峰命名）
+     * @param queryParams 查询请求（包含查询条件）
      * @param httpRequest HTTP 请求对象
      * @param httpResponse HTTP 响应对象
      */
     @PostMapping("/export")
-    @Operation(summary = "导出Excel", description = "导出{moduleName}数据")
+    @Operation(summary = "导出Excel", description = "导出数据为 Excel 文件，支持动态查询条件")
     public void export(
-            @RequestBody(required = false) Map<String, Object> queryParams,
+            @RequestBody(required = false) QueryParams queryParams,
             HttpServletRequest httpRequest,
             HttpServletResponse httpResponse) {
         try {
             BaseDTO<E> baseDTO = new BaseDTO<>();
             initBaseDTO(baseDTO, httpRequest, httpResponse);
 
-            if (queryParams != null && !queryParams.isEmpty()) {
-                baseDTO.setQueryWrapper(QueryWrapperBuilder.build(queryParams));
+            if (queryParams != null && queryParams.getQueryParams() != null && !queryParams.getQueryParams().isEmpty()) {
+                baseDTO.setQueryWrapper(QueryWrapperBuilder.build(queryParams.getQueryParams()));
             }
 
             doBeforeExport(baseDTO, httpRequest, httpResponse);

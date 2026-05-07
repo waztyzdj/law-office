@@ -3,29 +3,50 @@ package com.lawoffice.system.service.impl;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.lawoffice.framework.dto.BaseDTO;
 import com.lawoffice.framework.service.impl.BaseServiceImpl;
-import com.lawoffice.system.entity.User;
-import com.lawoffice.system.mapper.UserMapper;
+import com.lawoffice.system.entity.*;
+import com.lawoffice.system.mapper.*;
 import com.lawoffice.system.service.IUserService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
+
+import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.stream.Collectors;
 
 @Slf4j
 @Service
-public class UserServiceImpl extends BaseServiceImpl<User> implements IUserService {
+public class UserServiceImpl extends BaseServiceImpl<UserMapper, User> implements IUserService {
 
     @Autowired
-    private UserMapper userMapper;
+    private UserRoleMapper userRoleMapper;
+
+    @Autowired
+    private RoleMapper roleMapper;
+
+    @Autowired
+    private UserDepartMapper userDepartMapper;
+
+    @Autowired
+    private SysDepartMapper sysDepartMapper;
+
+    @Autowired
+    private UserTenantMapper userTenantMapper;
+
+    @Autowired
+    private TenantMapper tenantMapper;
+
+    @Autowired
+    private RolePermissionMapper rolePermissionMapper;
+
+    @Autowired
+    private PermissionMapper permissionMapper;
     
     private final BCryptPasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
-
-    @Autowired
-    public UserServiceImpl(UserMapper userMapper) {
-        super(userMapper, User.class);
-        this.userMapper = userMapper;
-    }
 
     @Override
     protected void doBeforeSave(BaseDTO<User> saveDTO) {
@@ -41,7 +62,7 @@ public class UserServiceImpl extends BaseServiceImpl<User> implements IUserServi
             LambdaQueryWrapper<User> wrapper = new LambdaQueryWrapper<>();
             wrapper.eq(User::getUsername, user.getUsername())
                    .eq(User::getDeleteFlag, 0);
-            if (userMapper.selectCount(wrapper) > 0) {
+            if (baseMapper.selectCount(wrapper) > 0) {
                 throw new RuntimeException("用户名已存在");
             }
             
@@ -49,7 +70,7 @@ public class UserServiceImpl extends BaseServiceImpl<User> implements IUserServi
                 LambdaQueryWrapper<User> phoneWrapper = new LambdaQueryWrapper<>();
                 phoneWrapper.eq(User::getPhone, user.getPhone())
                            .eq(User::getDeleteFlag, 0);
-                if (userMapper.selectCount(phoneWrapper) > 0) {
+                if (baseMapper.selectCount(phoneWrapper) > 0) {
                     throw new RuntimeException("手机号已被使用");
                 }
             }
@@ -58,7 +79,7 @@ public class UserServiceImpl extends BaseServiceImpl<User> implements IUserServi
                 LambdaQueryWrapper<User> idCardWrapper = new LambdaQueryWrapper<>();
                 idCardWrapper.eq(User::getIdCard, user.getIdCard())
                             .eq(User::getDeleteFlag, 0);
-                if (userMapper.selectCount(idCardWrapper) > 0) {
+                if (baseMapper.selectCount(idCardWrapper) > 0) {
                     throw new RuntimeException("身份证号已被使用");
                 }
             }
@@ -96,7 +117,250 @@ public class UserServiceImpl extends BaseServiceImpl<User> implements IUserServi
         user.setPassword(passwordEncoder.encode(newPassword));
         user.setUpdateTime(java.time.LocalDateTime.now());
         user.setUpdateBy("system");
-        userMapper.updateById(user);
+        // 使用 ServiceImpl 提供的 updateById 方法
+        this.updateById(user);
         log.info("重置用户密码成功，用户ID: {}", userId);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void assignRoles(String userId, List<String> roleIds) {
+        // 先删除用户现有的所有角色
+        LambdaQueryWrapper<UserRole> deleteWrapper = new LambdaQueryWrapper<>();
+        deleteWrapper.eq(UserRole::getUserId, userId);
+        userRoleMapper.delete(deleteWrapper);
+
+        // 批量插入新的角色关联
+        if (roleIds != null && !roleIds.isEmpty()) {
+            List<UserRole> userRoles = roleIds.stream()
+                .map(roleId -> {
+                    UserRole userRole = new UserRole();
+                    userRole.setUserId(userId);
+                    userRole.setRoleId(roleId);
+                    return userRole;
+                })
+                .collect(Collectors.toList());
+
+            for (UserRole userRole : userRoles) {
+                userRoleMapper.insert(userRole);
+            }
+        }
+
+        log.info("为用户分配角色成功，用户ID: {}, 角色数量: {}", userId, roleIds == null ? 0 : roleIds.size());
+    }
+
+    @Override
+    public List<Role> getUserRoles(String userId) {
+        // 查询用户的角色ID列表
+        LambdaQueryWrapper<UserRole> wrapper = new LambdaQueryWrapper<>();
+        wrapper.eq(UserRole::getUserId, userId);
+        List<UserRole> userRoles = userRoleMapper.selectList(wrapper);
+
+        if (userRoles.isEmpty()) {
+            return new ArrayList<>();
+        }
+
+        // 根据角色ID查询角色详情
+        List<String> roleIds = userRoles.stream()
+            .map(UserRole::getRoleId)
+            .collect(Collectors.toList());
+
+        LambdaQueryWrapper<Role> roleWrapper = new LambdaQueryWrapper<>();
+        roleWrapper.in(Role::getId, roleIds);
+        return roleMapper.selectList(roleWrapper);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void removeRoles(String userId, List<String> roleIds) {
+        if (roleIds == null || roleIds.isEmpty()) {
+            return;
+        }
+
+        LambdaQueryWrapper<UserRole> wrapper = new LambdaQueryWrapper<>();
+        wrapper.eq(UserRole::getUserId, userId)
+               .in(UserRole::getRoleId, roleIds);
+        userRoleMapper.delete(wrapper);
+
+        log.info("移除用户角色成功，用户ID: {}, 移除角色数量: {}", userId, roleIds.size());
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void assignDeparts(String userId, List<String> departIds) {
+        // 先删除用户现有的所有部门
+        LambdaQueryWrapper<UserDepart> deleteWrapper = new LambdaQueryWrapper<>();
+        deleteWrapper.eq(UserDepart::getUserId, userId);
+        userDepartMapper.delete(deleteWrapper);
+
+        // 批量插入新的部门关联
+        if (departIds != null && !departIds.isEmpty()) {
+            List<UserDepart> userDeparts = departIds.stream()
+                .map(departId -> {
+                    UserDepart userDepart = new UserDepart();
+                    userDepart.setUserId(userId);
+                    userDepart.setDepId(departId);
+                    return userDepart;
+                })
+                .collect(Collectors.toList());
+
+            for (UserDepart userDepart : userDeparts) {
+                userDepartMapper.insert(userDepart);
+            }
+        }
+
+        log.info("为用户分配部门成功，用户ID: {}, 部门数量: {}", userId, departIds == null ? 0 : departIds.size());
+    }
+
+    @Override
+    public List<SysDepart> getUserDeparts(String userId) {
+        // 查询用户的部门ID列表
+        LambdaQueryWrapper<UserDepart> wrapper = new LambdaQueryWrapper<>();
+        wrapper.eq(UserDepart::getUserId, userId);
+        List<UserDepart> userDeparts = userDepartMapper.selectList(wrapper);
+
+        if (userDeparts.isEmpty()) {
+            return new ArrayList<>();
+        }
+
+        // 根据部门ID查询部门详情
+        List<String> departIds = userDeparts.stream()
+            .map(UserDepart::getDepId)
+            .collect(Collectors.toList());
+
+        LambdaQueryWrapper<SysDepart> departWrapper = new LambdaQueryWrapper<>();
+        departWrapper.in(SysDepart::getId, departIds);
+        return sysDepartMapper.selectList(departWrapper);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void removeDeparts(String userId, List<String> departIds) {
+        if (departIds == null || departIds.isEmpty()) {
+            return;
+        }
+
+        LambdaQueryWrapper<UserDepart> wrapper = new LambdaQueryWrapper<>();
+        wrapper.eq(UserDepart::getUserId, userId)
+               .in(UserDepart::getDepId, departIds);
+        userDepartMapper.delete(wrapper);
+
+        log.info("移除用户部门成功，用户ID: {}, 移除部门数量: {}", userId, departIds.size());
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void assignTenants(String userId, List<String> tenantIds) {
+        // 先删除用户现有的所有租户
+        LambdaQueryWrapper<UserTenant> deleteWrapper = new LambdaQueryWrapper<>();
+        deleteWrapper.eq(UserTenant::getUserId, userId);
+        userTenantMapper.delete(deleteWrapper);
+
+        // 批量插入新的租户关联
+        if (tenantIds != null && !tenantIds.isEmpty()) {
+            List<UserTenant> userTenants = tenantIds.stream()
+                .map(tenantId -> {
+                    UserTenant userTenant = new UserTenant();
+                    userTenant.setUserId(userId);
+                    userTenant.setTenantId(tenantId);
+                    userTenant.setStatus("1"); // 默认状态为正常
+                    return userTenant;
+                })
+                .collect(Collectors.toList());
+
+            for (UserTenant userTenant : userTenants) {
+                userTenantMapper.insert(userTenant);
+            }
+        }
+
+        log.info("为用户分配租户成功，用户ID: {}, 租户数量: {}", userId, tenantIds == null ? 0 : tenantIds.size());
+    }
+
+    @Override
+    public List<Tenant> getUserTenants(String userId) {
+        // 查询用户的租户ID列表
+        LambdaQueryWrapper<UserTenant> wrapper = new LambdaQueryWrapper<>();
+        wrapper.eq(UserTenant::getUserId, userId);
+        List<UserTenant> userTenants = userTenantMapper.selectList(wrapper);
+
+        if (userTenants.isEmpty()) {
+            return new ArrayList<>();
+        }
+
+        // 根据租户ID查询租户详情
+        List<String> tenantIds = userTenants.stream()
+            .map(UserTenant::getTenantId)
+            .collect(Collectors.toList());
+
+        LambdaQueryWrapper<Tenant> tenantWrapper = new LambdaQueryWrapper<>();
+        tenantWrapper.in(Tenant::getId, tenantIds);
+        return tenantMapper.selectList(tenantWrapper);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void removeTenants(String userId, List<String> tenantIds) {
+        if (tenantIds == null || tenantIds.isEmpty()) {
+            return;
+        }
+
+        LambdaQueryWrapper<UserTenant> wrapper = new LambdaQueryWrapper<>();
+        wrapper.eq(UserTenant::getUserId, userId)
+               .in(UserTenant::getTenantId, tenantIds);
+        userTenantMapper.delete(wrapper);
+
+        log.info("移除用户租户成功，用户ID: {}, 移除租户数量: {}", userId, tenantIds.size());
+    }
+
+    @Override
+    public List<Permission> getUserPermissions(String userId) {
+        // 1. 获取用户的角色ID列表
+        LambdaQueryWrapper<UserRole> userRoleWrapper = new LambdaQueryWrapper<>();
+        userRoleWrapper.eq(UserRole::getUserId, userId);
+        List<UserRole> userRoles = userRoleMapper.selectList(userRoleWrapper);
+
+        if (userRoles.isEmpty()) {
+            return new ArrayList<>();
+        }
+
+        // 2. 获取所有角色的ID
+        List<String> roleIds = userRoles.stream()
+            .map(UserRole::getRoleId)
+            .distinct()
+            .collect(Collectors.toList());
+
+        // 3. 根据角色ID查询角色权限关联
+        LambdaQueryWrapper<RolePermission> rolePermWrapper = new LambdaQueryWrapper<>();
+        rolePermWrapper.in(RolePermission::getRoleId, roleIds);
+        List<RolePermission> rolePermissions = rolePermissionMapper.selectList(rolePermWrapper);
+
+        if (rolePermissions.isEmpty()) {
+            return new ArrayList<>();
+        }
+
+        // 4. 获取所有权限ID
+        List<String> permissionIds = rolePermissions.stream()
+            .map(RolePermission::getPermissionId)
+            .distinct()
+            .collect(Collectors.toList());
+
+        // 5. 根据权限ID查询权限详情
+        LambdaQueryWrapper<Permission> permWrapper = new LambdaQueryWrapper<>();
+        permWrapper.in(Permission::getId, permissionIds)
+                   .eq(Permission::getStatus, "1") // 只查询有效的权限
+                   .orderByAsc(Permission::getSortNo);
+        return permissionMapper.selectList(permWrapper);
+    }
+
+    @Override
+    public List<String> getUserPermissionCodes(String userId) {
+        // 获取用户权限列表，然后提取perms字段
+        List<Permission> permissions = getUserPermissions(userId);
+        
+        return permissions.stream()
+            .map(Permission::getPerms)
+            .filter(StringUtils::hasText) // 过滤掉空的perms
+            .distinct()
+            .collect(Collectors.toList());
     }
 }

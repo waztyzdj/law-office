@@ -1,5 +1,6 @@
 package com.lawoffice.framework.service;
 
+import com.baomidou.mybatisplus.extension.service.IService;
 import com.lawoffice.framework.dto.BaseDTO;
 import com.lawoffice.framework.dto.BasePageDTO;
 import com.lawoffice.framework.dto.BaseResult;
@@ -8,7 +9,13 @@ import jakarta.servlet.http.HttpServletResponse;
 import java.util.List;
 import java.util.Map;
 
-public interface IBaseService<E> {
+/**
+ * 基础服务接口
+ * 继承 MyBatis Plus 的 IService，获得丰富的 CRUD 方法
+ *
+ * @param <E> 实体类型
+ */
+public interface IBaseService<E> extends IService<E> {
 
     /**
      * 查询列表（不分页）

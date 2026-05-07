@@ -89,7 +89,7 @@ public class User extends BaseEntity {
     
     @ExcelIgnore
     @Schema(description = "上次登录选择租户ID")
-    private Integer loginTenantId;
+    private String loginTenantId;
     
     @ExcelIgnore
     @Schema(description = "流程入职离职状态")

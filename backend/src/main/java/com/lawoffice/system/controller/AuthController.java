@@ -20,6 +20,7 @@ import org.springframework.util.StringUtils;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 @Slf4j
@@ -82,12 +83,17 @@ public class AuthController {
 
             String token = jwtUtil.generateToken(username, claims);
 
+            // 获取用户权限列表
+            List<String> permissionCodes = userService.getUserPermissionCodes(user.getId());
+
             Map<String, Object> result = new HashMap<>();
             result.put("token", token);
             result.put("username", user.getUsername());
             result.put("realName", user.getRealname());
+            result.put("userId", user.getId());
+            result.put("permissions", permissionCodes);
 
-            log.info("用户登录成功：{}", username);
+            log.info("用户登录成功：{}, 权限数量: {}", username, permissionCodes.size());
             return BaseResult.success(result);
 
         } catch (Exception e) {
