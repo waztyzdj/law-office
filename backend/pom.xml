@@ -34,7 +34,7 @@
         <dependency>
             <groupId>cn.hutool</groupId>
             <artifactId>hutool-all</artifactId>
-            <version>5.8.25</version>
+            <version>5.8.40</version>
         </dependency>
 
         <!-- Spring Boot Web Starter -->
@@ -160,6 +160,13 @@
             <groupId>io.minio</groupId>
             <artifactId>minio</artifactId>
             <version>8.5.7</version>
+        </dependency>
+
+        <!-- Apache Shiro for Spring Boot (Jakarta) -->
+        <dependency>
+            <groupId>org.apache.shiro</groupId>
+            <artifactId>shiro-spring-boot-web-starter</artifactId>
+            <version>2.0.1</version>
         </dependency>
     </dependencies>
 

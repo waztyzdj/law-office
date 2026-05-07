@@ -12,3 +12,14 @@ jasypt:
 # JWT 配置
 jwt:
   secret: ${JWT_SECRET:lawoffice_jwt_secret_key_2026_change_this_in_production}
+
+# Shiro 配置
+shiro:
+  # 是否启用Shiro
+  enabled: true
+  # 登录URL（未认证时跳转）
+  loginUrl: /auth/login
+  # 成功URL
+  successUrl: /
+  # 未授权URL
+  unauthorizedUrl: /403

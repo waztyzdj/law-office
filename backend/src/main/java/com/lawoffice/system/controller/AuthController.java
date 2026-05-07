@@ -14,6 +14,7 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.shiro.SecurityUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.util.StringUtils;
@@ -85,6 +86,12 @@ public class AuthController {
 
             // 获取用户权限列表
             List<String> permissionCodes = userService.getUserPermissionCodes(user.getId());
+            
+            // 获取用户角色列表
+            List<com.lawoffice.system.entity.Role> roles = userService.getUserRoles(user.getId());
+            List<String> roleCodes = roles.stream()
+                    .map(com.lawoffice.system.entity.Role::getRoleCode)
+                    .toList();
 
             Map<String, Object> result = new HashMap<>();
             result.put("token", token);
@@ -92,8 +99,9 @@ public class AuthController {
             result.put("realName", user.getRealname());
             result.put("userId", user.getId());
             result.put("permissions", permissionCodes);
+            result.put("roles", roleCodes);
 
-            log.info("用户登录成功：{}, 权限数量: {}", username, permissionCodes.size());
+            log.info("用户登录成功：{}, 权限数量: {}, 角色数量: {}", username, permissionCodes.size(), roleCodes.size());
             return BaseResult.success(result);
 
         } catch (Exception e) {
@@ -109,7 +117,8 @@ public class AuthController {
     @Operation(summary = "获取用户信息", description = "获取当前登录用户的详细信息")
     public BaseResult<User> getUserInfo(HttpServletRequest request) {
         try {
-            String username = (String) request.getAttribute("username");
+            // 从Shiro SecurityUtils获取当前用户
+            String username = (String) SecurityUtils.getSubject().getPrincipal();
 
             if (!StringUtils.hasText(username)) {
                 return BaseResult.error(401, "未登录或登录已过期");
@@ -140,7 +149,12 @@ public class AuthController {
     @AutoLog(value = "用户登出", logType = LogType.OPERATION, operateType = OperateType.CUSTOM)
     public BaseResult<Void> logout(HttpServletRequest request) {
         try {
-            String username = (String) request.getAttribute("username");
+            // 从Shiro SecurityUtils获取当前用户
+            String username = (String) SecurityUtils.getSubject().getPrincipal();
+            
+            // 登出Shiro会话
+            SecurityUtils.getSubject().logout();
+            
             log.info("用户登出：{}", username);
 
             return BaseResult.success();
@@ -175,7 +189,7 @@ public class AuthController {
                 return BaseResult.error(400, "两次输入的新密码不一致");
             }
 
-            String username = (String) request.getAttribute("username");
+            String username = (String) SecurityUtils.getSubject().getPrincipal();
 
             LambdaQueryWrapper<User> wrapper = new LambdaQueryWrapper<>();
             wrapper.eq(User::getUsername, username)

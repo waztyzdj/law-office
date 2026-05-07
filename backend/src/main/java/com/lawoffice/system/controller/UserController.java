@@ -1,5 +1,6 @@
 package com.lawoffice.system.controller;
 
+import com.lawoffice.system.annotation.RequiresPermission;
 import com.lawoffice.framework.controller.BaseController;
 import com.lawoffice.system.entity.User;
 import com.lawoffice.system.service.IUserService;
@@ -17,4 +18,8 @@ public class UserController extends BaseController<IUserService, User> {
     public UserController(IUserService userService) {
         this.baseService = userService;
     }
+    
+    // 示例：添加权限控制的方法（需要在实际方法上添加注解）
+    // @RequiresPermission({"user:add"})
+    // public BaseResult<Void> addUser(@RequestBody User user) { ... }
 }
