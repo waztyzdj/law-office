@@ -152,29 +152,23 @@ public class PermissionAspect {
                 return;
             }
 
-            // 将 SecurityManager 绑定到当前线程上下文
-            ThreadContext.bind(securityManager);
+            // 执行权限校验（JwtAuthFilter 已经绑定了 SecurityManager）
+            Subject subject = SecurityUtils.getSubject();
+            String username = getCurrentUsername();
             
-            try {
-                // 执行权限校验
-                Subject subject = SecurityUtils.getSubject();
-                if (!subject.isPermitted(permissionCode)) {
-                    // 从 request 中获取用户名（更可靠）
-                    String username = getCurrentUsername();
-                    log.warn("用户 {} 没有权限 [{}] 访问方法: {}.{}",
-                            username != null ? username : "anonymous",
-                            permissionCode,
-                            targetClass.getSimpleName(), methodName);
-                    throw new PermissionDeniedException(permissionCode);
-                }
-
-                String username = getCurrentUsername();
-                log.debug("用户 {} 权限 [{}] 校验通过", username != null ? username : "anonymous", permissionCode);
-            } finally {
-                // 清理 ThreadContext，避免内存泄漏
-                ThreadContext.unbindSubject();
-                ThreadContext.unbindSecurityManager();
+            // 调试日志：输出当前用户的权限信息
+            log.debug("权限校验 - 用户: {}, 需要权限: [{}], Subject isAuthenticated: {}", 
+                    username, permissionCode, subject.isAuthenticated());
+            
+            if (!subject.isPermitted(permissionCode)) {
+                log.warn("用户 {} 没有权限 [{}] 访问方法: {}.{}",
+                        username != null ? username : "anonymous",
+                        permissionCode,
+                        targetClass.getSimpleName(), methodName);
+                throw new PermissionDeniedException(permissionCode);
             }
+
+            log.debug("用户 {} 权限 [{}] 校验通过", username != null ? username : "anonymous", permissionCode);
 
         } catch (RuntimeException e) {
             // 重新抛出运行时异常

@@ -53,10 +53,8 @@ public class AuthController {
                 return BaseResult.error(400, "用户名和密码不能为空");
             }
 
-            LambdaQueryWrapper<User> wrapper = new LambdaQueryWrapper<>();
-            wrapper.eq(User::getUsername, username)
-                   .eq(User::getDeleteFlag, 0);
-            User user = userMapper.selectOne(wrapper);
+            // 使用专用方法查询用户（包含密码字段）
+            User user = userMapper.selectByUsernameForLogin(username);
 
             if (user == null) {
                 log.warn("登录失败：用户名不存在 - {}", username);
@@ -75,12 +73,17 @@ public class AuthController {
 
             // 获取用户权限列表
             List<String> permissionCodes = userService.getUserPermissionCodes(user.getId());
+            log.info("用户 {} 的权限列表: {}", username, permissionCodes);
             
             // 获取用户角色列表
             List<com.lawoffice.system.entity.Role> roles = userService.getUserRoles(user.getId());
             List<String> roleCodes = roles.stream()
                     .map(com.lawoffice.system.entity.Role::getRoleCode)
                     .toList();
+            log.info("用户 {} 的角色列表: {}", username, roleCodes);
+
+            // 强制清除所有旧的 Redis 缓存（包括 Token、权限、角色）
+            tokenService.forceLogout(username);
 
             // 使用TokenService生成并存储Token到Redis
             String token = tokenService.generateAndStoreToken(
@@ -209,10 +212,8 @@ public class AuthController {
                 return BaseResult.error(401, "未登录或登录已过期");
             }
 
-            LambdaQueryWrapper<User> wrapper = new LambdaQueryWrapper<>();
-            wrapper.eq(User::getUsername, username)
-                   .eq(User::getDeleteFlag, 0);
-            User user = userMapper.selectOne(wrapper);
+            // 使用专用方法查询用户（包含密码字段）
+            User user = userMapper.selectByUsernameForLogin(username);
 
             if (user == null) {
                 return BaseResult.error(404, "用户不存在");

@@ -3,7 +3,6 @@ package com.lawoffice.framework.config;
 import com.fasterxml.jackson.annotation.JsonAutoDetect;
 import com.fasterxml.jackson.annotation.PropertyAccessor;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.jsontype.impl.LaissezFaireSubTypeValidator;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.data.redis.connection.RedisConnectionFactory;
@@ -29,15 +28,13 @@ public class RedisConfig {
         // 使用 StringRedisSerializer 来序列化和反序列化 redis 的 key 值
         StringRedisSerializer stringSerializer = new StringRedisSerializer();
         
-        // 使用 Jackson2JsonRedisSerializer 来序列化和反序列化 redis 的 value 值
-        Jackson2JsonRedisSerializer<Object> serializer = new Jackson2JsonRedisSerializer<>(Object.class);
-
+        // 创建 ObjectMapper（不启用类型信息）
         ObjectMapper mapper = new ObjectMapper();
         mapper.setVisibility(PropertyAccessor.ALL, JsonAutoDetect.Visibility.ANY);
-        mapper.activateDefaultTyping(LaissezFaireSubTypeValidator.instance, ObjectMapper.DefaultTyping.NON_FINAL);
+        // 注意：不启用 activateDefaultTyping，避免存储类型信息
         
-        // 新版 API，直接构造时传入 ObjectMapper
-        Jackson2JsonRedisSerializer<Object> newSerializer = 
+        // 使用 Jackson2JsonRedisSerializer
+        Jackson2JsonRedisSerializer<Object> serializer = 
                 new Jackson2JsonRedisSerializer<>(mapper, Object.class);
 
         // key 采用 String 的序列化方式
@@ -45,9 +42,9 @@ public class RedisConfig {
         // hash 的 key 也采用 String 的序列化方式
         template.setHashKeySerializer(stringSerializer);
         // value 序列化方式采用 jackson
-        template.setValueSerializer(newSerializer);
+        template.setValueSerializer(serializer);
         // hash 的 value 序列化方式采用 jackson
-        template.setHashValueSerializer(newSerializer);
+        template.setHashValueSerializer(serializer);
         template.afterPropertiesSet();
 
         return template;
