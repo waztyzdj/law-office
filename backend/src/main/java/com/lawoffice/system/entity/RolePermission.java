@@ -14,7 +14,7 @@ import java.time.LocalDateTime;
 @Data
 @EqualsAndHashCode(callSuper = true)
 @TableName("sys_role_permission")
-@ModuleInfo(name = "角色权限管理", description = "系统角色权限关联信息管理")
+@ModuleInfo(value = "role-permission", name = "角色权限管理", description = "系统角色权限关联信息管理")
 @Schema(description = "角色权限")
 public class RolePermission extends BaseEntity {
 

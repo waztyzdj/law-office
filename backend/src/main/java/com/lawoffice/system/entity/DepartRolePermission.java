@@ -11,7 +11,7 @@ import lombok.EqualsAndHashCode;
 @Data
 @EqualsAndHashCode(callSuper = true)
 @TableName("sys_depart_role_permission")
-@ModuleInfo(name = "部门角色权限管理", description = "系统部门角色权限关联信息管理")
+@ModuleInfo(value = "depart-role-permission", name = "部门角色权限管理", description = "系统部门角色权限关联信息管理")
 @Schema(description = "部门角色权限")
 public class DepartRolePermission extends BaseEntity {
 

@@ -12,7 +12,7 @@ import lombok.EqualsAndHashCode;
 @Data
 @EqualsAndHashCode(callSuper = true)
 @TableName("sys_user_role")
-@ModuleInfo(name = "用户角色管理", description = "系统用户角色关联信息管理")
+@ModuleInfo(value = "user-role", name = "用户角色管理", description = "系统用户角色关联信息管理")
 @Schema(description = "用户角色")
 public class UserRole extends BaseEntity {
 

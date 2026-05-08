@@ -1,5 +1,6 @@
 package com.lawoffice.system.aspect;
 
+import cn.hutool.core.util.StrUtil;
 import com.lawoffice.framework.annotation.ModuleInfo;
 import com.lawoffice.system.annotation.RequiresPermission;
 import lombok.extern.slf4j.Slf4j;
@@ -116,31 +117,31 @@ public class PermissionAspect {
                 return;
             }
             
-            // 获取模块名称（转换为小写，作为权限前缀）
-            String moduleName = moduleInfo.name();
-            
+            // 获取模块value值（作为权限前缀）
+            String moduleValue = moduleInfo.value();
+
             // 获取方法名
             String methodName = method.getName();
-            
+
             // 生成权限编码
-            String permissionCode = generatePermissionCode(moduleName, methodName);
-            
+            String permissionCode = generatePermissionCode(moduleValue, methodName);
+
             if (permissionCode == null) {
                 log.debug("方法 {} 不需要权限校验", methodName);
                 return;
             }
-            
+
             // 执行权限校验
             Subject subject = SecurityUtils.getSubject();
             if (!subject.isPermitted(permissionCode)) {
-                log.warn("用户 {} 没有权限 [{}] 访问方法: {}.{}", 
-                        subject.getPrincipal(), permissionCode, 
+                log.warn("用户 {} 没有权限 [{}] 访问方法: {}.{}",
+                        subject.getPrincipal(), permissionCode,
                         targetClass.getSimpleName(), methodName);
                 throw new RuntimeException("没有权限访问该功能，需要权限: " + permissionCode);
             }
-            
+
             log.debug("用户 {} 权限 [{}] 校验通过", subject.getPrincipal(), permissionCode);
-            
+
         } catch (RuntimeException e) {
             // 重新抛出运行时异常
             throw e;
@@ -155,16 +156,16 @@ public class PermissionAspect {
      * 规则：模块名:操作类型
      * 例如：user:view, role:add, permission:delete
      */
-    private String generatePermissionCode(String moduleName, String methodName) {
+    private String generatePermissionCode(String moduleValue, String methodName) {
         // 优先使用方法名映射
         String operation = METHOD_PERMISSION_MAP.get(methodName);
-        
+
         // 如果还是没有，返回null（不校验权限）
-        if (operation == null) {
+        if (StrUtil.isBlank(moduleValue) || StrUtil.isBlank(operation)) {
             return null;
         }
-        
+
         // 生成权限编码：模块名:操作
-        return moduleName + ":" + operation;
+        return moduleValue + ":" + operation;
     }
 }

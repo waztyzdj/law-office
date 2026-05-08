@@ -12,7 +12,7 @@ import lombok.EqualsAndHashCode;
 @Data
 @EqualsAndHashCode(callSuper = true)
 @TableName("sys_dict")
-@ModuleInfo(name = "字典管理", description = "系统字典信息管理")
+@ModuleInfo(value = "dict", name = "字典管理", description = "系统字典信息管理")
 @Schema(description = "字典")
 public class SysDict extends BaseEntity {
 

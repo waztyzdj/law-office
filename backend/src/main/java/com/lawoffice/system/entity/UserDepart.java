@@ -11,7 +11,7 @@ import lombok.EqualsAndHashCode;
 @Data
 @EqualsAndHashCode(callSuper = true)
 @TableName("sys_user_depart")
-@ModuleInfo(name = "用户部门管理", description = "系统用户部门关联信息管理")
+@ModuleInfo(value = "user-depart", name = "用户部门管理", description = "系统用户部门关联信息管理")
 @Schema(description = "用户部门")
 public class UserDepart extends BaseEntity {
 

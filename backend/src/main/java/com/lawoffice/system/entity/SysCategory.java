@@ -12,7 +12,7 @@ import lombok.EqualsAndHashCode;
 @Data
 @EqualsAndHashCode(callSuper = true)
 @TableName("sys_category")
-@ModuleInfo(name = "通用类型管理", description = "系统通用类型信息管理")
+@ModuleInfo(value = "category", name = "通用类型管理", description = "系统通用类型信息管理")
 @Schema(description = "通用类型")
 public class SysCategory extends BaseEntity {
 

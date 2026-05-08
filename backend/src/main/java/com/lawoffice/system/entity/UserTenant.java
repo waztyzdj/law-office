@@ -11,7 +11,7 @@ import lombok.EqualsAndHashCode;
 @Data
 @EqualsAndHashCode(callSuper = true)
 @TableName("sys_user_tenant")
-@ModuleInfo(name = "用户租户管理", description = "系统用户租户关联信息管理")
+@ModuleInfo(value = "user-tenant", name = "用户租户管理", description = "系统用户租户关联信息管理")
 @Schema(description = "用户租户")
 public class UserTenant extends BaseEntity {
 

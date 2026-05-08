@@ -12,7 +12,7 @@ import lombok.EqualsAndHashCode;
 @Data
 @EqualsAndHashCode(callSuper = true)
 @TableName("sys_depart")
-@ModuleInfo(name = "组织机构管理", description = "系统组织机构信息管理")
+@ModuleInfo(value = "depart", name = "组织机构管理", description = "系统组织机构信息管理")
 @Schema(description = "组织机构")
 public class SysDepart extends BaseEntity {
 

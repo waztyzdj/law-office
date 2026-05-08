@@ -12,7 +12,7 @@ import lombok.EqualsAndHashCode;
 @Data
 @EqualsAndHashCode(callSuper = true)
 @TableName("sys_permission")
-@ModuleInfo(name = "菜单权限管理", description = "系统菜单权限信息管理")
+@ModuleInfo(value = "permission", name = "菜单权限管理", description = "系统菜单权限信息管理")
 @Schema(description = "菜单权限")
 public class Permission extends BaseEntity {
 

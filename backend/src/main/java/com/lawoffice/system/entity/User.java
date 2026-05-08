@@ -15,7 +15,7 @@ import java.time.LocalDateTime;
 @Data
 @EqualsAndHashCode(callSuper = true)
 @TableName("sys_user")
-@ModuleInfo(name = "用户管理", description = "系统用户信息管理")
+@ModuleInfo(value = "user", name = "用户管理", description = "系统用户信息管理")
 @Schema(description = "用户")
 public class User extends BaseEntity {
     

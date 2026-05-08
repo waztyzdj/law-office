@@ -14,7 +14,7 @@ import java.time.LocalDateTime;
 @Data
 @EqualsAndHashCode(callSuper = true)
 @TableName("sys_tenant")
-@ModuleInfo(name = "多租户管理", description = "系统多租户信息管理")
+@ModuleInfo(value = "tenant", name = "多租户管理", description = "系统多租户信息管理")
 @Schema(description = "多租户")
 public class Tenant extends BaseEntity {
 

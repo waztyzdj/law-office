@@ -12,7 +12,7 @@ import lombok.EqualsAndHashCode;
 @Data
 @EqualsAndHashCode(callSuper = true)
 @TableName("sys_files")
-@ModuleInfo(name = "知识库文档管理", description = "系统知识库文档信息管理")
+@ModuleInfo(value = "files", name = "知识库文档管理", description = "系统知识库文档信息管理")
 @Schema(description = "知识库文档")
 public class SysFiles extends BaseEntity {
 
