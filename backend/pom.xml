@@ -162,11 +162,23 @@
             <version>8.5.7</version>
         </dependency>
 
-        <!-- Apache Shiro for Spring Boot (Jakarta) -->
+        <!-- Apache Shiro Core (不使用 web starter，避免 javax.servlet 依赖) -->
         <dependency>
             <groupId>org.apache.shiro</groupId>
-            <artifactId>shiro-spring-boot-web-starter</artifactId>
-            <version>2.0.1</version>
+            <artifactId>shiro-core</artifactId>
+            <version>2.0.2</version>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.shiro</groupId>
+            <artifactId>shiro-spring</artifactId>
+            <version>2.0.2</version>
+            <exclusions>
+                <!-- 排除旧的 shiro-web，因为它依赖 javax.servlet -->
+                <exclusion>
+                    <groupId>org.apache.shiro</groupId>
+                    <artifactId>shiro-web</artifactId>
+                </exclusion>
+            </exclusions>
         </dependency>
     </dependencies>
 
