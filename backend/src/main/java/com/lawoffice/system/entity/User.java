@@ -28,10 +28,12 @@ public class User extends BaseEntity {
     private String realname;
     
     @ExcelIgnore
+    @TableField(select = false)  // 查询时不返回此字段
     @Schema(description = "密码")
     private String password;
     
     @ExcelIgnore
+    @TableField(select = false)  // 查询时不返回此字段
     @Schema(description = "md5密码盐")
     private String salt;
     
