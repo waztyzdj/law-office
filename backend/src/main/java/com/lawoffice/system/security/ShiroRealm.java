@@ -86,7 +86,7 @@ public class ShiroRealm extends AuthorizingRealm {
     }
 
     /**
-     * 认证 - 验证JWT Token
+     * 认证 - 验证JWT Token（从 Redis 获取用户信息，避免频繁查库）
      */
     @Override
     protected AuthenticationInfo doGetAuthenticationInfo(AuthenticationToken authenticationToken) 
@@ -108,22 +108,17 @@ public class ShiroRealm extends AuthorizingRealm {
                 throw new AuthenticationException("Token中未包含用户名");
             }
 
-            // 查询用户信息
-            LambdaQueryWrapper<User> wrapper = new LambdaQueryWrapper<>();
-            wrapper.eq(User::getUsername, username)
-                   .eq(User::getDeleteFlag, 0);
-            User user = userMapper.selectOne(wrapper);
-
-            if (user == null) {
-                throw new AuthenticationException("用户不存在");
+            // 从 Redis 验证 Token 是否存在（JwtAuthFilter 已经验证过，这里再次确认）
+            if (!tokenService.validateToken(token)) {
+                throw new AuthenticationException("Token已失效");
             }
 
-            // 检查用户状态
-            if (user.getStatus() != null && user.getStatus() == 0) {
-                throw new AuthenticationException("用户已被禁用");
-            }
-
-            log.info("用户 {} 认证成功", username);
+            // 注意：这里不再查询数据库，因为：
+            // 1. JwtAuthFilter 已经验证了 Token 在 Redis 中存在
+            // 2. Token 存在说明用户已经登录且未过期
+            // 3. 用户状态变化会通过清除 Redis Token 来强制下线
+            
+            log.debug("用户 {} 认证成功（使用缓存）", username);
             return new SimpleAuthenticationInfo(username, token, getName());
 
         } catch (AuthenticationException e) {
