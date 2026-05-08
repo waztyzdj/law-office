@@ -7,7 +7,9 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.shiro.SecurityUtils;
+import org.apache.shiro.mgt.SecurityManager;
 import org.apache.shiro.subject.Subject;
+import org.apache.shiro.util.ThreadContext;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
@@ -27,6 +29,9 @@ public class JwtAuthFilter extends OncePerRequestFilter {
 
     @Autowired
     private ITokenService tokenService;
+
+    @Autowired
+    private SecurityManager securityManager;
 
     private JwtUtil jwtUtil;
 
@@ -95,6 +100,9 @@ public class JwtAuthFilter extends OncePerRequestFilter {
             // 从Token中获取用户名
             String username = jwtUtil.getUsernameFromToken(token);
             
+            // 将 SecurityManager 绑定到当前线程上下文
+            ThreadContext.bind(securityManager);
+            
             // 创建ShiroJwtToken并进行认证
             ShiroJwtToken shiroToken = new ShiroJwtToken(token);
             Subject subject = SecurityUtils.getSubject();
@@ -112,6 +120,10 @@ public class JwtAuthFilter extends OncePerRequestFilter {
             response.setContentType("application/json;charset=UTF-8");
             response.getWriter().write("{\"code\":401,\"message\":\"认证失败: " + e.getMessage() + "\"}");
             return;
+        } finally {
+            // 清理 ThreadContext，避免内存泄漏
+            ThreadContext.unbindSubject();
+            ThreadContext.unbindSecurityManager();
         }
 
         // 继续过滤链

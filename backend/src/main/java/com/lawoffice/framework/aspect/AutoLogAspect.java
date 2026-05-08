@@ -130,25 +130,42 @@ public class AutoLogAspect {
         }
         
         try {
+            // 收集所有可序列化的参数
+            java.util.List<Object> serializableArgs = new java.util.ArrayList<>();
+            
             for (Object arg : args) {
                 if (arg == null) {
                     continue;
                 }
                 
                 String className = arg.getClass().getName();
+                // 过滤掉 Servlet 相关对象
                 if (className.contains("HttpServletRequest") || 
                     className.contains("HttpServletResponse") ||
-                    className.contains("Servlet")) {
+                    className.contains("Servlet") ||
+                    className.contains("jakarta.servlet")) {
                     continue;
                 }
                 
-                return JSON.toJSONString(arg);
+                serializableArgs.add(arg);
             }
+            
+            // 如果没有可序列化的参数，返回空对象
+            if (serializableArgs.isEmpty()) {
+                return "{}";
+            }
+            
+            // 如果只有一个参数，直接序列化
+            if (serializableArgs.size() == 1) {
+                return JSON.toJSONString(serializableArgs.get(0));
+            }
+            
+            // 如果有多个参数，序列化为数组
+            return JSON.toJSONString(serializableArgs);
         } catch (Exception e) {
             log.warn("参数序列化异常", e);
+            return "{}";
         }
-        
-        return "{}";
     }
 
     private OperateType getOperateTypeByMethodName(String methodName) {
