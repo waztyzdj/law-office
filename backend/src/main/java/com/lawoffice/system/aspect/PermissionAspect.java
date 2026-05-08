@@ -2,14 +2,18 @@ package com.lawoffice.system.aspect;
 
 import cn.hutool.core.util.StrUtil;
 import com.lawoffice.framework.annotation.ModuleInfo;
+import com.lawoffice.framework.exception.PermissionDeniedException;
 import com.lawoffice.system.annotation.RequiresPermission;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.shiro.SecurityUtils;
+import org.apache.shiro.mgt.SecurityManager;
 import org.apache.shiro.subject.Subject;
+import org.apache.shiro.util.ThreadContext;
 import org.aspectj.lang.JoinPoint;
 import org.aspectj.lang.annotation.Aspect;
 import org.aspectj.lang.annotation.Before;
 import org.aspectj.lang.reflect.MethodSignature;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 import org.springframework.web.bind.annotation.*;
 
@@ -28,6 +32,9 @@ import java.util.Map;
 @Aspect
 @Component
 public class PermissionAspect {
+
+    @Autowired
+    private SecurityManager securityManager;
 
     /**
      * HTTP方法与权限操作的映射（用于BaseController自动权限）
@@ -86,7 +93,7 @@ public class PermissionAspect {
         if (!hasPermission) {
             log.warn("用户 {} 没有权限访问方法: {}, 需要的权限: {}", 
                     subject.getPrincipal(), method.getName(), Arrays.toString(permissions));
-            throw new RuntimeException("没有权限访问该功能");
+            throw new PermissionDeniedException(Arrays.toString(permissions));
         }
 
         log.debug("用户 {} 权限校验通过: {}", subject.getPrincipal(), method.getName());
@@ -104,11 +111,25 @@ public class PermissionAspect {
             // 获取目标类（实际的Controller类）
             Class<?> targetClass = joinPoint.getTarget().getClass();
             
-            // 检查是否有 ModuleInfo 注解
-            ModuleInfo moduleInfo = targetClass.getAnnotation(ModuleInfo.class);
+            // 从 BaseController 的 entityClass 字段中获取实体类
+            ModuleInfo moduleInfo = null;
+            try {
+                // 通过反射获取 entityClass 字段
+                java.lang.reflect.Field entityClassField = targetClass.getSuperclass().getDeclaredField("entityClass");
+                entityClassField.setAccessible(true);
+                Class<?> entityClass = (Class<?>) entityClassField.get(joinPoint.getTarget());
+                
+                // 从实体类上获取 @ModuleInfo 注解
+                if (entityClass != null) {
+                    moduleInfo = entityClass.getAnnotation(ModuleInfo.class);
+                }
+            } catch (Exception e) {
+                log.debug("从 BaseController 获取 entityClass 失败: {}", e.getMessage());
+            }
+            
             if (moduleInfo == null) {
                 // 如果没有 ModuleInfo 注解，跳过权限校验
-                log.debug("类 {} 没有 ModuleInfo 注解，跳过权限校验", targetClass.getSimpleName());
+                log.debug("类 {} 的实体类没有 ModuleInfo 注解，跳过权限校验", targetClass.getSimpleName());
                 return;
             }
             
@@ -131,16 +152,25 @@ public class PermissionAspect {
                 return;
             }
 
-            // 执行权限校验
-            Subject subject = SecurityUtils.getSubject();
-            if (!subject.isPermitted(permissionCode)) {
-                log.warn("用户 {} 没有权限 [{}] 访问方法: {}.{}",
-                        subject.getPrincipal(), permissionCode,
-                        targetClass.getSimpleName(), methodName);
-                throw new RuntimeException("没有权限访问该功能，需要权限: " + permissionCode);
-            }
+            // 将 SecurityManager 绑定到当前线程上下文
+            ThreadContext.bind(securityManager);
+            
+            try {
+                // 执行权限校验
+                Subject subject = SecurityUtils.getSubject();
+                if (!subject.isPermitted(permissionCode)) {
+                    log.warn("用户 {} 没有权限 [{}] 访问方法: {}.{}",
+                            subject.getPrincipal(), permissionCode,
+                            targetClass.getSimpleName(), methodName);
+                    throw new PermissionDeniedException(permissionCode);
+                }
 
-            log.debug("用户 {} 权限 [{}] 校验通过", subject.getPrincipal(), permissionCode);
+                log.debug("用户 {} 权限 [{}] 校验通过", subject.getPrincipal(), permissionCode);
+            } finally {
+                // 清理 ThreadContext，避免内存泄漏
+                ThreadContext.unbindSubject();
+                ThreadContext.unbindSecurityManager();
+            }
 
         } catch (RuntimeException e) {
             // 重新抛出运行时异常

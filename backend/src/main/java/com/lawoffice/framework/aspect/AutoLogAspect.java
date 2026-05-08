@@ -1,6 +1,6 @@
 package com.lawoffice.framework.aspect;
 
-import com.alibaba.fastjson2.JSON;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.lawoffice.framework.annotation.AutoLog;
 import com.lawoffice.framework.annotation.ModuleInfo;
 import com.lawoffice.framework.entity.SysLog;
@@ -8,6 +8,7 @@ import com.lawoffice.framework.enums.LogType;
 import com.lawoffice.framework.enums.OperateType;
 import com.lawoffice.framework.service.ILogService;
 import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
 import lombok.extern.slf4j.Slf4j;
 import org.aspectj.lang.ProceedingJoinPoint;
 import org.aspectj.lang.annotation.Around;
@@ -27,6 +28,9 @@ public class AutoLogAspect {
 
     @Autowired
     private ILogService sysLogService;
+    
+    @Autowired
+    private ObjectMapper objectMapper;
 
     @Around("@annotation(autoLog)")
     public Object aroundWithAnnotation(ProceedingJoinPoint joinPoint, AutoLog autoLog) throws Throwable {
@@ -138,12 +142,10 @@ public class AutoLogAspect {
                     continue;
                 }
                 
-                String className = arg.getClass().getName();
-                // 过滤掉 Servlet 相关对象
-                if (className.contains("HttpServletRequest") || 
-                    className.contains("HttpServletResponse") ||
-                    className.contains("Servlet") ||
-                    className.contains("jakarta.servlet")) {
+                // 使用 instanceof 过滤 Servlet 相关对象（更可靠）
+                if (arg instanceof HttpServletRequest || 
+                    arg instanceof HttpServletResponse) {
+                    log.debug("过滤掉 Servlet 对象: {}", arg.getClass().getName());
                     continue;
                 }
                 
@@ -155,13 +157,14 @@ public class AutoLogAspect {
                 return "{}";
             }
             
+            // 使用 Jackson 序列化（比 fastjson2 更安全，不会触发 getter 方法）
             // 如果只有一个参数，直接序列化
             if (serializableArgs.size() == 1) {
-                return JSON.toJSONString(serializableArgs.get(0));
+                return objectMapper.writeValueAsString(serializableArgs.get(0));
             }
             
             // 如果有多个参数，序列化为数组
-            return JSON.toJSONString(serializableArgs);
+            return objectMapper.writeValueAsString(serializableArgs);
         } catch (Exception e) {
             log.warn("参数序列化异常", e);
             return "{}";
