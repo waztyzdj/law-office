@@ -159,13 +159,17 @@ public class PermissionAspect {
                 // 执行权限校验
                 Subject subject = SecurityUtils.getSubject();
                 if (!subject.isPermitted(permissionCode)) {
+                    // 从 request 中获取用户名（更可靠）
+                    String username = getCurrentUsername();
                     log.warn("用户 {} 没有权限 [{}] 访问方法: {}.{}",
-                            subject.getPrincipal(), permissionCode,
+                            username != null ? username : "anonymous",
+                            permissionCode,
                             targetClass.getSimpleName(), methodName);
                     throw new PermissionDeniedException(permissionCode);
                 }
 
-                log.debug("用户 {} 权限 [{}] 校验通过", subject.getPrincipal(), permissionCode);
+                String username = getCurrentUsername();
+                log.debug("用户 {} 权限 [{}] 校验通过", username != null ? username : "anonymous", permissionCode);
             } finally {
                 // 清理 ThreadContext，避免内存泄漏
                 ThreadContext.unbindSubject();
@@ -197,5 +201,24 @@ public class PermissionAspect {
 
         // 生成权限编码：模块名:操作
         return moduleValue + ":" + operation;
+    }
+    
+    /**
+     * 从当前请求中获取用户名
+     */
+    private String getCurrentUsername() {
+        try {
+            org.springframework.web.context.request.ServletRequestAttributes attributes = 
+                (org.springframework.web.context.request.ServletRequestAttributes) 
+                org.springframework.web.context.request.RequestContextHolder.getRequestAttributes();
+            
+            if (attributes != null) {
+                Object username = attributes.getRequest().getAttribute("username");
+                return username != null ? username.toString() : null;
+            }
+        } catch (Exception e) {
+            log.debug("获取用户名失败", e);
+        }
+        return null;
     }
 }
