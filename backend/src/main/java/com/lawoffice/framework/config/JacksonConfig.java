@@ -1,5 +1,8 @@
 package com.lawoffice.framework.config;
 
+import com.fasterxml.jackson.core.JsonParser;
+import com.fasterxml.jackson.databind.DeserializationContext;
+import com.fasterxml.jackson.databind.JsonDeserializer;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
@@ -13,10 +16,12 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.converter.json.Jackson2ObjectMapperBuilder;
 
+import java.io.IOException;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.time.format.DateTimeFormatter;
+import java.time.format.DateTimeParseException;
 
 @Configuration
 public class JacksonConfig {
@@ -24,6 +29,40 @@ public class JacksonConfig {
     private static final String DATE_TIME_PATTERN = "yyyy-MM-dd HH:mm:ss";
     private static final String DATE_PATTERN = "yyyy-MM-dd";
     private static final String TIME_PATTERN = "HH:mm:ss";
+
+    /**
+     * 灵活的 LocalDateTime 反序列化器
+     * 支持: yyyy-MM-dd HH:mm:ss 和 yyyy-MM-dd 两种格式
+     */
+    static class FlexibleLocalDateTimeDeserializer extends JsonDeserializer<LocalDateTime> {
+        private static final DateTimeFormatter DATE_TIME_FORMATTER = DateTimeFormatter.ofPattern(DATE_TIME_PATTERN);
+        private static final DateTimeFormatter DATE_FORMATTER = DateTimeFormatter.ofPattern(DATE_PATTERN);
+
+        @Override
+        public LocalDateTime deserialize(JsonParser p, DeserializationContext ctxt) throws IOException {
+            String dateString = p.getValueAsString();
+            
+            if (dateString == null || dateString.trim().isEmpty()) {
+                return null;
+            }
+            
+            dateString = dateString.trim();
+            
+            try {
+                // 先尝试解析完整的日期时间格式
+                if (dateString.length() > 10) {
+                    return LocalDateTime.parse(dateString, DATE_TIME_FORMATTER);
+                } else {
+                    // 只有日期，解析后设置时间为 00:00:00
+                    LocalDate date = LocalDate.parse(dateString, DATE_FORMATTER);
+                    return date.atStartOfDay();
+                }
+            } catch (DateTimeParseException e) {
+                throw new IOException("无法解析日期时间: " + dateString + 
+                    "，期望格式: yyyy-MM-dd HH:mm:ss 或 yyyy-MM-dd", e);
+            }
+        }
+    }
 
     @Bean
     public ObjectMapper objectMapper() {
@@ -38,8 +77,8 @@ public class JacksonConfig {
                 new LocalTimeSerializer(DateTimeFormatter.ofPattern(TIME_PATTERN)));
         
         // 反序列化（JSON -> Java）
-        javaTimeModule.addDeserializer(LocalDateTime.class, 
-                new LocalDateTimeDeserializer(DateTimeFormatter.ofPattern(DATE_TIME_PATTERN)));
+        // 使用灵活的反序列化器，支持 yyyy-MM-dd 和 yyyy-MM-dd HH:mm:ss
+        javaTimeModule.addDeserializer(LocalDateTime.class, new FlexibleLocalDateTimeDeserializer());
         javaTimeModule.addDeserializer(LocalDate.class, 
                 new LocalDateDeserializer(DateTimeFormatter.ofPattern(DATE_PATTERN)));
         javaTimeModule.addDeserializer(LocalTime.class, 
