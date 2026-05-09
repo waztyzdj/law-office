@@ -153,26 +153,20 @@ public class AuthController {
         try {
             // 从请求头获取Token
             String authHeader = request.getHeader("Authorization");
-            String username = "unknown";
             
             if (authHeader != null && authHeader.startsWith("Bearer ")) {
                 String token = authHeader.substring(7);
-                // 从 Token 中获取用户名（用于日志记录）
-                try {
-                    com.lawoffice.system.util.JwtUtil jwtUtil = new com.lawoffice.system.util.JwtUtil(
-                        org.springframework.beans.factory.annotation.Value.class.cast(null) != null ? 
-                        "lawoffice_jwt_secret_key_2026_change_this_in_production" : "lawoffice_jwt_secret_key_2026_change_this_in_production"
-                    );
-                    username = jwtUtil.getUsernameFromToken(token);
-                } catch (Exception e) {
-                    log.warn("从Token中获取用户名失败: {}", e.getMessage());
-                }
+                // 从 request 属性中获取用户名（由 JwtAuthFilter 设置）
+                String username = (String) request.getAttribute("username");
                 
                 // 删除Redis中的Token和权限信息
                 tokenService.removeToken(token);
+                
+                log.info("用户登出：{}", username != null ? username : "unknown");
+            } else {
+                log.info("用户登出：无有效Token");
             }
             
-            log.info("用户登出：{}", username);
             return BaseResult.success();
         } catch (Exception e) {
             log.error("登出异常", e);
