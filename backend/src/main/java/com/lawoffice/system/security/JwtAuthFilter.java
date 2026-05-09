@@ -120,14 +120,16 @@ public class JwtAuthFilter extends OncePerRequestFilter {
             response.setContentType("application/json;charset=UTF-8");
             response.getWriter().write("{\"code\":401,\"message\":\"认证失败: " + e.getMessage() + "\"}");
             return;
-        } finally {
-            // 清理 ThreadContext，避免内存泄漏
-            ThreadContext.unbindSubject();
-            ThreadContext.unbindSecurityManager();
         }
 
         // 继续过滤链
-        filterChain.doFilter(request, response);
+        try {
+            filterChain.doFilter(request, response);
+        } finally {
+            // 在请求处理完成后清理 ThreadContext，避免内存泄漏
+            ThreadContext.unbindSubject();
+            ThreadContext.unbindSecurityManager();
+        }
     }
 
     /**

@@ -90,4 +90,34 @@ public interface IUserService extends IBaseService<User> {
      * @return 权限编码列表（perms字段）
      */
     List<String> getUserPermissionCodes(String userId);
+
+    /**
+     * 用户登录业务逻辑
+     * @param username 用户名
+     * @param password 密码
+     * @return 登录结果，包含token、用户信息等
+     */
+    java.util.Map<String, Object> login(String username, String password);
+
+    /**
+     * 获取当前用户信息
+     * @param username 用户名
+     * @return 用户信息
+     */
+    User getCurrentUserInfo(String username);
+
+    /**
+     * 用户登出业务逻辑
+     * @param token Token字符串
+     * @param username 用户名（可选，从request中获取）
+     */
+    void logout(String token, String username);
+
+    /**
+     * 修改密码业务逻辑
+     * @param username 用户名
+     * @param oldPassword 旧密码
+     * @param newPassword 新密码
+     */
+    void changePassword(String username, String oldPassword, String newPassword);
 }

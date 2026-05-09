@@ -46,6 +46,12 @@ public class UserServiceImpl extends BaseServiceImpl<UserMapper, User> implement
     @Autowired
     private PermissionMapper permissionMapper;
     
+    @Autowired
+    private UserMapper userMapper;
+    
+    @Autowired
+    private com.lawoffice.system.service.ITokenService tokenService;
+    
     private final BCryptPasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
 
     @Override
@@ -362,5 +368,112 @@ public class UserServiceImpl extends BaseServiceImpl<UserMapper, User> implement
             .filter(StringUtils::hasText) // 过滤掉空的perms
             .distinct()
             .collect(Collectors.toList());
+    }
+
+    @Override
+    public java.util.Map<String, Object> login(String username, String password) {
+        // 1. 查询用户信息（包含密码字段）
+        User user = userMapper.selectByUsernameForLogin(username);
+        
+        if (user == null) {
+            log.warn("登录失败：用户名不存在 - {}", username);
+            throw new RuntimeException("用户名或密码错误");
+        }
+        
+        // 2. 检查用户状态
+        if (user.getStatus() != null && user.getStatus() == 0) {
+            log.warn("登录失败：用户已被禁用 - {}", username);
+            throw new RuntimeException("用户已被禁用，请联系管理员");
+        }
+        
+        // 3. 验证密码
+        if (!verifyPassword(password, user.getPassword())) {
+            log.warn("登录失败：密码错误 - {}", username);
+            throw new RuntimeException("用户名或密码错误");
+        }
+        
+        // 4. 获取用户权限列表
+        List<String> permissionCodes = getUserPermissionCodes(user.getId());
+        log.info("用户 {} 的权限列表: {}", username, permissionCodes);
+        
+        // 5. 获取用户角色列表
+        List<Role> roles = getUserRoles(user.getId());
+        List<String> roleCodes = roles.stream()
+                .map(Role::getRoleCode)
+                .collect(Collectors.toList());
+        log.info("用户 {} 的角色列表: {}", username, roleCodes);
+        
+        // 6. 强制清除所有旧的 Redis 缓存（包括 Token、权限、角色）
+        tokenService.forceLogout(username);
+        
+        // 7. 生成并存储Token到Redis
+        String token = tokenService.generateAndStoreToken(
+                username,
+                user.getId(),
+                user.getRealname(),
+                permissionCodes,
+                roleCodes
+        );
+        
+        // 8. 构建返回结果
+        java.util.Map<String, Object> result = new java.util.HashMap<>();
+        result.put("token", token);
+        result.put("username", user.getUsername());
+        result.put("realName", user.getRealname());
+        result.put("userId", user.getId());
+        result.put("permissions", permissionCodes);
+        result.put("roles", roleCodes);
+        result.put("expireTime", 24); // 24小时
+        
+        log.info("用户登录成功：{}, 权限数量: {}, 角色数量: {}", username, permissionCodes.size(), roleCodes.size());
+        return result;
+    }
+
+    @Override
+    public User getCurrentUserInfo(String username) {
+        if (!StringUtils.hasText(username)) {
+            throw new RuntimeException("未登录或登录已过期");
+        }
+        
+        LambdaQueryWrapper<User> wrapper = new LambdaQueryWrapper<>();
+        wrapper.eq(User::getUsername, username)
+               .eq(User::getDeleteFlag, 0);
+        User user = userMapper.selectOne(wrapper);
+        
+        if (user == null) {
+            throw new RuntimeException("用户不存在");
+        }
+        
+        return user;
+    }
+
+    @Override
+    public void logout(String token, String username) {
+        if (token != null && !token.isEmpty()) {
+            // 删除Redis中的Token和权限信息
+            tokenService.removeToken(token);
+            log.info("用户登出：{}", username != null ? username : "unknown");
+        } else {
+            log.info("用户登出：无有效Token");
+        }
+    }
+
+    @Override
+    public void changePassword(String username, String oldPassword, String newPassword) {
+        // 1. 查询用户信息（包含密码字段）
+        User user = userMapper.selectByUsernameForLogin(username);
+        
+        if (user == null) {
+            throw new RuntimeException("用户不存在");
+        }
+        
+        // 2. 验证旧密码
+        if (!verifyPassword(oldPassword, user.getPassword())) {
+            throw new RuntimeException("旧密码错误");
+        }
+        
+        // 3. 重置密码
+        resetPassword(user.getId(), newPassword);
+        log.info("用户修改密码成功：{}", username);
     }
 }
