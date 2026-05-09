@@ -58,7 +58,7 @@ public class Permission extends BaseEntity {
 
     @ExcelProperty("菜单排序")
     @Schema(description = "菜单排序")
-    private Double sortNo;
+    private Integer sortNo;
 
     @ExcelIgnore
     @Schema(description = "聚合子路由: 1是0否")
