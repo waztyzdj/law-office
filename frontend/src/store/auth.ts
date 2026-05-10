@@ -39,35 +39,27 @@ export const useAuthStore = defineStore('auth', () => {
       if (result.token) {
         accessStore.setAccessToken(result.token);
 
-        // 构建用户信息
-        userInfo = {
-          userId: result.userId,
-          username: result.username,
-          realName: result.realName,
-          roles: result.roles,
-          homePath: preferences.app.defaultHomePath,
-        };
-
-        userStore.setUserInfo(userInfo);
-        accessStore.setAccessCodes(result.permissions);
+        // 注意：这里不再设置用户信息和权限码
+        // 用户信息将在路由守卫中通过 fetchUserInfo() 获取
+        // 权限码也将在路由守卫中通过 getAccessCodesApi() 获取
 
         if (accessStore.loginExpired) {
           accessStore.setLoginExpired(false);
         } else {
+          // 登录成功后，触发路由守卫，由守卫获取用户信息并生成菜单
           onSuccess
             ? await onSuccess?.()
-            : await router.push(
-                userInfo.homePath || preferences.app.defaultHomePath,
-              );
+            : await router.push(preferences.app.defaultHomePath);
         }
 
-        if (userInfo?.realName) {
-          notification.success({
-            description: `${$t('authentication.loginSuccessDesc')}:${userInfo?.realName}`,
-            duration: 3,
-            message: $t('authentication.loginSuccess'),
-          });
-        }
+        // 暂时不显示成功通知，等获取到用户信息后再显示
+        // if (userInfo?.realName) {
+        //   notification.success({
+        //     description: `${$t('authentication.loginSuccessDesc')}:${userInfo?.realName}`,
+        //     duration: 3,
+        //     message: $t('authentication.loginSuccess'),
+        //   });
+        // }
       }
     } finally {
       loginLoading.value = false;
@@ -108,6 +100,9 @@ export const useAuthStore = defineStore('auth', () => {
       realName: userInfo.realName || (userInfo as any).realName,
       roles: userInfo.roles || (userInfo as any).roles || [],
       homePath: userInfo.homePath || preferences.app.defaultHomePath,
+      desc: userInfo.desc || (userInfo as any).desc || '',
+      token: accessStore.accessToken || '',
+      avatar: userInfo.avatar || (userInfo as any).avatar || '',
     };
     
     userStore.setUserInfo(adaptedUserInfo);

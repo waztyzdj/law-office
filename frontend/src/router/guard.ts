@@ -5,8 +5,11 @@ import { preferences } from '@vben/preferences';
 import { useAccessStore, useUserStore } from '@vben/stores';
 import { startProgress, stopProgress } from '@vben/utils';
 
+import { notification } from 'ant-design-vue';
+
 import { accessRoutes, coreRouteNames } from '#/router/routes';
 import { useAuthStore } from '#/store';
+import { $t } from '#/locales';
 
 import { generateAccess } from './access';
 
@@ -93,7 +96,12 @@ function setupAccessGuard(router: Router) {
     // 生成路由表
     // 当前登录用户拥有的角色标识列表
     const userInfo = userStore.userInfo || (await authStore.fetchUserInfo());
+
     const userRoles = userInfo.roles ?? [];
+
+    // 从用户信息中获取权限码（后端在 /api/user/info 中返回 permissions 字段）
+    const accessCodes = (userInfo as any).permissions || [];
+    accessStore.setAccessCodes(accessCodes);
 
     // 生成菜单和路由
     const { accessibleMenus, accessibleRoutes } = await generateAccess({
@@ -107,6 +115,16 @@ function setupAccessGuard(router: Router) {
     accessStore.setAccessMenus(accessibleMenus);
     accessStore.setAccessRoutes(accessibleRoutes);
     accessStore.setIsAccessChecked(true);
+    
+    // 显示登录成功通知
+    if (userInfo?.realName) {
+      notification.success({
+        description: `${$t('authentication.loginSuccessDesc')}:${userInfo?.realName}`,
+        duration: 3,
+        message: $t('authentication.loginSuccess'),
+      });
+    }
+    
     const redirectPath = (from.query.redirect ??
       (to.path === preferences.app.defaultHomePath
         ? userInfo.homePath || preferences.app.defaultHomePath

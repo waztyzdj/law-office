@@ -506,7 +506,7 @@ public class UserServiceImpl extends BaseServiceImpl<UserMapper, User> implement
         userInfoDTO.setPermissions(permissionCodes);
         userInfoDTO.setRoles(roleCodes);
         // homePath 可以根据业务需求设置
-        userInfoDTO.setHomePath("/dashboard/analytics");
+        userInfoDTO.setHomePath("/system/user");
         
         log.info("获取用户详细信息成功：{}, 权限数量: {}, 角色数量: {}", username, permissionCodes.size(), roleCodes.size());
         return userInfoDTO;
