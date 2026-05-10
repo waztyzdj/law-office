@@ -122,9 +122,9 @@ public interface IUserService extends IBaseService<User> {
     void changePassword(String username, String oldPassword, String newPassword);
 
     /**
-     * 获取当前用户详细信息（包含角色、权限）
+     * 获取当前用户详细信息（包含角色、权限、菜单）
      * @param username 用户名
-     * @return 用户详细信息（参考登录成功后的返回结构）
+     * @return 用户详细信息
      */
-    java.util.Map<String, Object> getCurrentUserDetailInfo(String username);
+    com.lawoffice.system.dto.UserInfoDTO getCurrentUserDetailInfo(String username);
 }

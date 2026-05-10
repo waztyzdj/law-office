@@ -472,7 +472,7 @@ public class UserServiceImpl extends BaseServiceImpl<UserMapper, User> implement
     }
 
     @Override
-    public java.util.Map<String, Object> getCurrentUserDetailInfo(String username) {
+    public com.lawoffice.system.dto.UserInfoDTO getCurrentUserDetailInfo(String username) {
         if (!StringUtils.hasText(username)) {
             throw new RuntimeException("未登录或登录已过期");
         }
@@ -498,15 +498,17 @@ public class UserServiceImpl extends BaseServiceImpl<UserMapper, User> implement
                 .collect(Collectors.toList());
         log.info("用户 {} 的角色列表: {}", username, roleCodes);
         
-        // 4. 构建返回结果（参考登录成功后的返回结构）
-        java.util.Map<String, Object> result = new java.util.HashMap<>();
-        result.put("username", user.getUsername());
-        result.put("realName", user.getRealname());
-        result.put("userId", user.getId());
-        result.put("permissions", permissionCodes);
-        result.put("roles", roleCodes);
+        // 4. 构建返回结果
+        com.lawoffice.system.dto.UserInfoDTO userInfoDTO = new com.lawoffice.system.dto.UserInfoDTO();
+        userInfoDTO.setUserId(user.getId());
+        userInfoDTO.setUsername(user.getUsername());
+        userInfoDTO.setRealName(user.getRealname());
+        userInfoDTO.setPermissions(permissionCodes);
+        userInfoDTO.setRoles(roleCodes);
+        // homePath 可以根据业务需求设置
+        userInfoDTO.setHomePath("/dashboard/analytics");
         
         log.info("获取用户详细信息成功：{}, 权限数量: {}, 角色数量: {}", username, permissionCodes.size(), roleCodes.size());
-        return result;
+        return userInfoDTO;
     }
 }
