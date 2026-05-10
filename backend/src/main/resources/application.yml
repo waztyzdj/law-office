@@ -18,8 +18,8 @@ shiro:
   # 是否启用Shiro
   enabled: true
   # 登录URL（未认证时跳转）
-  loginUrl: /auth/login
+  loginUrl: /api/auth/login
   # 成功URL
-  successUrl: /
+  successUrl: /api/
   # 未授权URL
-  unauthorizedUrl: /403
+  unauthorizedUrl: /api/403

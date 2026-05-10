@@ -55,29 +55,6 @@ public class AuthController {
     }
 
     /**
-     * 获取当前用户信息
-     */
-    @GetMapping("/info")
-    @Operation(summary = "获取用户信息", description = "获取当前登录用户的详细信息")
-    public BaseResult<User> getUserInfo(HttpServletRequest request) {
-        try {
-            // 从 request 属性中获取用户名（由 JwtAuthFilter 设置）
-            String username = (String) request.getAttribute("username");
-            
-            // 调用 Service 层处理业务逻辑
-            User user = userService.getCurrentUserInfo(username);
-            return BaseResult.success(user);
-
-        } catch (RuntimeException e) {
-            log.warn("获取用户信息失败：{}", e.getMessage());
-            return BaseResult.error(401, e.getMessage());
-        } catch (Exception e) {
-            log.error("获取用户信息异常", e);
-            return BaseResult.error(500, "获取用户信息失败：" + e.getMessage());
-        }
-    }
-
-    /**
      * 用户登出
      */
     @PostMapping("/logout")

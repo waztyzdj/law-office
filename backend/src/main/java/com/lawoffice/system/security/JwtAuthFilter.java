@@ -44,14 +44,14 @@ public class JwtAuthFilter extends OncePerRequestFilter {
      * 不需要拦截的路径
      */
     private static final List<String> EXCLUDED_PATHS = Arrays.asList(
-            "/auth/login",
-            "/auth/logout",
-            "/swagger-ui",
-            "/v3/api-docs",
-            "/swagger-resources",
-            "/webjars",
-            "/static",
-            "/favicon.ico"
+            "/api/auth/login",
+            "/api/auth/logout",
+            "/api/swagger-ui",
+            "/api/v3/api-docs",
+            "/api/swagger-resources",
+            "/api/webjars",
+            "/api/static",
+            "/api/favicon.ico"
     );
 
     @Override
@@ -62,16 +62,16 @@ public class JwtAuthFilter extends OncePerRequestFilter {
         
         String uri = request.getRequestURI();
         
-        // 检查是否是排除的路径
-        if (isExcludedPath(uri)) {
-            filterChain.doFilter(request, response);
-            return;
-        }
-
-        // 处理OPTIONS请求（跨域预检）
+        // 处理OPTIONS请求（跨域预检）- 必须在最前面处理
         if ("OPTIONS".equalsIgnoreCase(request.getMethod())) {
             handleCors(response);
             response.setStatus(HttpServletResponse.SC_OK);
+            return;
+        }
+        
+        // 检查是否是排除的路径
+        if (isExcludedPath(uri)) {
+            filterChain.doFilter(request, response);
             return;
         }
 

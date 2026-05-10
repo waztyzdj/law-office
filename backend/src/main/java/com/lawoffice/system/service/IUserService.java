@@ -120,4 +120,11 @@ public interface IUserService extends IBaseService<User> {
      * @param newPassword 新密码
      */
     void changePassword(String username, String oldPassword, String newPassword);
+
+    /**
+     * 获取当前用户详细信息（包含角色、权限、菜单）
+     * @param username 用户名
+     * @return 用户详细信息
+     */
+    com.lawoffice.system.dto.UserInfoDTO getCurrentUserDetailInfo(String username);
 }

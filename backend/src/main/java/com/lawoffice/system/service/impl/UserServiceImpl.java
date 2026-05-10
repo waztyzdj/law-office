@@ -476,4 +476,61 @@ public class UserServiceImpl extends BaseServiceImpl<UserMapper, User> implement
         resetPassword(user.getId(), newPassword);
         log.info("用户修改密码成功：{}", username);
     }
+
+    @Override
+    public com.lawoffice.system.dto.UserInfoDTO getCurrentUserDetailInfo(String username) {
+        if (!StringUtils.hasText(username)) {
+            throw new RuntimeException("未登录或登录已过期");
+        }
+        
+        // 1. 获取用户基本信息
+        LambdaQueryWrapper<User> wrapper = new LambdaQueryWrapper<>();
+        wrapper.eq(User::getUsername, username)
+               .eq(User::getDeleteFlag, 0);
+        User user = userMapper.selectOne(wrapper);
+        
+        if (user == null) {
+            throw new RuntimeException("用户不存在");
+        }
+        
+        // 2. 构建返回DTO
+        com.lawoffice.system.dto.UserInfoDTO userInfoDTO = new com.lawoffice.system.dto.UserInfoDTO();
+        userInfoDTO.setUser(user);
+        
+        // 3. 获取用户角色列表
+        List<Role> roles = getUserRoles(user.getId());
+        userInfoDTO.setRoles(roles);
+        
+        // 4. 提取角色编码列表
+        List<String> roleCodes = roles.stream()
+                .map(Role::getRoleCode)
+                .collect(Collectors.toList());
+        userInfoDTO.setRoleCodes(roleCodes);
+        
+        // 5. 获取用户权限列表
+        List<Permission> permissions = getUserPermissions(user.getId());
+        userInfoDTO.setPermissions(permissions);
+        
+        // 6. 提取权限编码列表
+        List<String> permissionCodes = permissions.stream()
+                .map(Permission::getPerms)
+                .filter(StringUtils::hasText)
+                .distinct()
+                .collect(Collectors.toList());
+        userInfoDTO.setPermissionCodes(permissionCodes);
+        
+        // 7. 获取用户菜单列表（只获取菜单类型的权限，menuType为0或1）
+        List<Permission> menus = permissions.stream()
+                .filter(p -> p.getMenuType() != null && (p.getMenuType() == 0 || p.getMenuType() == 1))
+                .collect(Collectors.toList());
+        
+        // 8. 按层级排序菜单
+        List<Permission> sortedMenus = com.lawoffice.system.util.MenuTreeUtils.sortMenusByHierarchy(menus);
+        userInfoDTO.setMenus(sortedMenus);
+        
+        log.info("获取用户详细信息成功：{}, 角色数量: {}, 权限数量: {}, 菜单数量: {}", 
+                username, roles.size(), permissions.size(), menus.size());
+        
+        return userInfoDTO;
+    }
 }
