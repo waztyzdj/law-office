@@ -415,17 +415,11 @@ public class UserServiceImpl extends BaseServiceImpl<UserMapper, User> implement
                 roleCodes
         );
         
-        // 8. 构建返回结果
+        // 8. 构建返回结果（只返回token）
         java.util.Map<String, Object> result = new java.util.HashMap<>();
         result.put("token", token);
-        result.put("username", user.getUsername());
-        result.put("realName", user.getRealname());
-        result.put("userId", user.getId());
-        result.put("permissions", permissionCodes);
-        result.put("roles", roleCodes);
-        result.put("expireTime", 24); // 24小时
         
-        log.info("用户登录成功：{}, 权限数量: {}, 角色数量: {}", username, permissionCodes.size(), roleCodes.size());
+        log.info("用户登录成功：{}", username);
         return result;
     }
 
@@ -478,7 +472,7 @@ public class UserServiceImpl extends BaseServiceImpl<UserMapper, User> implement
     }
 
     @Override
-    public com.lawoffice.system.dto.UserInfoDTO getCurrentUserDetailInfo(String username) {
+    public java.util.Map<String, Object> getCurrentUserDetailInfo(String username) {
         if (!StringUtils.hasText(username)) {
             throw new RuntimeException("未登录或登录已过期");
         }
@@ -493,44 +487,26 @@ public class UserServiceImpl extends BaseServiceImpl<UserMapper, User> implement
             throw new RuntimeException("用户不存在");
         }
         
-        // 2. 构建返回DTO
-        com.lawoffice.system.dto.UserInfoDTO userInfoDTO = new com.lawoffice.system.dto.UserInfoDTO();
-        userInfoDTO.setUser(user);
+        // 2. 获取用户权限列表
+        List<String> permissionCodes = getUserPermissionCodes(user.getId());
+        log.info("用户 {} 的权限列表: {}", username, permissionCodes);
         
         // 3. 获取用户角色列表
         List<Role> roles = getUserRoles(user.getId());
-        userInfoDTO.setRoles(roles);
-        
-        // 4. 提取角色编码列表
         List<String> roleCodes = roles.stream()
                 .map(Role::getRoleCode)
                 .collect(Collectors.toList());
-        userInfoDTO.setRoleCodes(roleCodes);
+        log.info("用户 {} 的角色列表: {}", username, roleCodes);
         
-        // 5. 获取用户权限列表
-        List<Permission> permissions = getUserPermissions(user.getId());
-        userInfoDTO.setPermissions(permissions);
+        // 4. 构建返回结果（参考登录成功后的返回结构）
+        java.util.Map<String, Object> result = new java.util.HashMap<>();
+        result.put("username", user.getUsername());
+        result.put("realName", user.getRealname());
+        result.put("userId", user.getId());
+        result.put("permissions", permissionCodes);
+        result.put("roles", roleCodes);
         
-        // 6. 提取权限编码列表
-        List<String> permissionCodes = permissions.stream()
-                .map(Permission::getPerms)
-                .filter(StringUtils::hasText)
-                .distinct()
-                .collect(Collectors.toList());
-        userInfoDTO.setPermissionCodes(permissionCodes);
-        
-        // 7. 获取用户菜单列表（只获取菜单类型的权限，menuType为0或1）
-        List<Permission> menus = permissions.stream()
-                .filter(p -> p.getMenuType() != null && (p.getMenuType() == 0 || p.getMenuType() == 1))
-                .collect(Collectors.toList());
-        
-        // 8. 按层级排序菜单
-        List<Permission> sortedMenus = com.lawoffice.system.util.MenuTreeUtils.sortMenusByHierarchy(menus);
-        userInfoDTO.setMenus(sortedMenus);
-        
-        log.info("获取用户详细信息成功：{}, 角色数量: {}, 权限数量: {}, 菜单数量: {}", 
-                username, roles.size(), permissions.size(), menus.size());
-        
-        return userInfoDTO;
+        log.info("获取用户详细信息成功：{}, 权限数量: {}, 角色数量: {}", username, permissionCodes.size(), roleCodes.size());
+        return result;
     }
 }
