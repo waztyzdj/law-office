@@ -3,7 +3,9 @@ package com.lawoffice.framework.service;
 import com.baomidou.mybatisplus.extension.service.IService;
 import com.lawoffice.framework.dto.BaseDTO;
 import com.lawoffice.framework.dto.BasePageDTO;
-import com.lawoffice.framework.dto.BaseResult;
+import com.lawoffice.framework.vo.BaseVO;
+import com.lawoffice.framework.vo.PageVO;
+import com.lawoffice.framework.result.BaseResult;
 import jakarta.servlet.http.HttpServletResponse;
 
 import java.util.List;
@@ -15,32 +17,32 @@ import java.util.Map;
  *
  * @param <E> 实体类型
  */
-public interface IBaseService<E> extends IService<E> {
+public interface IBaseService<E, V extends BaseVO> extends IService<E> {
 
     /**
      * 查询列表（不分页）
      */
-    BaseResult<List<E>> list(BaseDTO<E> baseDTO);
+    BaseResult<List<V>> list(BaseDTO<E> baseDTO);
 
     /**
      * 分页查询列表
      */
-    BaseResult<Map<String, Object>> page(BasePageDTO<E> basePageDTO);
+    BaseResult<PageVO<V>> page(BasePageDTO<E> basePageDTO);
 
     /**
      * 根据ID查询单个实体
      */
-    BaseResult<E> getById(BaseDTO<E> idDTO);
+    BaseResult<V> getById(BaseDTO<E> idDTO);
 
     /**
      * 保存数据（新增或修改）
      */
-    BaseResult<E> save(BaseDTO<E> saveDTO);
+    BaseResult<V> save(BaseDTO<E> saveDTO);
 
     /**
      * 批量保存数据
      */
-    BaseResult<List<E>> batchSave(BaseDTO<E> batchSaveDTO);
+    BaseResult<List<V>> batchSave(BaseDTO<E> batchSaveDTO);
 
     /**
      * 删除单个数据

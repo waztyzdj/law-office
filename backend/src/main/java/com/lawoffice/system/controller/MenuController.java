@@ -1,7 +1,7 @@
 package com.lawoffice.system.controller;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
-import com.lawoffice.framework.dto.BaseResult;
+import com.lawoffice.framework.result.BaseResult;
 import com.lawoffice.system.dto.MenuRouteDTO;
 import com.lawoffice.system.entity.Permission;
 import com.lawoffice.system.entity.User;

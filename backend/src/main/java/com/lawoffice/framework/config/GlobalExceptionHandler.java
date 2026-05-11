@@ -1,6 +1,6 @@
 package com.lawoffice.framework.config;
 
-import com.lawoffice.framework.dto.BaseResult;
+import com.lawoffice.framework.result.BaseResult;
 import com.lawoffice.framework.exception.PermissionDeniedException;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;

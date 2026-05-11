@@ -1,4 +1,4 @@
-package com.lawoffice.framework.dto;
+package com.lawoffice.framework.req;
 
 import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.Data;
@@ -11,7 +11,7 @@ import java.util.Map;
  */
 @Data
 @Schema(description = "通用查询请求")
-public class QueryParams {
+public class BaseQueryReq {
 
     @Schema(description = "查询条件（键值对）", example = "{\"name\": \"张三\", \"status\": 1}")
     private Map<String, Object> queryParams;

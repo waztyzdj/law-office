@@ -1,4 +1,4 @@
-package com.lawoffice.framework.dto;
+package com.lawoffice.framework.result;
 
 import lombok.Data;
 

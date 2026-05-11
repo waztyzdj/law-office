@@ -1,11 +1,10 @@
 package com.lawoffice.system.controller;
 
-import com.lawoffice.framework.dto.BaseResult;
+import com.lawoffice.framework.result.BaseResult;
 import com.lawoffice.framework.annotation.AutoLog;
 import com.lawoffice.framework.enums.LogType;
 import com.lawoffice.framework.enums.OperateType;
 import com.lawoffice.system.dto.AuthUser;
-import com.lawoffice.system.entity.User;
 import com.lawoffice.system.service.IUserService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;

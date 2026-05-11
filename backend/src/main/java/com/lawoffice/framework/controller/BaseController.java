@@ -1,10 +1,15 @@
 package com.lawoffice.framework.controller;
 
+import cn.hutool.core.bean.BeanUtil;
 import com.lawoffice.framework.dto.BaseDTO;
 import com.lawoffice.framework.dto.BasePageDTO;
-import com.lawoffice.framework.dto.BaseResult;
-import com.lawoffice.framework.dto.QueryParams;
-import com.lawoffice.framework.entity.*;
+import com.lawoffice.framework.result.BaseResult;
+import com.lawoffice.framework.req.BasePageReq;
+import com.lawoffice.framework.req.BaseQueryReq;
+import com.lawoffice.framework.req.BaseReq;
+import com.lawoffice.framework.vo.BaseVO;
+import com.lawoffice.framework.vo.PageVO;
+import com.lawoffice.framework.entity.BaseEntity;
 import com.lawoffice.framework.service.IBaseService;
 import com.lawoffice.framework.annotation.ModuleInfo;
 import com.lawoffice.util.ExcelUtils;
@@ -26,25 +31,19 @@ import java.util.Map;
 
 /**
  * 基础控制器
- * 提供通用的 CRUD 操作接口，子类继承后可自动获得以下功能：
- * - 列表查询（不分页）
- * - 分页查询
- * - 保存数据（新增或修改）
- * - 删除数据（单个或批量）
- * - 导出 Excel
- * - 导入 Excel
  *
  * @param <S> Service 类型，需实现 IBaseService 接口
  * @param <E> 实体类型，需继承 BaseEntity
+ * @param <V> VO 类型，需继承 BaseVO
  */
 @Slf4j
-public class BaseController<S extends IBaseService<E>, E extends BaseEntity> {
+public class BaseController<S extends IBaseService<E, V>, E extends BaseEntity, V extends BaseVO> {
 
     @Setter
     protected S baseService;
 
     protected Class<E> entityClass;
-
+    protected Class<V> voClass;
     protected String moduleName;
 
     /**
@@ -55,6 +54,7 @@ public class BaseController<S extends IBaseService<E>, E extends BaseEntity> {
     public BaseController() {
         Type[] types = ((ParameterizedType) this.getClass().getGenericSuperclass()).getActualTypeArguments();
         this.entityClass = (Class<E>) types[1];
+        this.voClass = (Class<V>) types[2];
 
         ModuleInfo moduleInfo = entityClass.getAnnotation(ModuleInfo.class);
         if (moduleInfo != null) {
@@ -71,7 +71,7 @@ public class BaseController<S extends IBaseService<E>, E extends BaseEntity> {
      * @param request HTTP 请求对象
      * @param response HTTP 响应对象
      */
-    protected void doBeforeInitBaseDTO(BaseDTO<?> baseDTO, HttpServletRequest request, HttpServletResponse response) {
+    protected void doBeforeInitBaseDTO(BaseDTO<E> baseDTO, HttpServletRequest request, HttpServletResponse response) {
     }
 
     /**
@@ -82,7 +82,7 @@ public class BaseController<S extends IBaseService<E>, E extends BaseEntity> {
      * @param request HTTP 请求对象
      * @param response HTTP 响应对象
      */
-    protected void initBaseDTO(BaseDTO<?> baseDTO, HttpServletRequest request, HttpServletResponse response) {
+    protected void initBaseDTO(BaseDTO<E> baseDTO, HttpServletRequest request, HttpServletResponse response) {
         try {
             doBeforeInitBaseDTO(baseDTO, request, response);
 
@@ -107,7 +107,7 @@ public class BaseController<S extends IBaseService<E>, E extends BaseEntity> {
      * @param request HTTP 请求对象
      * @param response HTTP 响应对象
      */
-    protected void doAfterInitBaseDTO(BaseDTO<?> baseDTO, HttpServletRequest request, HttpServletResponse response) {
+    protected void doAfterInitBaseDTO(BaseDTO<E> baseDTO, HttpServletRequest request, HttpServletResponse response) {
     }
 
     /**
@@ -123,28 +123,29 @@ public class BaseController<S extends IBaseService<E>, E extends BaseEntity> {
     /**
      * 列表查询（不分页）
      *
-     * @param queryParams 查询请求（包含查询条件）
+     * @param req 查询请求
      * @param httpRequest HTTP 请求对象
      * @param httpResponse HTTP 响应对象
      * @return 查询结果列表
      */
     @PostMapping("/list")
     @Operation(summary = "列表查询", description = "查询列表数据（不分页），支持动态查询条件")
-    public BaseResult<List<E>> list(
-            @RequestBody(required = false) QueryParams queryParams,
+    public BaseResult<List<V>> list(
+            @RequestBody(required = false) BaseQueryReq req,
             HttpServletRequest httpRequest,
             HttpServletResponse httpResponse) {
         try {
             BaseDTO<E> baseDTO = new BaseDTO<>();
             initBaseDTO(baseDTO, httpRequest, httpResponse);
 
-            if (queryParams != null && queryParams.getQueryParams() != null && !queryParams.getQueryParams().isEmpty()) {
-                baseDTO.setQueryWrapper(QueryWrapperBuilderUtils.build(queryParams.getQueryParams()));
+            // 根据 req 中的条件构建 QueryWrapper
+            if (req != null && req.getQueryParams() != null && !req.getQueryParams().isEmpty()) {
+                baseDTO.setQueryWrapper(QueryWrapperBuilderUtils.build(req.getQueryParams()));
             }
 
             doBeforeList(baseDTO, httpRequest, httpResponse);
 
-            BaseResult<List<E>> result = baseService.list(baseDTO);
+            BaseResult<List<V>> result = baseService.list(baseDTO);
 
             doAfterList(baseDTO, result, httpRequest, httpResponse);
             return result;
@@ -162,7 +163,7 @@ public class BaseController<S extends IBaseService<E>, E extends BaseEntity> {
      * @param request HTTP 请求对象
      * @param response HTTP 响应对象
      */
-    protected void doAfterList(BaseDTO<E> baseDTO, BaseResult<List<E>> result, HttpServletRequest request, HttpServletResponse response) {
+    protected void doAfterList(BaseDTO<E> baseDTO, BaseResult<List<V>> result, HttpServletRequest request, HttpServletResponse response) {
     }
 
     /**
@@ -178,35 +179,33 @@ public class BaseController<S extends IBaseService<E>, E extends BaseEntity> {
     /**
      * 分页查询列表
      *
-     * @param pageNum 页码
-     * @param pageSize 每页数量
-     * @param queryParams 查询请求（包含查询条件）
+     * @param req 分页请求
      * @param httpRequest HTTP 请求对象
      * @param httpResponse HTTP 响应对象
      * @return 查询结果，包含 records（数据列表）和 total（总数）
      */
     @PostMapping("/page")
     @Operation(summary = "分页查询", description = "分页查询列表数据，支持动态查询条件")
-    public BaseResult<Map<String, Object>> page(
-            @RequestParam(defaultValue = "1") Integer pageNum,
-            @RequestParam(defaultValue = "10") Integer pageSize,
-            @RequestBody(required = false) QueryParams queryParams,
+    public BaseResult<PageVO<V>> page(
+            @RequestBody(required = false) BasePageReq req,
             HttpServletRequest httpRequest,
             HttpServletResponse httpResponse) {
         try {
             BasePageDTO<E> basePageDTO = new BasePageDTO<>();
-            basePageDTO.setPageNum(pageNum);
-            basePageDTO.setPageSize(pageSize);
+            if (req != null) {
+                basePageDTO.setPageNum(req.getPageNum());
+                basePageDTO.setPageSize(req.getPageSize());
+                // 根据 req 中的条件构建 QueryWrapper
+                if (req.getQueryParams() != null && !req.getQueryParams().isEmpty()) {
+                    basePageDTO.setQueryWrapper(QueryWrapperBuilderUtils.build(req.getQueryParams()));
+                }
+            }
 
             initBaseDTO(basePageDTO, httpRequest, httpResponse);
 
-            if (queryParams != null && queryParams.getQueryParams() != null && !queryParams.getQueryParams().isEmpty()) {
-                basePageDTO.setQueryWrapper(QueryWrapperBuilderUtils.build(queryParams.getQueryParams()));
-            }
-
             doBeforePage(basePageDTO, httpRequest, httpResponse);
 
-            BaseResult<Map<String, Object>> result = baseService.page(basePageDTO);
+            BaseResult<PageVO<V>> result = baseService.page(basePageDTO);
 
             doAfterPage(basePageDTO, result, httpRequest, httpResponse);
             return result;
@@ -224,7 +223,7 @@ public class BaseController<S extends IBaseService<E>, E extends BaseEntity> {
      * @param request HTTP 请求对象
      * @param response HTTP 响应对象
      */
-    protected void doAfterPage(BasePageDTO<E> basePageDTO, BaseResult<Map<String, Object>> result, HttpServletRequest request, HttpServletResponse response) {
+    protected void doAfterPage(BasePageDTO<E> basePageDTO, BaseResult<PageVO<V>> result, HttpServletRequest request, HttpServletResponse response) {
     }
 
     /**
@@ -240,23 +239,27 @@ public class BaseController<S extends IBaseService<E>, E extends BaseEntity> {
     /**
      * 根据ID查询单个实体
      *
-     * @param idDTO 包含ID的请求参数
+     * @param req 包含ID的请求参数
      * @param httpRequest HTTP 请求对象
      * @param httpResponse HTTP 响应对象
      * @return 查询到的实体对象
      */
     @PostMapping("/getById")
     @Operation(summary = "根据ID查询")
-    public BaseResult<E> getById(
-            @RequestBody BaseDTO<E> idDTO,
+    public BaseResult<V> getById(
+            @RequestBody BaseReq req,
             HttpServletRequest httpRequest,
             HttpServletResponse httpResponse) {
         try {
+            BaseDTO<E> idDTO = new BaseDTO<>();
+            if (req != null) {
+                idDTO.setId(req.getId());
+            }
             initBaseDTO(idDTO, httpRequest, httpResponse);
 
             doBeforeGetById(idDTO, httpRequest, httpResponse);
 
-            BaseResult<E> result = baseService.getById(idDTO);
+            BaseResult<V> result = baseService.getById(idDTO);
 
             doAfterGetById(idDTO, result, httpRequest, httpResponse);
             return result;
@@ -274,7 +277,7 @@ public class BaseController<S extends IBaseService<E>, E extends BaseEntity> {
      * @param request HTTP 请求对象
      * @param response HTTP 响应对象
      */
-    protected void doAfterGetById(BaseDTO<E> idDTO, BaseResult<E> result, HttpServletRequest request, HttpServletResponse response) {
+    protected void doAfterGetById(BaseDTO<E> idDTO, BaseResult<V> result, HttpServletRequest request, HttpServletResponse response) {
     }
 
     /**
@@ -291,26 +294,28 @@ public class BaseController<S extends IBaseService<E>, E extends BaseEntity> {
      * 保存数据（新增或修改）
      * 根据实体 ID 判断是新增还是修改：ID 为空则新增，否则修改
      *
-     * @param entity 实体对象
+     * @param req 请求参数
      * @param httpRequest HTTP 请求对象
      * @param httpResponse HTTP 响应对象
      * @return 保存后的实体对象
      */
     @PostMapping("/save")
     @Operation(summary = "保存数据")
-    public BaseResult<E> save(
-            @RequestBody E entity,
+    public BaseResult<V> save(
+            @RequestBody BaseReq req,
             HttpServletRequest httpRequest,
             HttpServletResponse httpResponse) {
         try {
             BaseDTO<E> saveDTO = new BaseDTO<>();
+            // 将 Req 转换为 Entity
+            E entity = BeanUtil.copyProperties(req, entityClass);
             saveDTO.setEntity(entity);
 
             initBaseDTO(saveDTO, httpRequest, httpResponse);
 
             doBeforeSave(saveDTO, httpRequest, httpResponse);
 
-            BaseResult<E> result = baseService.save(saveDTO);
+            BaseResult<V> result = baseService.save(saveDTO);
 
             doAfterSave(saveDTO, result, httpRequest, httpResponse);
             return result;
@@ -328,7 +333,7 @@ public class BaseController<S extends IBaseService<E>, E extends BaseEntity> {
      * @param request HTTP 请求对象
      * @param response HTTP 响应对象
      */
-    protected void doAfterSave(BaseDTO<E> saveDTO, BaseResult<E> result, HttpServletRequest request, HttpServletResponse response) {
+    protected void doAfterSave(BaseDTO<E> saveDTO, BaseResult<V> result, HttpServletRequest request, HttpServletResponse response) {
     }
 
     /**
@@ -344,26 +349,30 @@ public class BaseController<S extends IBaseService<E>, E extends BaseEntity> {
     /**
      * 批量保存数据
      *
-     * @param entityList 实体列表
+     * @param reqList 请求列表
      * @param httpRequest HTTP 请求对象
      * @param httpResponse HTTP 响应对象
      * @return 保存后的实体列表
      */
     @PostMapping("/batchSave")
     @Operation(summary = "批量保存")
-    public BaseResult<List<E>> batchSave(
-            @RequestBody List<E> entityList,
+    public BaseResult<java.util.List<V>> batchSave(
+            @RequestBody java.util.List<BaseReq> reqList,
             HttpServletRequest httpRequest,
             HttpServletResponse httpResponse) {
         try {
             BaseDTO<E> batchSaveDTO = new BaseDTO<>();
+            // 将 Req 列表转换为 Entity 列表
+            java.util.List<E> entityList = reqList.stream()
+                    .map(req -> BeanUtil.copyProperties(req, entityClass))
+                    .collect(java.util.stream.Collectors.toList());
             batchSaveDTO.setEntityList(entityList);
 
             initBaseDTO(batchSaveDTO, httpRequest, httpResponse);
 
             doBeforeBatchSave(batchSaveDTO, httpRequest, httpResponse);
 
-            BaseResult<List<E>> result = baseService.batchSave(batchSaveDTO);
+            BaseResult<List<V>> result = baseService.batchSave(batchSaveDTO);
 
             doAfterBatchSave(batchSaveDTO, result, httpRequest, httpResponse);
             return result;
@@ -381,7 +390,7 @@ public class BaseController<S extends IBaseService<E>, E extends BaseEntity> {
      * @param request HTTP 请求对象
      * @param response HTTP 响应对象
      */
-    protected void doAfterBatchSave(BaseDTO<E> batchSaveDTO, BaseResult<List<E>> result, HttpServletRequest request, HttpServletResponse response) {
+    protected void doAfterBatchSave(BaseDTO<E> batchSaveDTO, BaseResult<java.util.List<V>> result, HttpServletRequest request, HttpServletResponse response) {
     }
 
     /**
@@ -391,13 +400,13 @@ public class BaseController<S extends IBaseService<E>, E extends BaseEntity> {
      * @param request HTTP 请求对象
      * @param response HTTP 响应对象
      */
-    protected void doBeforeDelete(BaseDTO<?> deleteDTO, HttpServletRequest request, HttpServletResponse response) {
+    protected void doBeforeDelete(BaseDTO<E> deleteDTO, HttpServletRequest request, HttpServletResponse response) {
     }
 
     /**
      * 删除单个数据（逻辑删除）
      *
-     * @param entity 实体对象，从中获取ID进行删除
+     * @param req 请求参数，从中获取ID进行删除
      * @param httpRequest HTTP 请求对象
      * @param httpResponse HTTP 响应对象
      * @return 删除结果
@@ -405,14 +414,13 @@ public class BaseController<S extends IBaseService<E>, E extends BaseEntity> {
     @PostMapping("/delete")
     @Operation(summary = "删除数据")
     public BaseResult<Void> delete(
-            @RequestBody E entity,
+            @RequestBody BaseReq req,
             HttpServletRequest httpRequest,
             HttpServletResponse httpResponse) {
         try {
             BaseDTO<E> deleteDTO = new BaseDTO<>();
-            deleteDTO.setEntity(entity);
-            if (entity != null && entity.getId() != null) {
-                deleteDTO.setId(entity.getId());
+            if (req != null) {
+                deleteDTO.setId(req.getId());
             }
 
             initBaseDTO(deleteDTO, httpRequest, httpResponse);
@@ -437,7 +445,7 @@ public class BaseController<S extends IBaseService<E>, E extends BaseEntity> {
      * @param request HTTP 请求对象
      * @param response HTTP 响应对象
      */
-    protected void doAfterDelete(BaseDTO<?> deleteDTO, BaseResult<Void> result, HttpServletRequest request, HttpServletResponse response) {
+    protected void doAfterDelete(BaseDTO<E> deleteDTO, BaseResult<Void> result, HttpServletRequest request, HttpServletResponse response) {
     }
 
     /**
@@ -447,7 +455,7 @@ public class BaseController<S extends IBaseService<E>, E extends BaseEntity> {
      * @param request HTTP 请求对象
      * @param response HTTP 响应对象
      */
-    protected void doBeforeBatchDelete(BaseDTO<?> deleteDTO, HttpServletRequest request, HttpServletResponse response) {
+    protected void doBeforeBatchDelete(BaseDTO<E> deleteDTO, HttpServletRequest request, HttpServletResponse response) {
     }
 
     /**
@@ -490,7 +498,7 @@ public class BaseController<S extends IBaseService<E>, E extends BaseEntity> {
      * @param request HTTP 请求对象
      * @param response HTTP 响应对象
      */
-    protected void doAfterBatchDelete(BaseDTO<?> deleteDTO, BaseResult<Void> result, HttpServletRequest request, HttpServletResponse response) {
+    protected void doAfterBatchDelete(BaseDTO<E> deleteDTO, BaseResult<Void> result, HttpServletRequest request, HttpServletResponse response) {
     }
 
     /**
@@ -530,7 +538,7 @@ public class BaseController<S extends IBaseService<E>, E extends BaseEntity> {
 
             log.info("Excel导入：读取{}行数据，成功转换{}条记录", dataList.size(), entities.size());
 
-            BaseDTO<?> importDTO = new BaseDTO<>();
+            BaseDTO<E> importDTO = new BaseDTO<>();
             importDTO.setContext(RequestContextUtils.buildContext(httpRequest));
             importDTO.setRequest(httpRequest);
             importDTO.setResponse(httpResponse);
@@ -569,22 +577,23 @@ public class BaseController<S extends IBaseService<E>, E extends BaseEntity> {
     /**
      * 导出 Excel
      *
-     * @param queryParams 查询请求（包含查询条件）
+     * @param req 查询请求
      * @param httpRequest HTTP 请求对象
      * @param httpResponse HTTP 响应对象
      */
     @PostMapping("/export")
     @Operation(summary = "导出Excel", description = "导出数据为 Excel 文件，支持动态查询条件")
     public void export(
-            @RequestBody(required = false) QueryParams queryParams,
+            @RequestBody(required = false) BaseQueryReq req,
             HttpServletRequest httpRequest,
             HttpServletResponse httpResponse) {
         try {
             BaseDTO<E> baseDTO = new BaseDTO<>();
             initBaseDTO(baseDTO, httpRequest, httpResponse);
 
-            if (queryParams != null && queryParams.getQueryParams() != null && !queryParams.getQueryParams().isEmpty()) {
-                baseDTO.setQueryWrapper(QueryWrapperBuilderUtils.build(queryParams.getQueryParams()));
+            // 根据 req 中的条件构建 QueryWrapper
+            if (req != null && req.getQueryParams() != null && !req.getQueryParams().isEmpty()) {
+                baseDTO.setQueryWrapper(QueryWrapperBuilderUtils.build(req.getQueryParams()));
             }
 
             doBeforeExport(baseDTO, httpRequest, httpResponse);

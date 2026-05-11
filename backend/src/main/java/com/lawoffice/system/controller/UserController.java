@@ -1,7 +1,6 @@
 package com.lawoffice.system.controller;
 
-import com.lawoffice.framework.dto.BaseResult;
-import com.lawoffice.system.annotation.RequiresPermission;
+import com.lawoffice.framework.result.BaseResult;
 import com.lawoffice.framework.controller.BaseController;
 import com.lawoffice.system.dto.UserInfoDTO;
 import com.lawoffice.system.entity.User;
