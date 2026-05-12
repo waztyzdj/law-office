@@ -13,6 +13,7 @@ import com.lawoffice.system.mapper.DepartRoleUserMapper;
 import com.lawoffice.system.mapper.PermissionMapper;
 import com.lawoffice.system.mapper.UserMapper;
 import com.lawoffice.system.service.IDepartRoleService;
+import com.lawoffice.system.vo.DepartRoleVO;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
@@ -24,7 +25,7 @@ import java.util.stream.Collectors;
 
 @Slf4j
 @Service
-public class DepartRoleServiceImpl extends BaseServiceImpl<DepartRoleMapper, DepartRole> implements IDepartRoleService {
+public class DepartRoleServiceImpl extends BaseServiceImpl<DepartRoleMapper, DepartRole, DepartRoleVO> implements IDepartRoleService {
 
     @Autowired
     private DepartRolePermissionMapper departRolePermissionMapper;

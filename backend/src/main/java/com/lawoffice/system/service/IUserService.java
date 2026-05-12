@@ -5,10 +5,11 @@ import com.lawoffice.system.entity.Role;
 import com.lawoffice.system.entity.SysDepart;
 import com.lawoffice.system.entity.Tenant;
 import com.lawoffice.system.entity.User;
+import com.lawoffice.system.vo.UserVO;
 
 import java.util.List;
 
-public interface IUserService extends IBaseService<User> {
+public interface IUserService extends IBaseService<User, UserVO> {
 
     boolean verifyPassword(String rawPassword, String encodedPassword);
 

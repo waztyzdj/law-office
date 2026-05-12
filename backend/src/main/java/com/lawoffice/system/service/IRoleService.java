@@ -3,10 +3,11 @@ package com.lawoffice.system.service;
 import com.lawoffice.framework.service.IBaseService;
 import com.lawoffice.system.entity.Permission;
 import com.lawoffice.system.entity.Role;
+import com.lawoffice.system.vo.RoleVO;
 
 import java.util.List;
 
-public interface IRoleService extends IBaseService<Role> {
+public interface IRoleService extends IBaseService<Role, RoleVO> {
 
     /**
      * 为角色分配权限

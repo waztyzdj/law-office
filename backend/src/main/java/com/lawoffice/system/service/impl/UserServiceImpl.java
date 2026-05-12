@@ -6,6 +6,7 @@ import com.lawoffice.framework.service.impl.BaseServiceImpl;
 import com.lawoffice.system.entity.*;
 import com.lawoffice.system.mapper.*;
 import com.lawoffice.system.service.IUserService;
+import com.lawoffice.system.vo.UserVO;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
@@ -20,7 +21,7 @@ import java.util.stream.Collectors;
 
 @Slf4j
 @Service
-public class UserServiceImpl extends BaseServiceImpl<UserMapper, User> implements IUserService {
+public class UserServiceImpl extends BaseServiceImpl<UserMapper, User, UserVO> implements IUserService {
 
     @Autowired
     private UserRoleMapper userRoleMapper;
@@ -107,8 +108,8 @@ public class UserServiceImpl extends BaseServiceImpl<UserMapper, User> implement
     }
 
     @Override
-    protected void doAfterSave(BaseDTO<User> saveDTO, User entity) {
-        log.info("保存用户成功，用户ID: {}", entity.getId());
+    protected void doAfterSave(BaseDTO<User> saveDTO, UserVO vo) {
+        log.info("保存用户成功，用户ID: {}", vo.getId());
     }
 
     @Override

@@ -5,6 +5,7 @@ import com.lawoffice.framework.controller.BaseController;
 import com.lawoffice.system.dto.UserInfoDTO;
 import com.lawoffice.system.entity.User;
 import com.lawoffice.system.service.IUserService;
+import com.lawoffice.system.vo.UserVO;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.HttpServletRequest;
@@ -18,7 +19,7 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequestMapping("/user")
 @Tag(name = "用户管理", description = "系统用户信息管理")
-public class UserController extends BaseController<IUserService, User> {
+public class UserController extends BaseController<IUserService, User, UserVO> {
 
     @Autowired
     public UserController(IUserService userService) {

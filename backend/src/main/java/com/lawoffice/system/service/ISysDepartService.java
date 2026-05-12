@@ -4,10 +4,11 @@ import com.lawoffice.framework.service.IBaseService;
 import com.lawoffice.system.entity.DepartRole;
 import com.lawoffice.system.entity.Permission;
 import com.lawoffice.system.entity.SysDepart;
+import com.lawoffice.system.vo.SysDepartVO;
 
 import java.util.List;
 
-public interface ISysDepartService extends IBaseService<SysDepart> {
+public interface ISysDepartService extends IBaseService<SysDepart, SysDepartVO> {
 
     /**
      * 为部门分配角色

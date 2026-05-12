@@ -9,6 +9,7 @@ import com.lawoffice.system.mapper.PermissionMapper;
 import com.lawoffice.system.mapper.RoleMapper;
 import com.lawoffice.system.mapper.RolePermissionMapper;
 import com.lawoffice.system.service.IRoleService;
+import com.lawoffice.system.vo.RoleVO;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
@@ -20,7 +21,7 @@ import java.util.stream.Collectors;
 
 @Slf4j
 @Service
-public class RoleServiceImpl extends BaseServiceImpl<RoleMapper, Role> implements IRoleService {
+public class RoleServiceImpl extends BaseServiceImpl<RoleMapper, Role, RoleVO> implements IRoleService {
 
     @Autowired
     private RolePermissionMapper rolePermissionMapper;

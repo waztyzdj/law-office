@@ -6,10 +6,11 @@ import com.lawoffice.system.entity.DepartRoleUser;
 import com.lawoffice.system.entity.Permission;
 import com.lawoffice.system.entity.User;
 import com.lawoffice.system.entity.DepartRole;
+import com.lawoffice.system.vo.DepartRoleVO;
 
 import java.util.List;
 
-public interface IDepartRoleService extends IBaseService<DepartRole> {
+public interface IDepartRoleService extends IBaseService<DepartRole, DepartRoleVO> {
 
     /**
      * 为部门角色分配权限
