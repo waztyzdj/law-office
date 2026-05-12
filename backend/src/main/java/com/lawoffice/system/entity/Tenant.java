@@ -4,7 +4,6 @@ import com.alibaba.excel.annotation.ExcelProperty;
 import com.alibaba.excel.annotation.ExcelIgnore;
 import com.baomidou.mybatisplus.annotation.TableName;
 import com.lawoffice.framework.entity.BaseEntity;
-import com.lawoffice.framework.annotation.ModuleInfo;
 import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
@@ -14,7 +13,6 @@ import java.time.LocalDateTime;
 @Data
 @EqualsAndHashCode(callSuper = true)
 @TableName("sys_tenant")
-@ModuleInfo(value = "tenant", name = "多租户管理", description = "系统多租户信息管理")
 @Schema(description = "多租户")
 public class Tenant extends BaseEntity {
 

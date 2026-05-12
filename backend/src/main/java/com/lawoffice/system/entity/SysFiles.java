@@ -4,7 +4,6 @@ import com.alibaba.excel.annotation.ExcelProperty;
 import com.alibaba.excel.annotation.ExcelIgnore;
 import com.baomidou.mybatisplus.annotation.TableName;
 import com.lawoffice.framework.entity.BaseEntity;
-import com.lawoffice.framework.annotation.ModuleInfo;
 import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
@@ -12,7 +11,6 @@ import lombok.EqualsAndHashCode;
 @Data
 @EqualsAndHashCode(callSuper = true)
 @TableName("sys_files")
-@ModuleInfo(value = "files", name = "知识库文档管理", description = "系统知识库文档信息管理")
 @Schema(description = "知识库文档")
 public class SysFiles extends BaseEntity {
 

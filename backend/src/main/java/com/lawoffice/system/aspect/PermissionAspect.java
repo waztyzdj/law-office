@@ -111,25 +111,17 @@ public class PermissionAspect {
             // 获取目标类（实际的Controller类）
             Class<?> targetClass = joinPoint.getTarget().getClass();
             
-            // 从 BaseController 的 entityClass 字段中获取实体类
-            ModuleInfo moduleInfo = null;
-            try {
-                // 通过反射获取 entityClass 字段
-                java.lang.reflect.Field entityClassField = targetClass.getSuperclass().getDeclaredField("entityClass");
-                entityClassField.setAccessible(true);
-                Class<?> entityClass = (Class<?>) entityClassField.get(joinPoint.getTarget());
-                
-                // 从实体类上获取 @ModuleInfo 注解
-                if (entityClass != null) {
-                    moduleInfo = entityClass.getAnnotation(ModuleInfo.class);
-                }
-            } catch (Exception e) {
-                log.debug("从 BaseController 获取 entityClass 失败: {}", e.getMessage());
+            // 处理 CGLIB 代理类
+            if (targetClass.getName().contains("$$")) {
+                targetClass = targetClass.getSuperclass();
             }
+            
+            // 从 Controller 类上获取 @ModuleInfo 注解
+            ModuleInfo moduleInfo = targetClass.getAnnotation(ModuleInfo.class);
             
             if (moduleInfo == null) {
                 // 如果没有 ModuleInfo 注解，跳过权限校验
-                log.debug("类 {} 的实体类没有 ModuleInfo 注解，跳过权限校验", targetClass.getSimpleName());
+                log.debug("类 {} 没有 ModuleInfo 注解，跳过权限校验", targetClass.getSimpleName());
                 return;
             }
             

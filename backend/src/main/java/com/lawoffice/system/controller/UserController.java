@@ -2,6 +2,7 @@ package com.lawoffice.system.controller;
 
 import com.lawoffice.framework.result.BaseResult;
 import com.lawoffice.framework.controller.BaseController;
+import com.lawoffice.framework.annotation.ModuleInfo;
 import com.lawoffice.system.dto.UserInfoDTO;
 import com.lawoffice.system.entity.User;
 import com.lawoffice.system.req.UserReq;
@@ -20,6 +21,7 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequestMapping("/user")
 @Tag(name = "用户管理", description = "系统用户信息管理")
+@ModuleInfo(value = "user", name = "用户管理", description = "系统用户信息管理")
 public class UserController extends BaseController<IUserService, User, UserVO, UserReq> {
 
     @Autowired

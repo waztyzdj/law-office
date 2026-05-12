@@ -3,7 +3,6 @@ package com.lawoffice.system.entity;
 import com.alibaba.excel.annotation.ExcelProperty;
 import com.baomidou.mybatisplus.annotation.TableName;
 import com.lawoffice.framework.entity.BaseEntity;
-import com.lawoffice.framework.annotation.ModuleInfo;
 import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
@@ -11,7 +10,6 @@ import lombok.EqualsAndHashCode;
 @Data
 @EqualsAndHashCode(callSuper = true)
 @TableName("sys_user_tenant")
-@ModuleInfo(value = "user-tenant", name = "用户租户管理", description = "系统用户租户关联信息管理")
 @Schema(description = "用户租户")
 public class UserTenant extends BaseEntity {
 

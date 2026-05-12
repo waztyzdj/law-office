@@ -4,7 +4,6 @@ import com.alibaba.excel.annotation.ExcelProperty;
 import com.alibaba.excel.annotation.ExcelIgnore;
 import com.baomidou.mybatisplus.annotation.TableName;
 import com.lawoffice.framework.entity.BaseEntity;
-import com.lawoffice.framework.annotation.ModuleInfo;
 import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
@@ -12,7 +11,6 @@ import lombok.EqualsAndHashCode;
 @Data
 @EqualsAndHashCode(callSuper = true)
 @TableName("sys_dict_item")
-@ModuleInfo(value = "dict-item", name = "字典明细管理", description = "系统字典明细信息管理")
 @Schema(description = "字典明细")
 public class SysDictItem extends BaseEntity {
 

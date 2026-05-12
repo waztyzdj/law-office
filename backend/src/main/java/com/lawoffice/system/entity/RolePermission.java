@@ -4,7 +4,6 @@ import com.alibaba.excel.annotation.ExcelProperty;
 import com.alibaba.excel.annotation.ExcelIgnore;
 import com.baomidou.mybatisplus.annotation.TableName;
 import com.lawoffice.framework.entity.BaseEntity;
-import com.lawoffice.framework.annotation.ModuleInfo;
 import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
@@ -14,7 +13,6 @@ import java.time.LocalDateTime;
 @Data
 @EqualsAndHashCode(callSuper = true)
 @TableName("sys_role_permission")
-@ModuleInfo(value = "role-permission", name = "角色权限管理", description = "系统角色权限关联信息管理")
 @Schema(description = "角色权限")
 public class RolePermission extends BaseEntity {
 

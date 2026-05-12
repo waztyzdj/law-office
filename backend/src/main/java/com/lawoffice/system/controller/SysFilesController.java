@@ -1,6 +1,7 @@
 package com.lawoffice.system.controller;
 
 import com.lawoffice.framework.controller.BaseController;
+import com.lawoffice.framework.annotation.ModuleInfo;
 import com.lawoffice.system.entity.SysFiles;
 import com.lawoffice.system.req.SysFilesReq;
 import com.lawoffice.system.service.ISysFilesService;
@@ -13,6 +14,7 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequestMapping("/files")
 @Tag(name = "知识库文档管理", description = "系统知识库文档信息管理")
+@ModuleInfo(value = "files", name = "知识库文档管理", description = "系统知识库文档信息管理")
 public class SysFilesController extends BaseController<ISysFilesService, SysFiles, SysFilesVO, SysFilesReq> {
 
     @Autowired

@@ -1,6 +1,7 @@
 package com.lawoffice.system.controller;
 
 import com.lawoffice.framework.controller.BaseController;
+import com.lawoffice.framework.annotation.ModuleInfo;
 import com.lawoffice.system.entity.SysDepart;
 import com.lawoffice.system.req.SysDepartReq;
 import com.lawoffice.system.service.ISysDepartService;
@@ -13,6 +14,7 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequestMapping("/depart")
 @Tag(name = "组织机构管理", description = "系统组织机构信息管理")
+@ModuleInfo(value = "depart", name = "组织机构管理", description = "系统组织机构信息管理")
 public class SysDepartController extends BaseController<ISysDepartService, SysDepart, SysDepartVO, SysDepartReq> {
 
     @Autowired

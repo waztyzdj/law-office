@@ -234,20 +234,11 @@ public class AutoLogAspect {
                 log.debug("从 BaseController 获取 moduleName 失败: {}", e.getMessage());
             }
             
-            // 方式2：从泛型参数中获取实体类的 @ModuleInfo 注解
-            java.lang.reflect.Type genericSuperclass = controllerClass.getGenericSuperclass();
-            
-            if (genericSuperclass instanceof java.lang.reflect.ParameterizedType) {
-                java.lang.reflect.Type[] types = ((java.lang.reflect.ParameterizedType) genericSuperclass).getActualTypeArguments();
-                
-                if (types != null && types.length > 1 && types[1] instanceof Class) {
-                    Class<?> entityClass = (Class<?>) types[1];
-                    ModuleInfo moduleInfo = entityClass.getAnnotation(ModuleInfo.class);
-                    if (moduleInfo != null) {
-                        log.debug("从实体类 @ModuleInfo 获取模块名: {}", moduleInfo.name());
-                        return moduleInfo.name();
-                    }
-                }
+            // 方式2：从 Controller 类上获取 @ModuleInfo 注解
+            ModuleInfo moduleInfo = controllerClass.getAnnotation(ModuleInfo.class);
+            if (moduleInfo != null) {
+                log.debug("从 Controller @ModuleInfo 获取模块名: {}", moduleInfo.name());
+                return moduleInfo.name();
             }
         } catch (Exception e) {
             log.debug("提取模块名称失败: {}", e.getMessage());
