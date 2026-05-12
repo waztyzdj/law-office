@@ -35,19 +35,21 @@ import java.util.Map;
  * @param <S> Service 类型，需实现 IBaseService 接口
  * @param <E> 实体类型，需继承 BaseEntity
  * @param <V> VO 类型，需继承 BaseVO
+ * @param <R> Req 类型，需继承 BaseReq
  */
 @Slf4j
-public class BaseController<S extends IBaseService<E, V>, E extends BaseEntity, V extends BaseVO> {
+public class BaseController<S extends IBaseService<E, V>, E extends BaseEntity, V extends BaseVO, R extends BaseReq> {
 
     @Setter
     protected S baseService;
 
     protected Class<E> entityClass;
     protected Class<V> voClass;
+    protected Class<R> reqClass;
     protected String moduleName;
 
     /**
-     * 构造函数，初始化实体类和模块名称
+     * 构造函数，初始化实体类、VO类、Req类和模块名称
      * 通过反射获取泛型参数，并从实体类的 @ModuleInfo 注解中获取模块名称
      */
     @SuppressWarnings("unchecked")
@@ -55,6 +57,7 @@ public class BaseController<S extends IBaseService<E, V>, E extends BaseEntity, 
         Type[] types = ((ParameterizedType) this.getClass().getGenericSuperclass()).getActualTypeArguments();
         this.entityClass = (Class<E>) types[1];
         this.voClass = (Class<V>) types[2];
+        this.reqClass = (Class<R>) types[3];
 
         ModuleInfo moduleInfo = entityClass.getAnnotation(ModuleInfo.class);
         if (moduleInfo != null) {
@@ -247,7 +250,7 @@ public class BaseController<S extends IBaseService<E, V>, E extends BaseEntity, 
     @PostMapping("/getById")
     @Operation(summary = "根据ID查询")
     public BaseResult<V> getById(
-            @RequestBody BaseReq req,
+            @RequestBody R req,
             HttpServletRequest httpRequest,
             HttpServletResponse httpResponse) {
         try {
@@ -302,7 +305,7 @@ public class BaseController<S extends IBaseService<E, V>, E extends BaseEntity, 
     @PostMapping("/save")
     @Operation(summary = "保存数据")
     public BaseResult<V> save(
-            @RequestBody BaseReq req,
+            @RequestBody R req,
             HttpServletRequest httpRequest,
             HttpServletResponse httpResponse) {
         try {
@@ -357,7 +360,7 @@ public class BaseController<S extends IBaseService<E, V>, E extends BaseEntity, 
     @PostMapping("/batchSave")
     @Operation(summary = "批量保存")
     public BaseResult<java.util.List<V>> batchSave(
-            @RequestBody java.util.List<BaseReq> reqList,
+            @RequestBody java.util.List<R> reqList,
             HttpServletRequest httpRequest,
             HttpServletResponse httpResponse) {
         try {
@@ -414,7 +417,7 @@ public class BaseController<S extends IBaseService<E, V>, E extends BaseEntity, 
     @PostMapping("/delete")
     @Operation(summary = "删除数据")
     public BaseResult<Void> delete(
-            @RequestBody BaseReq req,
+            @RequestBody R req,
             HttpServletRequest httpRequest,
             HttpServletResponse httpResponse) {
         try {
