@@ -15,7 +15,7 @@ public class BaseVO implements Serializable {
     /**
      * 主键ID
      */
-    private Long id;
+    private String id;
 
     /**
      * 创建时间
