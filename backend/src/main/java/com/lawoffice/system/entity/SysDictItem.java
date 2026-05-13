@@ -3,7 +3,7 @@ package com.lawoffice.system.entity;
 import com.alibaba.excel.annotation.ExcelProperty;
 import com.alibaba.excel.annotation.ExcelIgnore;
 import com.baomidou.mybatisplus.annotation.TableName;
-import com.lawoffice.framework.entity.BaseEntity;
+import com.lawoffice.framework.entity.BaseTenantEntity;
 import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
@@ -12,7 +12,7 @@ import lombok.EqualsAndHashCode;
 @EqualsAndHashCode(callSuper = true)
 @TableName("sys_dict_item")
 @Schema(description = "字典明细")
-public class SysDictItem extends BaseEntity {
+public class SysDictItem extends BaseTenantEntity {
 
     @ExcelProperty("字典ID")
     @Schema(description = "字典id")

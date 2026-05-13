@@ -2,7 +2,7 @@ package com.lawoffice.system.entity;
 
 import com.alibaba.excel.annotation.ExcelProperty;
 import com.baomidou.mybatisplus.annotation.TableName;
-import com.lawoffice.framework.entity.BaseEntity;
+import com.lawoffice.framework.entity.BaseTenantEntity;
 import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
@@ -11,7 +11,7 @@ import lombok.EqualsAndHashCode;
 @EqualsAndHashCode(callSuper = true)
 @TableName("sys_depart_role")
 @Schema(description = "部门角色")
-public class DepartRole extends BaseEntity {
+public class DepartRole extends BaseTenantEntity {
 
     @ExcelProperty("部门ID")
     @Schema(description = "部门id")

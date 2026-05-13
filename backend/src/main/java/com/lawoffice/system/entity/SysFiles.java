@@ -3,7 +3,7 @@ package com.lawoffice.system.entity;
 import com.alibaba.excel.annotation.ExcelProperty;
 import com.alibaba.excel.annotation.ExcelIgnore;
 import com.baomidou.mybatisplus.annotation.TableName;
-import com.lawoffice.framework.entity.BaseEntity;
+import com.lawoffice.framework.entity.BaseTenantEntity;
 import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
@@ -12,7 +12,7 @@ import lombok.EqualsAndHashCode;
 @EqualsAndHashCode(callSuper = true)
 @TableName("sys_files")
 @Schema(description = "知识库文档")
-public class SysFiles extends BaseEntity {
+public class SysFiles extends BaseTenantEntity {
 
     @ExcelProperty("文件名称")
     @Schema(description = "文件名称")
@@ -33,10 +33,6 @@ public class SysFiles extends BaseEntity {
     @ExcelProperty("父级ID")
     @Schema(description = "父级id")
     private String parentId;
-
-    @ExcelProperty("租户ID")
-    @Schema(description = "租户id")
-    private String tenantId;
 
     @ExcelProperty("文件大小")
     @Schema(description = "文件大小（kb）")

@@ -3,7 +3,7 @@ package com.lawoffice.system.entity;
 import com.alibaba.excel.annotation.ExcelProperty;
 import com.alibaba.excel.annotation.ExcelIgnore;
 import com.baomidou.mybatisplus.annotation.TableName;
-import com.lawoffice.framework.entity.BaseEntity;
+import com.lawoffice.framework.entity.BaseTenantEntity;
 import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
@@ -12,7 +12,7 @@ import lombok.EqualsAndHashCode;
 @EqualsAndHashCode(callSuper = true)
 @TableName("sys_depart")
 @Schema(description = "组织机构")
-public class SysDepart extends BaseEntity {
+public class SysDepart extends BaseTenantEntity {
 
     @ExcelProperty("父机构ID")
     @Schema(description = "父机构ID")
@@ -69,10 +69,6 @@ public class SysDepart extends BaseEntity {
     @ExcelProperty("状态")
     @Schema(description = "状态（1启用，0不启用）")
     private String status;
-
-    @ExcelIgnore
-    @Schema(description = "租户ID")
-    private String tenantId;
 
     @ExcelIgnore
     @Schema(description = "是否有叶子节点: 1是0否")
