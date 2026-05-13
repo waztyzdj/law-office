@@ -23,6 +23,22 @@ public interface ITokenService {
                                  List<String> roles);
 
     /**
+     * 生成Token并存储到Redis（支持租户ID）
+     *
+     * @param username 用户名
+     * @param userId 用户ID
+     * @param realName 真实姓名
+     * @param permissions 权限列表
+     * @param roles 角色列表
+     * @param tenantId 租户ID
+     * @return Token字符串
+     */
+    String generateAndStoreTokenWithTenant(String username, String userId, String realName,
+                                           List<String> permissions,
+                                           List<String> roles,
+                                           String tenantId);
+
+    /**
      * 验证Token是否有效
      *
      * @param token Token字符串

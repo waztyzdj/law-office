@@ -393,34 +393,40 @@ public class UserServiceImpl extends BaseServiceImpl<UserMapper, User, UserVO> i
             throw new RuntimeException("用户名或密码错误");
         }
         
-        // 4. 获取用户权限列表
+        // 4. 获取用户的默认租户ID（从UserTenant关系中获取第一个正常状态的租户）
+        String defaultTenantId = getDefaultTenantId(user.getId());
+        log.info("用户 {} 的默认租户ID: {}", username, defaultTenantId);
+        
+        // 5. 获取用户权限列表
         List<String> permissionCodes = getUserPermissionCodes(user.getId());
         log.info("用户 {} 的权限列表: {}", username, permissionCodes);
         
-        // 5. 获取用户角色列表
+        // 6. 获取用户角色列表
         List<Role> roles = getUserRoles(user.getId());
         List<String> roleCodes = roles.stream()
                 .map(Role::getRoleCode)
                 .collect(Collectors.toList());
         log.info("用户 {} 的角色列表: {}", username, roleCodes);
         
-        // 6. 强制清除所有旧的 Redis 缓存（包括 Token、权限、角色）
+        // 7. 强制清除所有旧的 Redis 缓存（包括 Token、权限、角色）
         tokenService.forceLogout(username);
         
-        // 7. 生成并存储Token到Redis
-        String token = tokenService.generateAndStoreToken(
+        // 8. 生成并存储Token到Redis（传入租户ID）
+        String token = tokenService.generateAndStoreTokenWithTenant(
                 username,
                 user.getId(),
                 user.getRealname(),
                 permissionCodes,
-                roleCodes
+                roleCodes,
+                defaultTenantId
         );
         
-        // 8. 构建返回结果（只返回token）
+        // 9. 构建返回结果（只返回token）
         java.util.Map<String, Object> result = new java.util.HashMap<>();
         result.put("token", token);
+        result.put("tenantId", defaultTenantId);  // 返回租户ID给前端
         
-        log.info("用户登录成功：{}", username);
+        log.info("用户登录成功：{}, 租户ID: {}", username, defaultTenantId);
         return result;
     }
 
@@ -511,5 +517,26 @@ public class UserServiceImpl extends BaseServiceImpl<UserMapper, User, UserVO> i
         
         log.info("获取用户详细信息成功：{}, 权限数量: {}, 角色数量: {}", username, permissionCodes.size(), roleCodes.size());
         return userInfoDTO;
+    }
+
+    /**
+     * 获取用户的默认租户ID
+     * 从UserTenant关系中获取第一个正常状态的租户
+     */
+    private String getDefaultTenantId(String userId) {
+        LambdaQueryWrapper<UserTenant> wrapper = new LambdaQueryWrapper<>();
+        wrapper.eq(UserTenant::getUserId, userId)
+               .eq(UserTenant::getStatus, "1")  // 状态为正常
+               .orderByAsc(UserTenant::getCreateTime)
+               .last("LIMIT 1");
+        
+        UserTenant userTenant = userTenantMapper.selectOne(wrapper);
+        
+        if (userTenant != null) {
+            return userTenant.getTenantId();
+        }
+        
+        // 如果没有关联的租户，返回默认租户ID "0"
+        return "0";
     }
 }

@@ -53,10 +53,20 @@ public class TokenServiceImpl implements ITokenService {
     public String generateAndStoreToken(String username, String userId, String realName, 
                                         List<String> permissions, 
                                         List<String> roles) {
+        return generateAndStoreTokenWithTenant(username, userId, realName, permissions, roles, "0");
+    }
+
+    @Override
+    public String generateAndStoreTokenWithTenant(String username, String userId, String realName,
+                                                   List<String> permissions,
+                                                   List<String> roles,
+                                                   String tenantId) {
         // 1. 生成JWT Token
         Map<String, Object> claims = new HashMap<>();
         claims.put("userId", userId);
         claims.put("realName", realName);
+        claims.put("tenantId", tenantId != null ? tenantId : "0");
+        
         String token = jwtUtil.generateToken(username, claims);
 
         // 2. 存储Token信息到Redis
@@ -66,6 +76,7 @@ public class TokenServiceImpl implements ITokenService {
         tokenInfo.put("userId", userId);
         tokenInfo.put("realName", realName);
         tokenInfo.put("loginTime", System.currentTimeMillis());
+        tokenInfo.put("tenantId", tenantId != null ? tenantId : "0");
         
         redisUtils.hmset(tokenKey, tokenInfo, TOKEN_EXPIRE_TIME);
 
@@ -77,7 +88,8 @@ public class TokenServiceImpl implements ITokenService {
         String roleKey = ROLE_PREFIX + username;
         redisUtils.set(roleKey, roles, TOKEN_EXPIRE_TIME);
 
-        log.info("Token生成并存储成功，用户: {}, 过期时间: {}小时", username, TOKEN_EXPIRE_TIME / 3600);
+        log.info("Token生成并存储成功，用户: {}, 租户ID: {}, 过期时间: {}小时", 
+                username, tenantId, TOKEN_EXPIRE_TIME / 3600);
         return token;
     }
 

@@ -1,5 +1,6 @@
 package com.lawoffice.framework.util;
 
+import com.lawoffice.framework.config.TenantContextHolder;
 import com.lawoffice.framework.dto.RequestContext;
 import jakarta.servlet.http.HttpServletRequest;
 
@@ -31,6 +32,7 @@ public class RequestContextUtils {
                 .token(request.getHeader("Authorization"))
                 .ipAddress(request.getRemoteAddr())
                 .userAgent(request.getHeader("User-Agent"))
+                .tenantId(TenantContextHolder.getCurrentTenantId())  // 添加租户ID
                 .build();
     }
 }

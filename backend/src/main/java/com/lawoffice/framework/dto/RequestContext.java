@@ -18,4 +18,6 @@ public class RequestContext {
     private String ipAddress;
     
     private String userAgent;
+    
+    private String tenantId;  // 当前租户ID
 }
