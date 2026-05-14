@@ -5,9 +5,9 @@ import type { TablePaginationConfig } from './useTable';
 import { 
   useTableHeaderFilter, 
   useTableHeaderSelectFilter,
+  useTableHeaderDateTimeFilter,
   DEFAULT_FILTER_CONDITIONS, 
   DATE_FILTER_CONDITIONS, 
-  DATETIME_FILTER_CONDITIONS,
   type SelectOption,
 } from './useTableHeaderFilter';
 
@@ -170,14 +170,23 @@ export function defineTableColumn<T = any>(
           return h('span', {}, option.label);
         };
       }
+    } else if (columnType === 'datetime') {
+      // DateTime 类型：使用日期/时间切换筛选器
+      column.sorter = sorter;
+      column.filterDropdown = useTableHeaderDateTimeFilter(
+        dataIndex
+      ).createFilterDropdown(filterState, emit, pagination);
+      column.filteredValue =
+        filterState.value[dataIndex] && filterState.value[dataIndex].value
+          ? ['filtered']
+          : undefined;
+      column.onFilter = () => true;
     } else {
       // 普通列，根据列类型选择筛选条件
       let filterConditions = DEFAULT_FILTER_CONDITIONS;
       
       if (columnType === 'date') {
         filterConditions = DATE_FILTER_CONDITIONS;
-      } else if (columnType === 'datetime') {
-        filterConditions = DATETIME_FILTER_CONDITIONS;
       }
       
       column.sorter = sorter;

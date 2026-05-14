@@ -54,6 +54,27 @@ export const DATETIME_FILTER_CONDITIONS: FilterConditionOption[] = [
 ];
 
 /**
+ * 日期时间筛选条件选项（日期模式）
+ */
+export const DATETIME_DATE_FILTER_CONDITIONS: FilterConditionOption[] = [
+  { label: '等于', value: 'eq' },
+  { label: '大于', value: 'gt' },
+  { label: '大于等于', value: 'ge' },
+  { label: '小于', value: 'lt' },
+  { label: '小于等于', value: 'le' },
+  { label: '在两者之间', value: 'between' },
+];
+
+/**
+ * 日期时间筛选条件选项（时间模式）
+ */
+export const DATETIME_TIME_FILTER_CONDITIONS: FilterConditionOption[] = [
+  { label: '大于', value: 'gt' },
+  { label: '小于', value: 'lt' },
+  { label: '在两者之间', value: 'between' },
+];
+
+/**
  * 列类型
  */
 export type ColumnType = 'text' | 'date' | 'datetime' | 'number' | 'select';
@@ -229,6 +250,7 @@ export function useTableHeaderFilter(
                 size: 'small',
                 onClick: () => {
                   clearFilters?.();
+                  // 重置所有状态
                   condition.value = defaultConditions[0]?.value || 'like';
                   value.value = '';
                   dateValue.value = null;
@@ -407,6 +429,7 @@ export function useTableHeaderSelectFilter(
                 size: 'small',
                 onClick: () => {
                   clearFilters?.();
+                  // 重置所有状态
                   selectedValues.value = [];
                   filterState.value[dataIndex] = undefined;
                   
@@ -424,6 +447,341 @@ export function useTableHeaderSelectFilter(
 
   return {
     selectedValues,
+    createFilterDropdown,
+  };
+}
+
+/**
+ * DateTime 类型表头筛选组合式函数（支持日期/时间切换）
+ * @param dataIndex 字段索引
+ * @returns 筛选相关的方法和状态
+ */
+export function useTableHeaderDateTimeFilter(dataIndex: string) {
+  // 模式：'date' | 'time'，默认为 date
+  const mode = ref<'date' | 'time'>('date');
+  // 筛选条件
+  const condition = ref<string>(DATETIME_DATE_FILTER_CONDITIONS[0]?.value || 'eq');
+  // 日期值
+  const dateValue = ref<any>(null);
+  // 日期范围值
+  const dateRangeValue = ref<[any, any] | null>(null);
+  // 时间值
+  const timeValue = ref<any>(null);
+  // 时间范围值
+  const timeRangeValue = ref<[any, any] | null>(null);
+
+  /**
+   * 根据当前模式和条件生成搜索参数
+   */
+  const generateSearchParams = () => {
+    if (mode.value === 'date') {
+      // 日期模式：自动拼接时分秒
+      if (condition.value === 'eq' && dateValue.value) {
+        // 等于：转换为 between，范围为当天 00:00:00 到 23:59:59
+        const start = dayjs(dateValue.value).format('YYYY-MM-DD') + ' 00:00:00';
+        const end = dayjs(dateValue.value).format('YYYY-MM-DD') + ' 23:59:59';
+        return {
+          condition: 'between',
+          value: [start, end],
+        };
+      } else if (condition.value === 'gt' && dateValue.value) {
+        // 大于：使用当天 23:59:59
+        const value = dayjs(dateValue.value).format('YYYY-MM-DD') + ' 23:59:59';
+        return { condition: 'gt', value };
+      } else if (condition.value === 'ge' && dateValue.value) {
+        // 大于等于：使用当天 00:00:00
+        const value = dayjs(dateValue.value).format('YYYY-MM-DD') + ' 00:00:00';
+        return { condition: 'ge', value };
+      } else if (condition.value === 'lt' && dateValue.value) {
+        // 小于：使用当天 00:00:00
+        const value = dayjs(dateValue.value).format('YYYY-MM-DD') + ' 00:00:00';
+        return { condition: 'lt', value };
+      } else if (condition.value === 'le' && dateValue.value) {
+        // 小于等于：使用当天 23:59:59
+        const value = dayjs(dateValue.value).format('YYYY-MM-DD') + ' 23:59:59';
+        return { condition: 'le', value };
+      } else if (condition.value === 'between' && dateRangeValue.value) {
+        // 在两者之间：开始日期 00:00:00，结束日期 23:59:59
+        const start = dayjs(dateRangeValue.value[0]).format('YYYY-MM-DD') + ' 00:00:00';
+        const end = dayjs(dateRangeValue.value[1]).format('YYYY-MM-DD') + ' 23:59:59';
+        return {
+          condition: 'between',
+          value: [start, end],
+        };
+      }
+    } else {
+      // 时间模式：直接使用时间值（字符串格式）
+      if (condition.value === 'gt' && timeValue.value) {
+        return { condition: 'gt', value: timeValue.value };
+      } else if (condition.value === 'lt' && timeValue.value) {
+        return { condition: 'lt', value: timeValue.value };
+      } else if (condition.value === 'between' && timeRangeValue.value) {
+        return {
+          condition: 'between',
+          value: timeRangeValue.value,
+        };
+      }
+    }
+    
+    return null;
+  };
+
+  /**
+   * 创建表头筛选下拉框组件
+   * @param filterState 筛选状态对象（ref）
+   * @param emit 事件触发函数
+   * @param pagination 分页配置
+   * @returns 渲染函数
+   */
+  const createFilterDropdown = (
+    filterState: Ref<Record<string, any>>,
+    emit: Function,
+    pagination: any
+  ) => {
+    // 标记是否已经初始化过
+    let initialized = false;
+    
+    return ({ confirm, clearFilters }: any) => {
+      // 只在首次渲染时从 filterState 同步
+      if (!initialized) {
+        const currentFilter = filterState.value[dataIndex];
+        if (currentFilter) {
+          // 恢复模式
+          if (currentFilter.mode) {
+            mode.value = currentFilter.mode;
+          }
+          // 恢复条件（优先使用 condition 字段，用于 UI 显示）
+          if (currentFilter.condition) {
+            condition.value = currentFilter.condition;
+          }
+          // 恢复值
+          if (currentFilter.value) {
+            if (mode.value === 'date') {
+              if (condition.value === 'between' && Array.isArray(currentFilter.value)) {
+                // 在两者之间：直接使用数组
+                dateRangeValue.value = [
+                  dayjs(currentFilter.value[0]),
+                  dayjs(currentFilter.value[1]),
+                ];
+              } else if (Array.isArray(currentFilter.value)) {
+                // 其他条件但值是数组（如 eq 转换后的 between）：提取第一个元素作为日期
+                dateValue.value = dayjs(currentFilter.value[0]);
+              } else {
+                // 单个值
+                dateValue.value = dayjs(currentFilter.value);
+              }
+            } else {
+              if (condition.value === 'between' && Array.isArray(currentFilter.value)) {
+                // 时间范围：保持字符串格式
+                timeRangeValue.value = currentFilter.value;
+              } else if (Array.isArray(currentFilter.value)) {
+                // 其他条件但值是数组：提取第一个元素
+                timeValue.value = currentFilter.value[0];
+              } else {
+                // 单个时间：保持字符串格式
+                timeValue.value = currentFilter.value;
+              }
+            }
+          }
+        }
+        initialized = true;
+      }
+      
+      // 根据模式选择筛选条件
+      const conditions = mode.value === 'date' 
+        ? DATETIME_DATE_FILTER_CONDITIONS 
+        : DATETIME_TIME_FILTER_CONDITIONS;
+      
+      // 根据条件动态计算弹出框宽度
+      // 只有时间模式且选择"在两者之间"时才增加宽度
+      const isTimeRange = mode.value === 'time' && condition.value === 'between';
+      const popupWidth = isTimeRange ? 380 : 280;
+      
+      return h('div', { style: `padding: 16px; width: ${popupWidth}px;` }, [
+        // 日期/时间模式切换开关
+        h('div', { style: 'margin-bottom: 12px;' }, [
+          h('label', { style: 'display: block; margin-bottom: 4px;' }, '筛选模式'),
+          h('div', { style: 'display: flex; gap: 8px;' }, [
+            h(
+              Button,
+              {
+                type: mode.value === 'date' ? 'primary' : 'default',
+                size: 'small',
+                onClick: () => {
+                  mode.value = 'date';
+                  condition.value = DATETIME_DATE_FILTER_CONDITIONS[0]?.value || 'eq';
+                  // 清空值
+                  dateValue.value = null;
+                  dateRangeValue.value = null;
+                },
+              },
+              () => '日期'
+            ),
+            h(
+              Button,
+              {
+                type: mode.value === 'time' ? 'primary' : 'default',
+                size: 'small',
+                onClick: () => {
+                  mode.value = 'time';
+                  condition.value = DATETIME_TIME_FILTER_CONDITIONS[0]?.value || 'gt';
+                  // 清空值
+                  timeValue.value = null;
+                  timeRangeValue.value = null;
+                },
+              },
+              () => '时间'
+            ),
+          ]),
+        ]),
+        // 运算符选择
+        h('div', { style: 'margin-bottom: 8px;' }, [
+          h('label', { style: 'display: block; margin-bottom: 4px;' }, '条件'),
+          h(Select as any, {
+            value: condition.value,
+            style: { width: '100%' },
+            onChange: (val: string) => {
+              condition.value = val;
+              // 清空之前的值
+              dateValue.value = null;
+              dateRangeValue.value = null;
+              timeValue.value = null;
+              timeRangeValue.value = null;
+            },
+            options: conditions.map((c) => ({ label: c.label, value: c.value })),
+          }),
+        ]),
+        // 日期控件（日期模式）
+        ...(mode.value === 'date' ? [
+          h('div', { style: 'margin-bottom: 8px;' }, [
+            h('label', { style: 'display: block; margin-bottom: 4px;' }, '日期'),
+            condition.value === 'between'
+              ? h(DatePicker.RangePicker as any, {
+                  value: dateRangeValue.value,
+                  style: { width: '100%' },
+                  placeholder: ['开始日期', '结束日期'],
+                  onChange: (dates: any) => {
+                    dateRangeValue.value = dates;
+                  },
+                })
+              : h(DatePicker as any, {
+                  value: dateValue.value,
+                  style: { width: '100%' },
+                  placeholder: '请选择日期',
+                  onChange: (date: any) => {
+                    dateValue.value = date;
+                  },
+                }),
+          ]),
+        ] : []),
+        // 时间控件（时间模式）
+        ...(mode.value === 'time' ? [
+          h('div', { style: 'margin-bottom: 8px;' }, [
+            h('label', { style: 'display: block; margin-bottom: 4px;' }, '时间'),
+            condition.value === 'between'
+              ? h(DatePicker.RangePicker as any, {
+                  value: timeRangeValue.value ? [
+                    dayjs(timeRangeValue.value[0]),
+                    dayjs(timeRangeValue.value[1])
+                  ] : null,
+                  style: { width: '100%' },
+                  showTime: true,
+                  format: 'YYYY-MM-DD HH:mm:ss',
+                  placeholder: ['开始时间', '结束时间'],
+                  onChange: (dates: any) => {
+                    timeRangeValue.value = dates && dates.length === 2 ? [
+                      dates[0]?.format('YYYY-MM-DD HH:mm:ss'),
+                      dates[1]?.format('YYYY-MM-DD HH:mm:ss'),
+                    ] : null;
+                  },
+                })
+              : h(DatePicker as any, {
+                  value: timeValue.value ? dayjs(timeValue.value) : null,
+                  style: { width: '100%' },
+                  showTime: true,
+                  format: 'YYYY-MM-DD HH:mm:ss',
+                  placeholder: '请选择时间',
+                  onChange: (date: any) => {
+                    timeValue.value = date?.format('YYYY-MM-DD HH:mm:ss') || null;
+                  },
+                }),
+          ]),
+        ] : []),
+        // 提示信息
+        ...((mode.value === 'date' && !dateValue.value && !dateRangeValue.value) ||
+            (mode.value === 'time' && !timeValue.value && !timeRangeValue.value)
+          ? [
+              h('div', { 
+                style: 'color: #faad14; font-size: 12px; margin-bottom: 8px;',
+              }, '⚠️ 请选择日期/时间'),
+            ]
+          : []),
+        // 按钮
+        h(Space, { style: 'justify-content: center; display: flex; width: 100%;' }, {
+          default: () => [
+            h(
+              Button,
+              {
+                type: 'primary',
+                size: 'small',
+                onClick: () => {
+                  const searchParams = generateSearchParams();
+                  
+                  if (!searchParams) {
+                    message.warning(mode.value === 'date' ? '请选择日期' : '请选择时间');
+                    return;
+                  }
+
+                  // 构建筛选条件，保存模式信息
+                  filterState.value[dataIndex] = {
+                    mode: mode.value,
+                    condition: condition.value,  // 保存原始的 UI 选择（如 'eq'），用于 UI 显示
+                    apiCondition: searchParams.condition,  // 保存转换后的条件（如 'between'），用于后端查询
+                    value: searchParams.value,
+                  };
+
+                  confirm();
+
+                  // 手动触发 change 事件
+                  emit('change', pagination, filterState.value, {});
+                },
+              },
+              () => '搜索'
+            ),
+            h(
+              Button,
+              {
+                size: 'small',
+                onClick: () => {
+                  clearFilters?.();
+                  // 重置所有状态
+                  mode.value = 'date';
+                  condition.value = DATETIME_DATE_FILTER_CONDITIONS[0]?.value || 'eq';
+                  dateValue.value = null;
+                  dateRangeValue.value = null;
+                  timeValue.value = null;
+                  timeRangeValue.value = null;
+                  filterState.value[dataIndex] = undefined;
+                  
+                  // 触发 change 事件，更新筛选状态
+                  emit('change', pagination, filterState.value, {});
+                },
+              },
+              () => '重置'
+            ),
+          ],
+        }),
+      ]);
+    };
+  };
+
+  return {
+    mode,
+    condition,
+    dateValue,
+    dateRangeValue,
+    timeValue,
+    timeRangeValue,
     createFilterDropdown,
   };
 }

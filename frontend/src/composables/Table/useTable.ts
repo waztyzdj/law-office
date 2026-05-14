@@ -140,16 +140,19 @@ export function useTable<T = any>(
 
       // 处理高级筛选（包含 condition 和 value）
       if (filterValue.condition && filterValue.value !== undefined) {
-        const { condition, value } = filterValue;
-
+        const { condition, apiCondition, value } = filterValue;
+        
+        // 优先使用 apiCondition（转换后的条件），如果不存在则使用 condition
+        const effectiveCondition = apiCondition || condition;
+        
         // 特殊处理"开头是"和"结尾是"
-        if (condition === 'like') {
+        if (effectiveCondition === 'like') {
           // 判断是否是"开头是"或"结尾是"的逻辑可以在这里扩展
           // 目前统一使用 like
           queryParams[`${key}_like`] = value;
         } else {
           // 其他条件直接拼接操作符
-          queryParams[`${key}_${condition}`] = value;
+          queryParams[`${key}_${effectiveCondition}`] = value;
         }
       }
       // 处理日期范围筛选

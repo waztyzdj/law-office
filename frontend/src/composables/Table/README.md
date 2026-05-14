@@ -90,7 +90,39 @@ export function getUserColumns(filterState, emit, pagination) {
 // - 支持自定义颜色显示
 ```
 
-#### 4. 日期列 🆕
+#### 4. DateTime 类型列（日期/时间切换）🆕
+
+```typescript
+{
+  dataIndex: 'createTime',
+  title: '创建时间',
+  options: {
+    width: 180,
+    columnType: 'datetime' as const,
+  },
+}
+
+// 特性：
+// - 支持日期/时间模式切换
+// - 日期模式：自动拼接时分秒（00:00:00 或 23:59:59）
+// - 时间模式：使用完整的时间值
+// - 智能参数转换，适配后端查询需求
+```
+
+**日期模式运算符及参数转换：**
+- **等于** → `between`: `[日期 00:00:00, 日期 23:59:59]`
+- **大于** → `gt`: `日期 23:59:59`
+- **大于等于** → `ge`: `日期 00:00:00`
+- **小于** → `lt`: `日期 00:00:00`
+- **小于等于** → `le`: `日期 23:59:59`
+- **在两者之间** → `between`: `[开始日期 00:00:00, 结束日期 23:59:59]`
+
+**时间模式运算符：**
+- **大于** → `gt`: 直接使用时间值
+- **小于** → `lt`: 直接使用时间值
+- **在两者之间** → `between`: `[开始时间, 结束时间]`
+
+#### 5. 日期列 🆕
 
 ```typescript
 {
@@ -108,7 +140,7 @@ export function getUserColumns(filterState, emit, pagination) {
 // - 格式化：YYYY-MM-DD
 ```
 
-#### 5. 日期时间列 🆕
+#### 6. 日期时间列 🆕
 
 ```typescript
 {
@@ -126,7 +158,7 @@ export function getUserColumns(filterState, emit, pagination) {
 // - 格式化：YYYY-MM-DD HH:mm:ss
 ```
 
-#### 6. 枚举/状态列
+#### 7. 枚举/状态列
 
 ```typescript
 import { h } from 'vue';
@@ -155,7 +187,7 @@ import { Tag } from 'ant-design-vue';
 }
 ```
 
-#### 7. 操作列（无筛选）
+#### 8. 操作列（无筛选）
 
 ```typescript
 import { h } from 'vue';
@@ -200,8 +232,8 @@ import { Space } from 'ant-design-vue';
 |------|----------|----------|------|
 | text | 输入框 | 包含、等于、不等于、大于、小于等 | - |
 | date | 日期选择器 | 等于、大于、小于、在两者之间 | YYYY-MM-DD |
-| datetime | 日期时间选择器 | 等于、大于、小于、在两者之间 | YYYY-MM-DD HH:mm:ss |
-| **select** | **多选下拉框** | **in（在...之中）** | **自动渲染标签** |
+| **datetime** | **日期/时间切换** | **日期模式：等于、大于、小于等<br/>时间模式：大于、小于、在两者之间** | **YYYY-MM-DD HH:mm:ss** |
+| select | 多选下拉框 | in（在...之中） | 自动渲染标签 |
 | number | 输入框 | 同 text | - |
 
 ### SelectOption 配置项
