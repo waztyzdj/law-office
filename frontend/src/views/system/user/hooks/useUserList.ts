@@ -1,7 +1,7 @@
 import { ref, reactive } from 'vue';
 import { message, Modal } from 'ant-design-vue';
-import type { UserInfo, UserListParams } from '#/api/system/user';
-import { getUserListApi, deleteUserApi, batchDeleteUserApi } from '#/api/system/user';
+import type { UserInfo, UserListParams } from './useUserApi';
+import { getUserListApi, deleteUserApi, batchDeleteUserApi } from './useUserApi';
 
 /**
  * 用户列表分页配置
@@ -111,15 +111,7 @@ export function useUserList(getSearchParams: () => Partial<UserListParams>) {
       const searchParams = getSearchParams();
       const tableFilters = extraFilters || activeFilters.value;
       
-      console.log('=== 筛选调试信息 ===');
-      console.log('extraFilters:', extraFilters);
-      console.log('activeFilters:', activeFilters.value);
-      console.log('tableFilters:', tableFilters);
-      
       const filterQueryParams = convertFiltersToQueryParams(tableFilters);
-      
-      console.log('filterQueryParams:', filterQueryParams);
-      console.log('===================');
       
       const params: UserListParams = {
         current: pagination.current,
@@ -135,14 +127,11 @@ export function useUserList(getSearchParams: () => Partial<UserListParams>) {
         };
       }
       
-      console.log('最终请求参数:', JSON.stringify(params, null, 2));
-      
       const result = await getUserListApi(params);
       dataSource.value = result.items || [];
       pagination.total = result.total || 0;
     } catch (error) {
       message.error('加载数据失败');
-      console.error(error);
     } finally {
       loading.value = false;
     }
@@ -164,7 +153,6 @@ export function useUserList(getSearchParams: () => Partial<UserListParams>) {
           await loadData();
         } catch (error) {
           message.error('删除失败');
-          console.error(error);
         }
       },
     });
@@ -192,7 +180,6 @@ export function useUserList(getSearchParams: () => Partial<UserListParams>) {
           await loadData();
         } catch (error) {
           message.error('批量删除失败');
-          console.error(error);
         }
       },
     });
@@ -209,12 +196,6 @@ export function useUserList(getSearchParams: () => Partial<UserListParams>) {
    * 分页、排序、筛选变化
    */
   const handleTableChange = (pag: any, filters: any, sorter: any) => {
-    console.log('=== Table Change 事件 ===');
-    console.log('pag:', pag);
-    console.log('filters:', filters);
-    console.log('sorter:', sorter);
-    console.log('========================');
-    
     pagination.current = pag.current;
     pagination.pageSize = pag.pageSize;
     
@@ -231,19 +212,11 @@ export function useUserList(getSearchParams: () => Partial<UserListParams>) {
       };
       const order = orderMap[sorter.order] || '';
       
-      console.log('排序字段:', sorter.field, '排序方式:', order);
       // TODO: 如果需要后端排序，可以将排序信息传递给 loadData
     }
     
     // 重新加载数据（带上筛选条件）
     loadData(filters);
-  };
-
-  /**
-   * 重置选中状态
-   */
-  const resetSelection = () => {
-    selectedRowKeys.value = [];
   };
 
   return {
@@ -257,6 +230,5 @@ export function useUserList(getSearchParams: () => Partial<UserListParams>) {
     handleBatchDelete,
     onSelectChange,
     handleTableChange,
-    resetSelection,
   };
 }
