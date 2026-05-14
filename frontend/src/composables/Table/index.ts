@@ -9,6 +9,6 @@ export type {
   StorageConfig,
 } from './useTable';
 
-// 表头搜索相关
-export { useAdvancedFilter, DEFAULT_FILTER_CONDITIONS } from './TableHeaderSearch/useAdvancedFilter';
-export type { FilterConditionOption } from './TableHeaderSearch/useAdvancedFilter';
+// 表头筛选相关
+export { useTableHeaderFilter, DEFAULT_FILTER_CONDITIONS } from './useTableHeaderFilter';
+export type { FilterConditionOption } from './useTableHeaderFilter';

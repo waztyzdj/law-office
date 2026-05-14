@@ -29,12 +29,12 @@ export const DEFAULT_FILTER_CONDITIONS: FilterConditionOption[] = [
 ];
 
 /**
- * 高级筛选组合式函数
+ * 表头筛选组合式函数
  * @param dataIndex 字段索引
  * @param defaultConditions 默认筛选条件选项
  * @returns 筛选相关的方法和状态
  */
-export function useAdvancedFilter(
+export function useTableHeaderFilter(
   dataIndex: string,
   defaultConditions: FilterConditionOption[] = []
 ) {
@@ -43,7 +43,7 @@ export function useAdvancedFilter(
   const value = ref<string>('');
 
   /**
-   * 创建高级筛选下拉框组件
+   * 创建表头筛选下拉框组件
    * @param filterState 筛选状态对象（ref）
    * @param emit 事件触发函数
    * @param pagination 分页配置

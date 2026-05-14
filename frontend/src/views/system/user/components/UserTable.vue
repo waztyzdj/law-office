@@ -7,14 +7,14 @@ import {
   Card
 } from 'ant-design-vue';
 import type { UserInfo } from '#/api/system/user';
-import type { PaginationConfig } from '../hooks/useUserList';
+import type { TablePaginationConfig } from '#/composables/Table';
 import { getUserColumns } from '../hooks/useUserColumns';
 
 interface Props {
   dataSource: UserInfo[];
   loading: boolean;
-  pagination: PaginationConfig;
-  selectedRowKeys: string[];
+  pagination: TablePaginationConfig;
+  selectedRowKeys: (string | number)[];
   activeFilters: Record<string, any>;
 }
 

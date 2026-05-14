@@ -3,10 +3,10 @@ import type { UserInfo, UserListParams } from '#/api/system/user';
 import { getUserListApi, deleteUserApi, batchDeleteUserApi } from '#/api/system/user';
 
 /**
- * 用户列表逻辑组合式函数
+ * 用户表格逻辑组合式函数
  * @param getSearchParams 获取搜索表单参数的方法
  */
-export function useUserList(getSearchParams: () => Partial<UserListParams>) {
+export function useUserTable(getSearchParams: () => Partial<UserListParams>) {
   // 使用通用的 useTable
   const table = useTable<UserInfo>(
     // 数据获取方法
@@ -35,7 +35,7 @@ export function useUserList(getSearchParams: () => Partial<UserListParams>) {
   );
 
   /**
-   * 加载用户列表数据（包装一层，自动传入搜索参数）
+   * 加载用户表格数据（包装一层，自动传入搜索参数）
    */
   const loadData = async (extraFilters?: Record<string, any>) => {
     const searchParams = getSearchParams();

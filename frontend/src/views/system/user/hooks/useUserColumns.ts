@@ -2,13 +2,13 @@ import { h } from 'vue';
 import { Space, Tag } from 'ant-design-vue';
 import type { ColumnsType } from 'ant-design-vue/es/table';
 import type { UserInfo } from '#/api/system/user';
-import type { PaginationConfig } from './useUserList';
-import { useAdvancedFilter, DEFAULT_FILTER_CONDITIONS } from '#/composables/Table/TableHeaderSearch/useAdvancedFilter';
+import type { TablePaginationConfig } from '#/composables/Table';
+import { useTableHeaderFilter, DEFAULT_FILTER_CONDITIONS } from '#/composables/Table';
 
 export function getUserColumns(
   filterState: any,
   emit: any,
-  pagination: PaginationConfig
+  pagination: TablePaginationConfig
 ): ColumnsType<UserInfo> {
   return [
     {
@@ -18,7 +18,7 @@ export function getUserColumns(
       width: 120,
       align: 'center',
       sorter: true,
-      filterDropdown: useAdvancedFilter('username', DEFAULT_FILTER_CONDITIONS).createFilterDropdown(
+      filterDropdown: useTableHeaderFilter('username', DEFAULT_FILTER_CONDITIONS).createFilterDropdown(
         filterState,
         emit,
         pagination
@@ -33,7 +33,7 @@ export function getUserColumns(
       width: 120,
       align: 'center',
       sorter: true,
-      filterDropdown: useAdvancedFilter('realname', DEFAULT_FILTER_CONDITIONS).createFilterDropdown(
+      filterDropdown: useTableHeaderFilter('realname', DEFAULT_FILTER_CONDITIONS).createFilterDropdown(
         filterState,
         emit,
         pagination
@@ -66,7 +66,7 @@ export function getUserColumns(
       width: 180,
       align: 'center',
       sorter: true,
-      filterDropdown: useAdvancedFilter('email', DEFAULT_FILTER_CONDITIONS).createFilterDropdown(
+      filterDropdown: useTableHeaderFilter('email', DEFAULT_FILTER_CONDITIONS).createFilterDropdown(
         filterState,
         emit,
         pagination
@@ -81,7 +81,7 @@ export function getUserColumns(
       width: 130,
       align: 'center',
       sorter: true,
-      filterDropdown: useAdvancedFilter('phone', DEFAULT_FILTER_CONDITIONS).createFilterDropdown(
+      filterDropdown: useTableHeaderFilter('phone', DEFAULT_FILTER_CONDITIONS).createFilterDropdown(
         filterState,
         emit,
         pagination
@@ -96,7 +96,7 @@ export function getUserColumns(
       width: 120,
       align: 'center',
       sorter: true,
-      filterDropdown: useAdvancedFilter('workNo', DEFAULT_FILTER_CONDITIONS).createFilterDropdown(
+      filterDropdown: useTableHeaderFilter('workNo', DEFAULT_FILTER_CONDITIONS).createFilterDropdown(
         filterState,
         emit,
         pagination
@@ -110,7 +110,7 @@ export function getUserColumns(
       key: 'post',
       width: 120,
       align: 'center',
-      filterDropdown: useAdvancedFilter('post', DEFAULT_FILTER_CONDITIONS).createFilterDropdown(
+      filterDropdown: useTableHeaderFilter('post', DEFAULT_FILTER_CONDITIONS).createFilterDropdown(
         filterState,
         emit,
         pagination

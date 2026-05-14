@@ -2,9 +2,9 @@
 import { onMounted, watch } from 'vue';
 import { message } from 'ant-design-vue';
 import UserTable from './components/UserTable.vue';
-import { useUserList } from './hooks/useUserList';
+import { useUserTable } from './hooks/useUserTable';
 
-// 使用列表组合式函数（不需要搜索参数）
+// 使用表格组合式函数（不需要搜索参数）
 const {
   dataSource,
   loading,
@@ -16,7 +16,7 @@ const {
   handleBatchDelete,
   onSelectChange,
   handleTableChange,
-} = useUserList(() => ({}));
+} = useUserTable(() => ({}));
 
 // 调试：监听 activeFilters 的变化
 watch(activeFilters, (newVal) => {
