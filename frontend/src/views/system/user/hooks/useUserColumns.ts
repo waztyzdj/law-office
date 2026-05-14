@@ -23,7 +23,7 @@ export function getUserColumns(
         emit,
         pagination
       ),
-      filteredValue: filterState.value.username ? ['filtered'] : undefined,
+      filteredValue: filterState.value.username && filterState.value.username.value ? ['filtered'] : undefined,
       onFilter: () => true,
     },
     {
@@ -38,7 +38,7 @@ export function getUserColumns(
         emit,
         pagination
       ),
-      filteredValue: filterState.value.realname ? ['filtered'] : undefined,
+      filteredValue: filterState.value.realname && filterState.value.realname.value ? ['filtered'] : undefined,
       onFilter: () => true,
     },
     {
@@ -71,7 +71,7 @@ export function getUserColumns(
         emit,
         pagination
       ),
-      filteredValue: filterState.value.email ? ['filtered'] : undefined,
+      filteredValue: filterState.value.email && filterState.value.email.value ? ['filtered'] : undefined,
       onFilter: () => true,
     },
     {
@@ -86,7 +86,7 @@ export function getUserColumns(
         emit,
         pagination
       ),
-      filteredValue: filterState.value.phone ? ['filtered'] : undefined,
+      filteredValue: filterState.value.phone && filterState.value.phone.value ? ['filtered'] : undefined,
       onFilter: () => true,
     },
     {
@@ -101,7 +101,7 @@ export function getUserColumns(
         emit,
         pagination
       ),
-      filteredValue: filterState.value.workNo ? ['filtered'] : undefined,
+      filteredValue: filterState.value.workNo && filterState.value.workNo.value ? ['filtered'] : undefined,
       onFilter: () => true,
     },
     {
@@ -115,7 +115,7 @@ export function getUserColumns(
         emit,
         pagination
       ),
-      filteredValue: filterState.value.post ? ['filtered'] : undefined,
+      filteredValue: filterState.value.post && filterState.value.post.value ? ['filtered'] : undefined,
       onFilter: () => true,
     },
     {
