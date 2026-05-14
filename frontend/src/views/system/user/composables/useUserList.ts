@@ -16,6 +16,14 @@ export interface PaginationConfig {
 }
 
 /**
+ * 筛选条件类型
+ */
+export interface FilterCondition {
+  condition: string; // like, eq, ne, gt, lt, etc.
+  value: any;
+}
+
+/**
  * 用户列表逻辑组合式函数
  */
 export function useUserList(getSearchParams: () => Partial<UserListParams>) {
@@ -35,18 +43,99 @@ export function useUserList(getSearchParams: () => Partial<UserListParams>) {
 
   // 选中的行
   const selectedRowKeys = ref<string[]>([]);
+  
+  // 筛选状态（用于列头筛选）
+  const activeFilters = ref<Record<string, FilterCondition | any>>({});
+
+  /**
+   * 将前端筛选条件转换为后端 QueryWrapperBuilderUtils 支持的格式
+   * @param filters Table 组件的 filters 参数
+   * @returns 符合后端规范的查询参数
+   */
+  const convertFiltersToQueryParams = (filters: Record<string, any>): Record<string, any> => {
+    const queryParams: Record<string, any> = {};
+    
+    Object.keys(filters).forEach(key => {
+      const filterValue = filters[key];
+      
+      // 如果筛选值为空，跳过
+      if (!filterValue || (Array.isArray(filterValue) && filterValue.length === 0)) {
+        return;
+      }
+      
+      // 处理高级筛选（包含 condition 和 value）
+      if (filterValue.condition && filterValue.value !== undefined) {
+        const { condition, value } = filterValue;
+        
+        // 特殊处理"开头是"和"结尾是"
+        if (condition === 'like') {
+          // 判断是否是"开头是"或"结尾是"的逻辑可以在这里扩展
+          // 目前统一使用 like
+          queryParams[`${key}_like`] = value;
+        } else {
+          // 其他条件直接拼接操作符
+          queryParams[`${key}_${condition}`] = value;
+        }
+      } 
+      // 处理日期范围筛选
+      else if (Array.isArray(filterValue) && filterValue.length === 2) {
+        const [start, end] = filterValue;
+        if (start && end) {
+          queryParams[`${key}_ge`] = start.format('YYYY-MM-DD HH:mm:ss');
+          queryParams[`${key}_le`] = end.format('YYYY-MM-DD HH:mm:ss');
+        } else if (start) {
+          queryParams[`${key}_ge`] = start.format('YYYY-MM-DD HH:mm:ss');
+        } else if (end) {
+          queryParams[`${key}_le`] = end.format('YYYY-MM-DD HH:mm:ss');
+        }
+      }
+      // 处理简单值筛选
+      else {
+        const value = Array.isArray(filterValue) ? filterValue[0] : filterValue;
+        if (value !== undefined && value !== null) {
+          queryParams[`${key}_eq`] = value;
+        }
+      }
+    });
+    
+    return queryParams;
+  };
 
   /**
    * 加载用户列表数据
    */
-  const loadData = async () => {
+  const loadData = async (extraFilters?: Record<string, any>) => {
     loading.value = true;
     try {
+      // 合并搜索表单参数和列头筛选参数
+      const searchParams = getSearchParams();
+      const tableFilters = extraFilters || activeFilters.value;
+      
+      console.log('=== 筛选调试信息 ===');
+      console.log('extraFilters:', extraFilters);
+      console.log('activeFilters:', activeFilters.value);
+      console.log('tableFilters:', tableFilters);
+      
+      const filterQueryParams = convertFiltersToQueryParams(tableFilters);
+      
+      console.log('filterQueryParams:', filterQueryParams);
+      console.log('===================');
+      
       const params: UserListParams = {
         current: pagination.current,
         size: pagination.pageSize,
-        ...getSearchParams(),
+        ...searchParams,
       };
+      
+      // 如果有筛选条件，添加到 queryParams
+      if (Object.keys(filterQueryParams).length > 0) {
+        params.queryParams = {
+          ...(params.queryParams || {}),
+          ...filterQueryParams,
+        };
+      }
+      
+      console.log('最终请求参数:', JSON.stringify(params, null, 2));
       
       const result = await getUserListApi(params);
       dataSource.value = result.items || [];
@@ -117,12 +206,37 @@ export function useUserList(getSearchParams: () => Partial<UserListParams>) {
   };
 
   /**
-   * 分页变化
+   * 分页、排序、筛选变化
    */
-  const handleTableChange = (pag: any) => {
+  const handleTableChange = (pag: any, filters: any, sorter: any) => {
+    console.log('=== Table Change 事件 ===');
+    console.log('pag:', pag);
+    console.log('filters:', filters);
+    console.log('sorter:', sorter);
+    console.log('========================');
+    
     pagination.current = pag.current;
     pagination.pageSize = pag.pageSize;
-    loadData();
+    
+    // 更新筛选状态
+    if (filters) {
+      activeFilters.value = filters;
+    }
+    
+    // 处理排序参数
+    if (sorter && sorter.field) {
+      const orderMap: Record<string, string> = {
+        ascend: 'asc',
+        descend: 'desc',
+      };
+      const order = orderMap[sorter.order] || '';
+      
+      console.log('排序字段:', sorter.field, '排序方式:', order);
+      // TODO: 如果需要后端排序，可以将排序信息传递给 loadData
+    }
+    
+    // 重新加载数据（带上筛选条件）
+    loadData(filters);
   };
 
   /**
@@ -137,6 +251,7 @@ export function useUserList(getSearchParams: () => Partial<UserListParams>) {
     loading,
     pagination,
     selectedRowKeys,
+    activeFilters,
     loadData,
     handleDelete,
     handleBatchDelete,

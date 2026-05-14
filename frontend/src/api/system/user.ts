@@ -34,6 +34,7 @@ export interface UserListParams {
   phone?: string;
   email?: string;
   status?: number;
+  queryParams?: Record<string, any>; // 动态查询条件（用于列头筛选）
 }
 
 /**
@@ -56,10 +57,10 @@ export async function getUserInfoApi() {
  */
 export async function getUserListApi(params: UserListParams) {
   // 转换参数格式：current -> pageNum, size -> pageSize
-  const requestParams = {
+  const requestParams: any = {
     pageNum: params.current || 1,
     pageSize: params.size || 10,
-    queryParams: {},
+    queryParams: {} as Record<string, any>,
   };
 
   // 将搜索条件放入 queryParams
@@ -77,6 +78,14 @@ export async function getUserListApi(params: UserListParams) {
   }
   if (params.status !== undefined) {
     requestParams.queryParams.status = params.status;
+  }
+
+  // 合并额外的 queryParams（来自列头筛选）
+  if (params.queryParams && Object.keys(params.queryParams).length > 0) {
+    requestParams.queryParams = {
+      ...requestParams.queryParams,
+      ...params.queryParams,
+    };
   }
 
   // 调用后端接口
