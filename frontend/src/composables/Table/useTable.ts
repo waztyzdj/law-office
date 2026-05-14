@@ -1,6 +1,5 @@
 import { ref, reactive } from 'vue';
 import { message, Modal } from 'ant-design-vue';
-import type { Ref } from 'vue';
 
 /**
  * 表格分页配置类型
@@ -337,11 +336,11 @@ export function useTable<T = any>(
 
     // 处理排序参数
     if (sorter && sorter.field) {
-      const orderMap: Record<string, string> = {
-        ascend: 'asc',
-        descend: 'desc',
-      };
-      const order = orderMap[sorter.order] || '';
+      // const orderMap: Record<string, string> = {
+      //   ascend: 'asc',
+      //   descend: 'desc',
+      // };
+      // const order = orderMap[sorter.order] || '';
 
       // TODO: 如果需要后端排序,可以将排序信息传递给 loadData
       // 例如: loadData(extraSearchParams, undefined, { field: sorter.field, order })

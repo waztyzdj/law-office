@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, watch } from 'vue';
+import { onMounted } from 'vue';
 import { message } from 'ant-design-vue';
 import UserTable from './components/UserTable.vue';
 import { useUserTable } from './hooks/useUserTable';

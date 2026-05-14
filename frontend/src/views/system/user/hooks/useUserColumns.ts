@@ -71,23 +71,11 @@ export function getUserColumns(
       title: '状态',
       options: {
         width: 80,
-        sorter: false,
-        filters: [
-          { text: '正常', value: 1 },
-          { text: '冻结', value: 2 },
+        columnType: 'select' as const, // 指定为下拉选择类型
+        selectOptions: [
+          { label: '正常', value: 1, color: 'green' },
+          { label: '冻结', value: 2, color: 'red' },
         ],
-        onFilter: (value: any, record: UserInfo) => record.status === value,
-        customRender: ({ record }: { record: UserInfo }) => {
-          const statusMap: Record<number, { text: string; color: string }> = {
-            1: { text: '正常', color: 'green' },
-            2: { text: '冻结', color: 'red' },
-          };
-          const status = statusMap[record.status ?? 1];
-          if (!status) {
-            return h(Tag, { color: 'default' }, () => '未知');
-          }
-          return h(Tag, { color: status.color }, () => status.text);
-        },
       },
     },
     {
@@ -109,6 +97,6 @@ export function getUserColumns(
     },
   ];
 
-  // 使用辅助函数批量生成列配置
-  return defineTableColumns<UserInfo>(columns, filterState, emit, pagination);
+  // 使用通用列定义函数处理
+  return defineTableColumns(columns, filterState, emit, pagination);
 }
