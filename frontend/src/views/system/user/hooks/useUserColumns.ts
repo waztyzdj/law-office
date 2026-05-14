@@ -3,7 +3,7 @@ import { Space, Tag } from 'ant-design-vue';
 import type { ColumnsType } from 'ant-design-vue/es/table';
 import type { UserInfo } from '#/api/system/user';
 import type { TablePaginationConfig } from '#/composables/Table';
-import { defineTableColumns, type TableColumnOptions } from '#/composables/Table';
+import { defineTableColumns } from '#/composables/Table';
 
 /**
  * 用户列表列定义配置
