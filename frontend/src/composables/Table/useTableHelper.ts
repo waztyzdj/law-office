@@ -8,6 +8,7 @@ import {
   useTableHeaderDateTimeFilter,
   DEFAULT_FILTER_CONDITIONS, 
   DATE_FILTER_CONDITIONS, 
+  NUMBER_FILTER_CONDITIONS,
   type SelectOption,
 } from './useTableHeaderFilter';
 
@@ -187,6 +188,8 @@ export function defineTableColumn<T = any>(
       
       if (columnType === 'date') {
         filterConditions = DATE_FILTER_CONDITIONS;
+      } else if (columnType === 'number') {
+        filterConditions = NUMBER_FILTER_CONDITIONS;
       }
       
       column.sorter = sorter;

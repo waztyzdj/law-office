@@ -1,5 +1,5 @@
 import { ref, h } from 'vue';
-import { Input, Select, Button, Space, DatePicker, message } from 'ant-design-vue';
+import { Input, InputNumber, Select, Button, Space, DatePicker, message } from 'ant-design-vue';
 import type { Ref } from 'vue';
 import dayjs from 'dayjs';
 
@@ -70,6 +70,18 @@ export const DATETIME_TIME_FILTER_CONDITIONS: FilterConditionOption[] = [
 ];
 
 /**
+ * 数值类型筛选条件选项
+ */
+export const NUMBER_FILTER_CONDITIONS: FilterConditionOption[] = [
+  { label: '等于', value: 'eq' },
+  { label: '大于', value: 'gt' },
+  { label: '大于等于', value: 'ge' },
+  { label: '小于', value: 'lt' },
+  { label: '小于等于', value: 'le' },
+  { label: '在两者之间', value: 'between' },
+];
+
+/**
  * 列类型
  */
 export type ColumnType = 'text' | 'date' | 'datetime' | 'number' | 'select';
@@ -103,6 +115,8 @@ export function useTableHeaderFilter(
   const value = ref<string>('');
   const dateValue = ref<any>(null);
   const dateRangeValue = ref<[any, any] | null>(null);
+  const numberValue = ref<string>('');
+  const numberRangeValue = ref<[string, string] | null>(null);
 
   /**
    * 创建表头筛选下拉框组件
@@ -141,6 +155,17 @@ export function useTableHeaderFilter(
                   : dayjs(currentFilter.value).startOf('day');
               }
             }
+          } else if (columnType === 'number') {
+            // 恢复数值
+            if (currentFilter.value) {
+              if (Array.isArray(currentFilter.value)) {
+                // 范围查询
+                numberRangeValue.value = currentFilter.value;
+              } else {
+                // 单值查询
+                numberValue.value = String(currentFilter.value);
+              }
+            }
           } else {
             value.value = currentFilter.value || '';
           }
@@ -176,6 +201,49 @@ export function useTableHeaderFilter(
                 dateValue.value = date;
               },
               placeholder: '请选择日期',
+            });
+          }
+        } else if (columnType === 'number') {
+          const isRange = condition.value === 'between';
+          
+          if (isRange) {
+            // 数值范围输入
+            return h('div', { style: 'display: flex; gap: 8px;' }, [
+              h(InputNumber as any, {
+                value: numberRangeValue.value?.[0] !== undefined ? Number(numberRangeValue.value[0]) : undefined,
+                style: { flex: 1 },
+                placeholder: '最小值',
+                onChange: (val: number | null) => {
+                  if (numberRangeValue.value) {
+                    numberRangeValue.value = [String(val ?? ''), numberRangeValue.value[1]];
+                  } else {
+                    numberRangeValue.value = [String(val ?? ''), ''];
+                  }
+                },
+              }),
+              h('span', { style: 'display: flex; align-items: center;' }, '至'),
+              h(InputNumber as any, {
+                value: numberRangeValue.value?.[1] !== undefined ? Number(numberRangeValue.value[1]) : undefined,
+                style: { flex: 1 },
+                placeholder: '最大值',
+                onChange: (val: number | null) => {
+                  if (numberRangeValue.value) {
+                    numberRangeValue.value = [numberRangeValue.value[0], String(val ?? '')];
+                  } else {
+                    numberRangeValue.value = ['', String(val ?? '')];
+                  }
+                },
+              }),
+            ]);
+          } else {
+            // 单数值输入
+            return h(InputNumber as any, {
+              value: numberValue.value !== '' ? Number(numberValue.value) : undefined,
+              style: { width: '100%' },
+              placeholder: '请输入数值',
+              onChange: (val: number | null) => {
+                numberValue.value = val !== null ? String(val) : '';
+              },
             });
           }
         } else {
@@ -300,6 +368,26 @@ export function useTableHeaderFilter(
           return;
         }
       }
+    } else if (columnType === 'number') {
+      const isRange = condition.value === 'between';
+      
+      if (isRange) {
+        // 范围查询
+        if (numberRangeValue.value && numberRangeValue.value[0] && numberRangeValue.value[1]) {
+          filterValue = numberRangeValue.value;
+        } else {
+          message.warning('请输入完整的数值范围');
+          return;
+        }
+      } else {
+        // 单值查询
+        if (numberValue.value) {
+          filterValue = numberValue.value;
+        } else {
+          message.warning('请输入数值');
+          return;
+        }
+      }
     } else {
       // 文本查询
       filterValue = value.value;
@@ -322,6 +410,8 @@ export function useTableHeaderFilter(
     value,
     dateValue,
     dateRangeValue,
+    numberValue,
+    numberRangeValue,
     createFilterDropdown,
   };
 }
