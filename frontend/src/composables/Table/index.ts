@@ -12,3 +12,7 @@ export type {
 // 表头筛选相关
 export { useTableHeaderFilter, DEFAULT_FILTER_CONDITIONS } from './useTableHeaderFilter';
 export type { FilterConditionOption } from './useTableHeaderFilter';
+
+// 表格列定义辅助函数
+export { defineTableColumn, defineTableColumns } from './useTableHelper';
+export type { TableColumnOptions } from './useTableHelper';
