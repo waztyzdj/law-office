@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted } from 'vue';
+import { onMounted, watch } from 'vue';
 import { message } from 'ant-design-vue';
 import UserTable from './components/UserTable.vue';
 import { useUserList } from './hooks/useUserList';
@@ -10,12 +10,18 @@ const {
   loading,
   pagination,
   selectedRowKeys,
+  activeFilters,
   loadData,
   handleDelete,
   handleBatchDelete,
   onSelectChange,
   handleTableChange,
 } = useUserList(() => ({}));
+
+// 调试：监听 activeFilters 的变化
+watch(activeFilters, (newVal) => {
+  console.log('activeFilters 变化:', newVal);
+}, { deep: true });
 
 // 编辑用户
 const handleEdit = (record: any) => {
@@ -31,6 +37,7 @@ const handleAdd = () => {
 
 // 初始化加载
 onMounted(() => {
+  console.log('页面加载，activeFilters:', activeFilters.value);
   loadData();
 });
 </script>
@@ -43,6 +50,7 @@ onMounted(() => {
       :loading="loading"
       :pagination="pagination"
       :selected-row-keys="selectedRowKeys"
+      :active-filters="activeFilters"
       @edit="handleEdit"
       @delete="handleDelete"
       @change="handleTableChange"

@@ -54,8 +54,21 @@ export function useAdvancedFilter(
     emit: Function,
     pagination: any
   ) => {
+    // 标记是否已经初始化过
+    let initialized = false;
+    
     return ({ confirm, clearFilters }: any) => {
-      return h('div', { style: 'padding: 8px; width: 250px;' }, [
+      // 只在首次渲染时从 filterState 同步，避免覆盖用户输入
+      if (!initialized) {
+        const currentFilter = filterState.value[dataIndex];
+        if (currentFilter && currentFilter.condition) {
+          condition.value = currentFilter.condition;
+          value.value = currentFilter.value || '';
+        }
+        initialized = true;
+      }
+      
+      return h('div', { style: 'padding: 16px; width: 250px;' }, [
         // 条件选择
         h('div', { style: 'margin-bottom: 8px;' }, [
           h('label', { style: 'display: block; margin-bottom: 4px;' }, '条件'),
@@ -96,7 +109,7 @@ export function useAdvancedFilter(
           }),
         ]),
         // 按钮
-        h(Space, {}, {
+        h(Space, { style: 'justify-content: center; display: flex; width: 100%;' }, {
           default: () => [
             h(
               Button,
@@ -127,6 +140,9 @@ export function useAdvancedFilter(
                   condition.value = defaultConditions[0]?.value || 'like';
                   value.value = '';
                   filterState.value[dataIndex] = undefined;
+                  
+                  // 触发 change 事件，更新筛选状态
+                  emit('change', pagination, filterState.value, {});
                 },
               },
               () => '重置'

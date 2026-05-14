@@ -1,17 +1,10 @@
 import { h } from 'vue';
 import { Space, Tag } from 'ant-design-vue';
 import type { ColumnsType } from 'ant-design-vue/es/table';
-import type { UserInfo } from './useUserApi';
+import type { UserInfo } from '#/api/system/user';
 import type { PaginationConfig } from './useUserList';
 import { useAdvancedFilter, DEFAULT_FILTER_CONDITIONS } from '#/composables/Table/TableHeaderSearch/useAdvancedFilter';
 
-/**
- * 用户表格列配置
- * @param filterState 筛选状态
- * @param emit 事件触发函数
- * @param pagination 分页配置
- * @returns 表格列定义数组
- */
 export function getUserColumns(
   filterState: any,
   emit: any,
@@ -30,7 +23,7 @@ export function getUserColumns(
         emit,
         pagination
       ),
-      filteredValue: filterState.value.username ? [filterState.value.username] : undefined,
+      filteredValue: filterState.value.username ? ['filtered'] : undefined,
       onFilter: () => true,
     },
     {
@@ -45,7 +38,7 @@ export function getUserColumns(
         emit,
         pagination
       ),
-      filteredValue: filterState.value.realname ? [filterState.value.realname] : undefined,
+      filteredValue: filterState.value.realname ? ['filtered'] : undefined,
       onFilter: () => true,
     },
     {
@@ -59,6 +52,7 @@ export function getUserColumns(
         { text: '女', value: 2 },
         { text: '未知', value: 0 },
       ],
+      filteredValue: undefined,
       onFilter: (value: any, record: UserInfo) => record.sex === value,
       customRender: ({ record }) => {
         const sexMap: Record<number, string> = { 0: '未知', 1: '男', 2: '女' };
@@ -77,7 +71,7 @@ export function getUserColumns(
         emit,
         pagination
       ),
-      filteredValue: filterState.value.email ? [filterState.value.email] : undefined,
+      filteredValue: filterState.value.email ? ['filtered'] : undefined,
       onFilter: () => true,
     },
     {
@@ -92,7 +86,7 @@ export function getUserColumns(
         emit,
         pagination
       ),
-      filteredValue: filterState.value.phone ? [filterState.value.phone] : undefined,
+      filteredValue: filterState.value.phone ? ['filtered'] : undefined,
       onFilter: () => true,
     },
     {
@@ -107,7 +101,7 @@ export function getUserColumns(
         emit,
         pagination
       ),
-      filteredValue: filterState.value.workNo ? [filterState.value.workNo] : undefined,
+      filteredValue: filterState.value.workNo ? ['filtered'] : undefined,
       onFilter: () => true,
     },
     {
@@ -121,7 +115,7 @@ export function getUserColumns(
         emit,
         pagination
       ),
-      filteredValue: filterState.value.post ? [filterState.value.post] : undefined,
+      filteredValue: filterState.value.post ? ['filtered'] : undefined,
       onFilter: () => true,
     },
     {
@@ -134,6 +128,7 @@ export function getUserColumns(
         { text: '正常', value: 1 },
         { text: '冻结', value: 2 },
       ],
+      filteredValue: undefined,
       onFilter: (value: any, record: UserInfo) => record.status === value,
       customRender: ({ record }) => {
         const statusMap: Record<number, { text: string; color: string }> = {
@@ -153,6 +148,7 @@ export function getUserColumns(
       width: 150,
       align: 'center',
       fixed: 'right',
+      filteredValue: undefined,
       customRender: ({ record }) => {
         return h(Space, { size: 'middle' }, {
           default: () => [

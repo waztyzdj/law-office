@@ -1,7 +1,7 @@
-import { ref, reactive } from 'vue';
+import { ref, reactive, onMounted } from 'vue';
 import { message, Modal } from 'ant-design-vue';
-import type { UserInfo, UserListParams } from './useUserApi';
-import { getUserListApi, deleteUserApi, batchDeleteUserApi } from './useUserApi';
+import type { UserInfo, UserListParams } from '#/api/system/user';
+import { getUserListApi, deleteUserApi, batchDeleteUserApi } from '#/api/system/user';
 
 /**
  * 用户列表分页配置
@@ -22,6 +22,32 @@ export interface FilterCondition {
   condition: string; // like, eq, ne, gt, lt, etc.
   value: any;
 }
+
+// localStorage 的 key
+const STORAGE_KEY = 'user_list_filters';
+
+/**
+ * 从 localStorage 加载筛选条件
+ */
+const loadFiltersFromStorage = (): Record<string, FilterCondition | any> => {
+  try {
+    const stored = localStorage.getItem(STORAGE_KEY);
+    return stored ? JSON.parse(stored) : {};
+  } catch {
+    return {};
+  }
+};
+
+/**
+ * 保存筛选条件到 localStorage
+ */
+const saveFiltersToStorage = (filters: Record<string, FilterCondition | any>) => {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(filters));
+  } catch (error) {
+    console.error('保存筛选条件失败:', error);
+  }
+};
 
 /**
  * 用户列表逻辑组合式函数
@@ -44,8 +70,8 @@ export function useUserList(getSearchParams: () => Partial<UserListParams>) {
   // 选中的行
   const selectedRowKeys = ref<string[]>([]);
   
-  // 筛选状态（用于列头筛选）
-  const activeFilters = ref<Record<string, FilterCondition | any>>({});
+  // 筛选状态（用于列头筛选）- 从 localStorage 初始化
+  const activeFilters = ref<Record<string, FilterCondition | any>>(loadFiltersFromStorage());
 
   /**
    * 将前端筛选条件转换为后端 QueryWrapperBuilderUtils 支持的格式
@@ -109,7 +135,18 @@ export function useUserList(getSearchParams: () => Partial<UserListParams>) {
     try {
       // 合并搜索表单参数和列头筛选参数
       const searchParams = getSearchParams();
-      const tableFilters = extraFilters || activeFilters.value;
+      
+      // 如果传入了额外筛选条件，合并到activeFilters并持久化
+      if (extraFilters) {
+        // 合并新旧筛选条件，保留未被修改的列的筛选条件
+        activeFilters.value = {
+          ...activeFilters.value,
+          ...extraFilters,
+        };
+        saveFiltersToStorage(activeFilters.value);
+      }
+      
+      const tableFilters = activeFilters.value;
       
       const filterQueryParams = convertFiltersToQueryParams(tableFilters);
       
@@ -199,9 +236,10 @@ export function useUserList(getSearchParams: () => Partial<UserListParams>) {
     pagination.current = pag.current;
     pagination.pageSize = pag.pageSize;
     
-    // 更新筛选状态
+    // 更新筛选状态并持久化
     if (filters) {
       activeFilters.value = filters;
+      saveFiltersToStorage(filters);
     }
     
     // 处理排序参数

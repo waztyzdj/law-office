@@ -1,12 +1,12 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue';
+import { computed, toRef } from 'vue';
 import { 
   Table, 
   Button, 
   Space, 
   Card
 } from 'ant-design-vue';
-import type { UserInfo } from '../hooks/useUserApi';
+import type { UserInfo } from '#/api/system/user';
 import type { PaginationConfig } from '../hooks/useUserList';
 import { getUserColumns } from '../hooks/useUserColumns';
 
@@ -15,6 +15,7 @@ interface Props {
   loading: boolean;
   pagination: PaginationConfig;
   selectedRowKeys: string[];
+  activeFilters: Record<string, any>;
 }
 
 interface Emits {
@@ -29,11 +30,11 @@ interface Emits {
 const props = defineProps<Props>();
 const emit = defineEmits<Emits>();
 
-// 自定义筛选状态管理
-const filterState = ref<Record<string, any>>({});
+// 将父组件传入的activeFilters转换为ref，以便getUserColumns正确使用
+const filterStateRef = toRef(props, 'activeFilters');
 
 // 表格列定义（使用配置函数）
-const columns = computed(() => getUserColumns(filterState, emit, props.pagination));
+const columns = computed(() => getUserColumns(filterStateRef, emit, props.pagination));
 </script>
 
 <template>
