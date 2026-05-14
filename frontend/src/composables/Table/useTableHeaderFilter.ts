@@ -59,6 +59,18 @@ export const DATETIME_FILTER_CONDITIONS: FilterConditionOption[] = [
 export type ColumnType = 'text' | 'date' | 'datetime' | 'number' | 'select';
 
 /**
+ * Select 选项配置
+ */
+export interface SelectOption {
+  /** 显示文本 */
+  label: string;
+  /** 值 */
+  value: any;
+  /** 标签颜色（可选） */
+  color?: string;
+}
+
+/**
  * 表头筛选组合式函数
  * @param dataIndex 字段索引
  * @param defaultConditions 默认筛选条件选项
@@ -293,6 +305,125 @@ export function useTableHeaderFilter(
     value,
     dateValue,
     dateRangeValue,
+    createFilterDropdown,
+  };
+}
+
+/**
+ * Select 类型表头筛选组合式函数（多选下拉框）
+ * @param dataIndex 字段索引
+ * @param options 选项配置数组
+ * @returns 筛选相关的方法和状态
+ */
+export function useTableHeaderSelectFilter(
+  dataIndex: string,
+  options: SelectOption[] = []
+) {
+  // 选中的值
+  const selectedValues = ref<any[]>([]);
+
+  /**
+   * 创建表头筛选下拉框组件（多选）
+   * @param filterState 筛选状态对象（ref）
+   * @param emit 事件触发函数
+   * @param pagination 分页配置
+   * @returns 渲染函数
+   */
+  const createFilterDropdown = (
+    filterState: Ref<Record<string, any>>,
+    emit: Function,
+    pagination: any
+  ) => {
+    // 标记是否已经初始化过
+    let initialized = false;
+    
+    return ({ confirm, clearFilters }: any) => {
+      // 只在首次渲染时从 filterState 同步
+      if (!initialized) {
+        const currentFilter = filterState.value[dataIndex];
+        if (currentFilter && currentFilter.value) {
+          // 支持数组或逗号分隔的字符串
+          if (Array.isArray(currentFilter.value)) {
+            selectedValues.value = currentFilter.value;
+          } else if (typeof currentFilter.value === 'string') {
+            selectedValues.value = currentFilter.value.split(',').map((v: string) => v.trim());
+          }
+        }
+        initialized = true;
+      }
+      
+      return h('div', { style: 'padding: 16px; width: 280px;' }, [
+        // 标签
+        h('div', { style: 'margin-bottom: 8px;' }, [
+          h('label', { style: 'display: block; margin-bottom: 4px;' }, '选择'),
+        ]),
+        // 多选下拉框
+        h('div', { style: 'margin-bottom: 8px;' }, [
+          h(Select as any, {
+            mode: 'multiple',
+            value: selectedValues.value,
+            style: { width: '100%' },
+            placeholder: '请选择',
+            onChange: (values: any[]) => {
+              selectedValues.value = values;
+            },
+            options: options.map((opt) => ({
+              label: opt.label,
+              value: opt.value,
+            })),
+          }),
+        ]),
+        // 按钮
+        h(Space, { style: 'justify-content: center; display: flex; width: 100%;' }, {
+          default: () => [
+            h(
+              Button,
+              {
+                type: 'primary',
+                size: 'small',
+                onClick: () => {
+                  if (selectedValues.value.length === 0) {
+                    message.warning('请至少选择一个选项');
+                    return;
+                  }
+
+                  // 构建筛选条件，使用 in 操作符
+                  filterState.value[dataIndex] = {
+                    condition: 'in',
+                    value: selectedValues.value,
+                  };
+
+                  confirm();
+
+                  // 手动触发 change 事件
+                  emit('change', pagination, filterState.value, {});
+                },
+              },
+              () => '搜索'
+            ),
+            h(
+              Button,
+              {
+                size: 'small',
+                onClick: () => {
+                  clearFilters?.();
+                  selectedValues.value = [];
+                  filterState.value[dataIndex] = undefined;
+                  
+                  // 触发 change 事件，更新筛选状态
+                  emit('change', pagination, filterState.value, {});
+                },
+              },
+              () => '重置'
+            ),
+          ],
+        }),
+      ]);
+    };
+  };
+
+  return {
+    selectedValues,
     createFilterDropdown,
   };
 }

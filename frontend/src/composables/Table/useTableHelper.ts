@@ -1,7 +1,15 @@
 import { h } from 'vue';
+import { Tag } from 'ant-design-vue';
 import type { ColumnsType } from 'ant-design-vue/es/table';
 import type { TablePaginationConfig } from './useTable';
-import { useTableHeaderFilter, DEFAULT_FILTER_CONDITIONS, DATE_FILTER_CONDITIONS, DATETIME_FILTER_CONDITIONS } from './useTableHeaderFilter';
+import { 
+  useTableHeaderFilter, 
+  useTableHeaderSelectFilter,
+  DEFAULT_FILTER_CONDITIONS, 
+  DATE_FILTER_CONDITIONS, 
+  DATETIME_FILTER_CONDITIONS,
+  type SelectOption,
+} from './useTableHeaderFilter';
 
 /**
  * 列类型枚举
@@ -28,6 +36,8 @@ export interface TableColumnOptions<T = any> {
   hasFilter?: boolean;
   /** 列类型，默认为 text */
   columnType?: ColumnType;
+  /** Select 选项配置（当 columnType 为 select 时使用） */
+  selectOptions?: SelectOption[];
   /** 其他 Ant Design Vue 列配置 */
   [key: string]: any;
 }
@@ -90,6 +100,7 @@ export function defineTableColumn<T = any>(
     onFilter,
     hasFilter = true,
     columnType = 'text',
+    selectOptions,
     ...restOptions
   } = options;
 
@@ -127,6 +138,37 @@ export function defineTableColumn<T = any>(
       // 枚举列通常不需要 sorter，但可以手动指定
       if (sorter !== false) {
         column.sorter = sorter;
+      }
+    } else if (columnType === 'select' && selectOptions && selectOptions.length > 0) {
+      // Select 类型：使用多选下拉框筛选
+      column.sorter = sorter;
+      column.filterDropdown = useTableHeaderSelectFilter(
+        dataIndex,
+        selectOptions
+      ).createFilterDropdown(filterState, emit, pagination);
+      column.filteredValue =
+        filterState.value[dataIndex] && filterState.value[dataIndex].value
+          ? ['filtered']
+          : undefined;
+      column.onFilter = () => true;
+      
+      // 自动生成 customRender，根据 selectOptions 显示带颜色的标签
+      if (!customRender) {
+        column.customRender = ({ record }: { record: T }) => {
+          const value = record[dataIndex as keyof T];
+          const option = selectOptions.find(opt => opt.value === value);
+          
+          if (!option) {
+            return h('span', {}, String(value ?? '-'));
+          }
+          
+          // 如果有颜色配置，使用 Tag 组件
+          if (option.color) {
+            return h(Tag, { color: option.color }, () => option.label);
+          }
+          
+          return h('span', {}, option.label);
+        };
       }
     } else {
       // 普通列，根据列类型选择筛选条件

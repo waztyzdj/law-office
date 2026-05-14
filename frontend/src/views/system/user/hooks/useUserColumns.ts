@@ -30,16 +30,12 @@ export function getUserColumns(
       title: '性别',
       options: {
         width: 80,
-        filters: [
-          { text: '男', value: 1 },
-          { text: '女', value: 2 },
-          { text: '未知', value: 0 },
+        columnType: 'select' as const,
+        selectOptions: [
+          { label: '男', value: 1, color: 'blue' },
+          { label: '女', value: 2, color: 'pink' },
+          { label: '未知', value: 0 },
         ],
-        onFilter: (value: any, record: UserInfo) => record.sex === value,
-        customRender: ({ record }: { record: UserInfo }) => {
-          const sexMap: Record<number, string> = { 0: '未知', 1: '男', 2: '女' };
-          return sexMap[record.sex ?? 0] || '未知';
-        },
       },
     },
     {

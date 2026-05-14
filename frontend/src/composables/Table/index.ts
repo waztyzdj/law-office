@@ -12,11 +12,12 @@ export type {
 // 表头筛选相关
 export { 
   useTableHeaderFilter, 
+  useTableHeaderSelectFilter,
   DEFAULT_FILTER_CONDITIONS,
   DATE_FILTER_CONDITIONS,
   DATETIME_FILTER_CONDITIONS,
 } from './useTableHeaderFilter';
-export type { FilterConditionOption, ColumnType } from './useTableHeaderFilter';
+export type { FilterConditionOption, ColumnType, SelectOption } from './useTableHeaderFilter';
 
 // 表格列定义辅助函数
 export { defineTableColumn, defineTableColumns } from './useTableHelper';
