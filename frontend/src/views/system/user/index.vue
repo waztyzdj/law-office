@@ -16,12 +16,9 @@ const {
   handleBatchDelete,
   onSelectChange,
   handleTableChange,
+  clearAllFilters,
 } = useUserTable(() => ({}));
 
-// 调试：监听 activeFilters 的变化
-watch(activeFilters, (newVal) => {
-  console.log('activeFilters 变化:', newVal);
-}, { deep: true });
 
 // 编辑用户
 const handleEdit = (record: any) => {
@@ -37,7 +34,9 @@ const handleAdd = () => {
 
 // 初始化加载
 onMounted(() => {
-  console.log('页面加载，activeFilters:', activeFilters.value);
+  // 页面首次加载时清除所有筛选缓存
+  clearAllFilters();
+  // 然后加载数据
   loadData();
 });
 </script>
