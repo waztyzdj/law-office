@@ -468,11 +468,18 @@ export function useTableHeaderSelectFilter(
         h('div', { style: 'margin-bottom: 8px;' }, [
           h(Select as any, {
             mode: 'multiple',
+            showSearch: true,
             value: selectedValues.value,
             style: { width: '100%' },
-            placeholder: '请选择',
+            placeholder: '请输入或选择',
             onChange: (values: any[]) => {
               selectedValues.value = values;
+            },
+            filterOption: (input: string, option: any) => {
+              if (input) {
+                return option.label.toLowerCase().includes(input.toLowerCase());
+              }
+              return true;
             },
             options: options.map((opt) => ({
               label: opt.label,
