@@ -63,10 +63,19 @@ export function getUserColumns(
       options: { width: 120 },
     },
     {
+      dataIndex: 'createTime',
+      title: '创建时间',
+      options: {
+        width: 180,
+        columnType: 'datetime' as const, // 指定为日期时间类型
+      },
+    },
+    {
       dataIndex: 'status',
       title: '状态',
       options: {
         width: 80,
+        sorter: false,
         filters: [
           { text: '正常', value: 1 },
           { text: '冻结', value: 2 },

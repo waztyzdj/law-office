@@ -1,7 +1,12 @@
 import { h } from 'vue';
 import type { ColumnsType } from 'ant-design-vue/es/table';
 import type { TablePaginationConfig } from './useTable';
-import { useTableHeaderFilter, DEFAULT_FILTER_CONDITIONS } from './useTableHeaderFilter';
+import { useTableHeaderFilter, DEFAULT_FILTER_CONDITIONS, DATE_FILTER_CONDITIONS, DATETIME_FILTER_CONDITIONS } from './useTableHeaderFilter';
+
+/**
+ * 列类型枚举
+ */
+export type ColumnType = 'text' | 'date' | 'datetime' | 'number' | 'select';
 
 /**
  * 表格列配置选项（简化版）
@@ -21,6 +26,8 @@ export interface TableColumnOptions<T = any> {
   onFilter?: (value: any, record: T) => boolean;
   /** 是否启用筛选，默认 true（操作列等可设为 false） */
   hasFilter?: boolean;
+  /** 列类型，默认为 text */
+  columnType?: ColumnType;
   /** 其他 Ant Design Vue 列配置 */
   [key: string]: any;
 }
@@ -31,6 +38,13 @@ export interface TableColumnOptions<T = any> {
  * @example
  * // 简单文本列（自动添加筛选、排序）
  * defineTableColumn('username', '用户名', { width: 120 }, filterState, emit, pagination)
+ * 
+ * @example
+ * // 日期列
+ * defineTableColumn('createTime', '创建时间', { 
+ *   width: 180,
+ *   columnType: 'date'
+ * }, filterState, emit, pagination)
  * 
  * @example
  * // 枚举/状态列
@@ -75,6 +89,7 @@ export function defineTableColumn<T = any>(
     filters,
     onFilter,
     hasFilter = true,
+    columnType = 'text',
     ...restOptions
   } = options;
 
@@ -114,11 +129,20 @@ export function defineTableColumn<T = any>(
         column.sorter = sorter;
       }
     } else {
-      // 普通文本列，使用高级筛选
+      // 普通列，根据列类型选择筛选条件
+      let filterConditions = DEFAULT_FILTER_CONDITIONS;
+      
+      if (columnType === 'date') {
+        filterConditions = DATE_FILTER_CONDITIONS;
+      } else if (columnType === 'datetime') {
+        filterConditions = DATETIME_FILTER_CONDITIONS;
+      }
+      
       column.sorter = sorter;
       column.filterDropdown = useTableHeaderFilter(
         dataIndex,
-        DEFAULT_FILTER_CONDITIONS
+        filterConditions,
+        columnType
       ).createFilterDropdown(filterState, emit, pagination);
       column.filteredValue =
         filterState.value[dataIndex] && filterState.value[dataIndex].value

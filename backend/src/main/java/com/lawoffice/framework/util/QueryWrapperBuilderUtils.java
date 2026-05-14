@@ -4,6 +4,7 @@ import cn.hutool.core.util.StrUtil;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import lombok.extern.slf4j.Slf4j;
 
+import java.util.ArrayList;
 import java.util.Map;
 import java.util.Set;
 
@@ -166,6 +167,11 @@ public class QueryWrapperBuilderUtils {
                     String[] values = ((String) value).split(",");
                     if (values.length == 2) {
                         wrapper.between(field, values[0], values[1]);
+                    }
+                } else if (value instanceof ArrayList) {
+                    ArrayList<String> values = (ArrayList<String>) value;
+                    if (values.size() == 2) {
+                        wrapper.between(field, values.get(0), values.get(1));
                     }
                 }
                 break;
