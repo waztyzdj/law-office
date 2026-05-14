@@ -6,8 +6,8 @@ import {
   Space, 
   Card
 } from 'ant-design-vue';
-import type { UserInfo } from '#/api/system/user';
-import type { PaginationConfig } from '../composables/useUserList';
+import type { UserInfo } from '../hooks/useUserApi';
+import type { PaginationConfig } from '../hooks/useUserList';
 import { getUserColumns } from '../hooks/useUserColumns';
 
 interface Props {
