@@ -236,10 +236,24 @@ export function useUserList(getSearchParams: () => Partial<UserListParams>) {
     pagination.current = pag.current;
     pagination.pageSize = pag.pageSize;
     
-    // 更新筛选状态并持久化
+    // 更新筛选状态并持久化 - 使用合并策略
     if (filters) {
-      activeFilters.value = filters;
-      saveFiltersToStorage(filters);
+      // 合并新旧筛选条件,保留未被修改的列的筛选条件
+      // 当filters中某列为undefined时,表示该列被重置,应从activeFilters中移除
+      const updatedFilters: Record<string, any> = { ...activeFilters.value };
+      
+      Object.keys(filters).forEach(key => {
+        if (filters[key] === undefined) {
+          // 重置的列,从activeFilters中移除
+          delete updatedFilters[key];
+        } else {
+          // 更新或新增筛选条件
+          updatedFilters[key] = filters[key];
+        }
+      });
+      
+      activeFilters.value = updatedFilters;
+      saveFiltersToStorage(updatedFilters);
     }
     
     // 处理排序参数
@@ -250,11 +264,11 @@ export function useUserList(getSearchParams: () => Partial<UserListParams>) {
       };
       const order = orderMap[sorter.order] || '';
       
-      // TODO: 如果需要后端排序，可以将排序信息传递给 loadData
+      // TODO: 如果需要后端排序,可以将排序信息传递给 loadData
     }
     
-    // 重新加载数据（带上筛选条件）
-    loadData(filters);
+    // 重新加载数据(带上筛选条件)
+    loadData();
   };
 
   return {
