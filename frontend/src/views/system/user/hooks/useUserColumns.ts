@@ -90,7 +90,7 @@ export function getUserColumns(
       title: '操作',
       options: {
         width: 150,
-        fixed: 'right',
+        fixed: 'right' as const,
         hasFilter: false, // 操作列不需要筛选
         customRender: ({ record }: { record: UserInfo }) => {
           return h(Space, { size: 'middle' }, {
