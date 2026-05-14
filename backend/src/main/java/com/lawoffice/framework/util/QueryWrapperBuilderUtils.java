@@ -84,7 +84,7 @@ public class QueryWrapperBuilderUtils {
             return false;
         }
         String lowerOp = operator.toLowerCase();
-        return Set.of("like", "eq", "ne", "gt", "ge", "lt", "le", "in", "between", "like_start", "like_end").contains(lowerOp);
+        return Set.of("like", "eq", "ne", "gt", "ge", "lt", "le", "in", "between", "likestart", "likeend").contains(lowerOp);
     }
 
     /**
@@ -128,11 +128,11 @@ public class QueryWrapperBuilderUtils {
             case "like":
                 wrapper.like(field, value);
                 break;
-            case "like_start":
+            case "likestart":
                 // 开头是：field LIKE 'value%'
                 wrapper.likeRight(field, value);
                 break;
-            case "like_end":
+            case "likeend":
                 // 结尾是：field LIKE '%value'
                 wrapper.likeLeft(field, value);
                 break;

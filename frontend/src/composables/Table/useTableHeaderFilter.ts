@@ -19,14 +19,9 @@ export const DEFAULT_FILTER_CONDITIONS: FilterConditionOption[] = [
   { label: '包含', value: 'like' },
   { label: '等于', value: 'eq' },
   { label: '不等于', value: 'ne' },
-  { label: '大于', value: 'gt' },
-  { label: '大于等于', value: 'ge' },
-  { label: '小于', value: 'lt' },
-  { label: '小于等于', value: 'le' },
   { label: '在...之中', value: 'in', title: '用逗号进行分隔，例如：张三,李四,王五' },
-  { label: '区间查询', value: 'between', title: '用逗号进行分隔，例如：A,M' },
-  { label: '开头是', value: 'like_start' },
-  { label: '结尾是', value: 'like_end' },
+  { label: '开头是', value: 'likestart' },
+  { label: '结尾是', value: 'likeend' },
 ];
 
 /**
@@ -57,21 +52,21 @@ export const DATETIME_FILTER_CONDITIONS: FilterConditionOption[] = [
  * 日期时间筛选条件选项（日期模式）
  */
 export const DATETIME_DATE_FILTER_CONDITIONS: FilterConditionOption[] = [
+  { label: '在两者之间', value: 'between' },
   { label: '等于', value: 'eq' },
   { label: '大于', value: 'gt' },
   { label: '大于等于', value: 'ge' },
   { label: '小于', value: 'lt' },
   { label: '小于等于', value: 'le' },
-  { label: '在两者之间', value: 'between' },
 ];
 
 /**
  * 日期时间筛选条件选项（时间模式）
  */
 export const DATETIME_TIME_FILTER_CONDITIONS: FilterConditionOption[] = [
+  { label: '在两者之间', value: 'between' },
   { label: '大于', value: 'gt' },
   { label: '小于', value: 'lt' },
-  { label: '在两者之间', value: 'between' },
 ];
 
 /**
