@@ -23,6 +23,8 @@ composables/Table/
 - ✅ 自动处理通用的列属性（对齐、筛选、排序等）
 - ✅ 减少重复代码，提升可维护性
 - ✅ 支持多种列类型（文本、日期、时间、枚举、操作等）
+- ✅ **自动启用单元格内容省略号显示和 Tooltip 提示** 🆕
+- ✅ **列标题自动不换行并显示省略号** 🆕
 - ✅ 灵活的配置选项
 
 ### 使用示例
@@ -45,6 +47,9 @@ const column = defineTableColumn(
 // 生成的列配置包含：
 // - align: 'center'
 // - sorter: true
+// - ellipsis: true (自动启用省略号)
+// - customHeaderCell: 列标题不换行
+// - customRender: 自动包装 Tooltip
 // - filterDropdown: 自动添加高级筛选
 // - filteredValue: 自动绑定筛选状态
 // - onFilter: () => true
@@ -252,6 +257,16 @@ interface SelectOption {
 - 预设颜色：`green`, `red`, `blue`, `orange`, `purple`, `cyan` 等
 - 十六进制颜色：`#ff0000`, `#00ff00` 等
 - 不配置 color 则显示普通文本
+
+### 自动省略号和 Tooltip 功能 🆕
+
+所有通过 `defineTableColumn` 或 `defineTableColumns` 定义的列都会自动获得以下特性：
+
+1. **列标题不换行**：标题过长时自动显示省略号
+2. **单元格内容不换行**：内容超出列宽时显示省略号
+3. **鼠标悬停显示完整内容**：悬停在单元格上时，通过 Tooltip 显示完整文本
+
+这些特性无需额外配置，自动应用于所有列。如果需要自定义行为，可以通过 `customRender` 覆盖默认渲染。
 
 ### 完整示例
 

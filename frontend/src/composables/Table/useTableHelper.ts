@@ -144,6 +144,14 @@ export function defineTableColumn<T = any>(
     key: dataIndex,
     align: 'center',
     ellipsis: true, // 启用省略号显示
+    // 列标题不换行，超出显示省略号
+    customHeaderCell: () => ({
+      style: {
+        overflow: 'hidden',
+        textOverflow: 'ellipsis',
+        whiteSpace: 'nowrap',
+      },
+    }),
     ...restOptions,
   };
 
