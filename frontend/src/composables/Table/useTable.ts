@@ -63,6 +63,7 @@ export interface StorageConfig {
  * @param batchDeleteItems 批量删除的 API 方法（可选）
  * @param storageConfig localStorage 配置（可选）
  * @param deleteConfig 删除对话框配置（可选）
+ * @param enableRowSelection 是否启用行选择功能，默认为 false
  * @returns 表格相关状态和方法
  */
 export function useTable<T = any>(
@@ -70,7 +71,8 @@ export function useTable<T = any>(
   deleteItem?: (id: string | number) => Promise<any>,
   batchDeleteItems?: (ids: (string | number)[]) => Promise<any>,
   storageConfig?: StorageConfig,
-  deleteConfig?: DeleteConfig
+  deleteConfig?: DeleteConfig,
+  enableRowSelection: boolean = false
 ) {
   // 表格数据
   const dataSource = ref<T[]>([]);
@@ -86,8 +88,8 @@ export function useTable<T = any>(
     showTotal: (total: number) => `共 ${total} 条`,
   });
 
-  // 选中的行
-  const selectedRowKeys = ref<(string | number)[]>([]);
+  // 选中的行（仅在启用行选择时初始化）
+  const selectedRowKeys = ref<(string | number)[]>(enableRowSelection ? [] : undefined as any);
 
   // 筛选状态（用于列头筛选）- 从 localStorage 初始化
   const filtersKey = storageConfig?.filtersKey || 'table_list_filters';
@@ -261,9 +263,14 @@ export function useTable<T = any>(
   }
 
   /**
-   * 批量删除项目
+   * 批量删除项目（仅在启用行选择时可用）
    */
   function handleBatchDelete() {
+    if (!enableRowSelection) {
+      message.warning('行选择功能未启用');
+      return;
+    }
+
     if (!batchDeleteItems) {
       message.warning('未配置批量删除方法');
       return;
@@ -301,9 +308,13 @@ export function useTable<T = any>(
   }
 
   /**
-   * 选择行变化
+   * 选择行变化（仅在启用行选择时可用）
    */
   function onSelectChange(keys: (string | number)[]) {
+    if (!enableRowSelection) {
+      console.warn('行选择功能未启用');
+      return;
+    }
     selectedRowKeys.value = keys;
   }
 
@@ -369,12 +380,11 @@ export function useTable<T = any>(
     dataSource,
     loading,
     pagination,
-    selectedRowKeys,
+    ...(enableRowSelection ? { selectedRowKeys } : {}),
     activeFilters,
     loadData,
     handleDelete,
-    handleBatchDelete,
-    onSelectChange,
+    ...(enableRowSelection ? { handleBatchDelete, onSelectChange } : {}),
     handleTableChange,
     clearAllFilters,
     resetPagination,

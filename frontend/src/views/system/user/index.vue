@@ -9,16 +9,12 @@ const {
   dataSource,
   loading,
   pagination,
-  selectedRowKeys,
   activeFilters,
   loadData,
   handleDelete,
-  handleBatchDelete,
-  onSelectChange,
   handleTableChange,
   clearAllFilters,
 } = useUserTable(() => ({}));
-
 
 // 编辑用户
 const handleEdit = (record: any) => {
@@ -48,13 +44,10 @@ onMounted(() => {
       :data-source="dataSource"
       :loading="loading"
       :pagination="pagination"
-      :selected-row-keys="selectedRowKeys"
       :active-filters="activeFilters"
       @edit="handleEdit"
       @delete="handleDelete"
       @change="handleTableChange"
-      @select-change="onSelectChange"
-      @batch-delete="handleBatchDelete"
       @add="handleAdd"
     />
   </div>

@@ -14,7 +14,6 @@ interface Props {
   dataSource: UserInfo[];
   loading: boolean;
   pagination: TablePaginationConfig;
-  selectedRowKeys: (string | number)[];
   activeFilters: Record<string, any>;
 }
 
@@ -22,8 +21,6 @@ interface Emits {
   (e: 'edit', record: UserInfo): void;
   (e: 'delete', record: UserInfo): void;
   (e: 'change', pag: any, filters: any, sorter: any): void;
-  (e: 'select-change', keys: (string | number)[]): void;
-  (e: 'batch-delete'): void;
   (e: 'add'): void;
 }
 
@@ -42,9 +39,6 @@ const columns = computed(() => getUserColumns(filterStateRef, emit, props.pagina
     <div class="table-toolbar">
       <Space>
         <Button type="primary" @click="$emit('add')">新增用户</Button>
-        <Button danger @click="$emit('batch-delete')" :disabled="selectedRowKeys.length === 0">
-          批量删除
-        </Button>
       </Space>
     </div>
     
@@ -53,10 +47,6 @@ const columns = computed(() => getUserColumns(filterStateRef, emit, props.pagina
       :data-source="dataSource"
       :loading="loading"
       :pagination="pagination"
-      :row-selection="{
-        selectedRowKeys: selectedRowKeys,
-        onChange: (keys) => $emit('select-change', keys),
-      }"
       row-key="id"
       @change="(pag, filters, sorter) => $emit('change', pag, filters, sorter)"
       bordered

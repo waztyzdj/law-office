@@ -1,13 +1,13 @@
 import { useTable } from '#/composables/Table';
 import type { UserInfo, UserListParams } from '#/api/system/user';
-import { getUserListApi, deleteUserApi, batchDeleteUserApi } from '#/api/system/user';
+import { getUserListApi, deleteUserApi } from '#/api/system/user';
 
 /**
  * 用户表格逻辑组合式函数
  * @param getSearchParams 获取搜索表单参数的方法
  */
 export function useUserTable(getSearchParams: () => Partial<UserListParams>) {
-  // 使用通用的 useTable
+  // 使用通用的 useTable（不启用行选择功能）
   const table = useTable<UserInfo>(
     // 数据获取方法
     async (params) => {
@@ -19,8 +19,8 @@ export function useUserTable(getSearchParams: () => Partial<UserListParams>) {
     },
     // 删除单个用户（包装以适配类型）
     (id: string | number) => deleteUserApi(String(id)),
-    // 批量删除用户（包装以适配类型）
-    (ids: (string | number)[]) => batchDeleteUserApi(ids.map(id => String(id))),
+    // 不启用批量删除功能
+    undefined,
     // localStorage 配置
     {
       filtersKey: 'user_list_filters',
@@ -29,8 +29,6 @@ export function useUserTable(getSearchParams: () => Partial<UserListParams>) {
     {
       title: '确认删除',
       content: (record: UserInfo) => `确定要删除用户"${record.realname}"吗？`,
-      batchTitle: '确认批量删除',
-      batchContent: (count: number) => `确定要删除选中的 ${count} 个用户吗？`,
     }
   );
 
