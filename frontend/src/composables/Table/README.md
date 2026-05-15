@@ -191,29 +191,92 @@ const columns = autoFreezeActionColumn(baseColumns.value, {
 
 #### 3. 自定义操作列标识
 
-如果你的操作列不是 `action`，而是其他名称（如 `operations`）：
+如果操作列的 `dataIndex` 不是 `'action'`：
 
 ``typescript
 const columns = autoFreezeActionColumn(baseColumns.value, {
-  actionColumnKey: 'operations', // 自定义操作列 key
+  actionColumnKey: 'operations', // 自定义操作列标识
 });
 ```
 
-#### 4. 手动控制操作列冻结
+---
 
-如果你希望在列定义中手动控制（保持原有行为）：
+## 📏 偏好设置行高配置使用指南
 
-``typescript
-{
-  dataIndex: 'action',
-  title: '操作',
-  options: {
-    width: 150,
-    fixed: 'right' as const, // 手动指定，autoFreezeActionColumn 会跳过此列
-    hasFilter: false,
-  },
-}
+### 功能说明
+
+[useTable](file://e:\project\law-office\frontend\src\composables\Table\useTable.ts#L197-L546) 会自动从系统偏好设置中读取表格行高配置，并转换为 Ant Design Vue Table 的 `size` 属性。
+
+**配置位置**：偏好设置 → 扩展 → 表格行高（24-60px，默认 36px）
+
+### 使用示例
+
+#### 方式一：直接使用 tableSize（推荐）
+
+``vue
+<script setup lang="ts">
+import { useTable } from '#/composables/Table';
+
+const {
+  dataSource,
+  loading,
+  pagination,
+  tableSize, // ← 自动从偏好设置读取的行高配置
+} = useTable({ /* 配置 */ });
+</script>
+
+<template>
+  <Table
+    :columns="columns"
+    :data-source="dataSource"
+    :loading="loading"
+    :pagination="pagination"
+    :size="tableSize"  ← 应用表格尺寸
+    row-key="id"
+  />
+</template>
 ```
+
+#### 方式二：在 SmartTable 中使用
+
+``vue
+<script setup lang="ts">
+import { SmartTable, useTable } from '#/composables/Table';
+
+const {
+  dataSource,
+  loading,
+  pagination,
+  tableSize,
+} = useTable({ /* 配置 */ });
+</script>
+
+<template>
+  <SmartTable
+    :columns="columns"
+    :data-source="dataSource"
+    :loading="loading"
+    :pagination="pagination"
+    :size="tableSize"  ← 应用表格尺寸
+    row-key="id"
+  />
+</template>
+```
+
+### 尺寸映射规则
+
+| 行高范围 | size 值 | 说明 | padding |
+|---------|---------|------|---------|
+| ≤ 32px | `small` | 紧凑模式 | 4px 8px |
+| 33-47px | `middle` | 默认模式 | 8px 16px |
+| ≥ 48px | `large` | 宽松模式 | 16px 16px |
+
+### 注意事项
+
+1. **响应式更新**：当用户在偏好设置中修改行高时，`tableSize` 会自动更新，表格立即响应
+2. **默认值**：如果未配置行高，默认使用 36px（对应 `size="middle"`）
+3. **可覆盖**：业务代码可以手动传入自定义的 `size` 值覆盖 `tableSize`
+4. **类型安全**：`tableSize` 的类型为 `Ref<'small' | 'middle' | 'large'>`
 
 ---
 

@@ -1,0 +1,50 @@
+/**
+ * 全局自定义样式
+ * 
+ * 用于覆盖框架默认样式和添加全局 CSS 变量
+ * 所有全局样式都应在此文件中定义
+ */
+
+/* ==================== CSS 变量定义 ==================== */
+:root {
+  /* 表格行高配置 - 会被 useTable 动态更新 */
+  --table-row-height: 36px;
+  
+  /* 其他全局 CSS 变量可以在这里添加 */
+}
+
+/* ==================== Ant Design Vue 组件样式覆盖 ==================== */
+
+/**
+ * 表格行高配置
+ * 通过 CSS 变量控制所有 Ant Design Vue Table 的行高
+ */
+.ant-table-wrapper {
+  .ant-table-tbody > tr > td,
+  .ant-table-thead > tr > th {
+    height: var(--table-row-height);
+    min-height: var(--table-row-height);
+    max-height: var(--table-row-height);
+    padding: calc((var(--table-row-height) - 20px) / 2) 16px;
+    line-height: 1.5;
+  }
+
+  /* small 尺寸的表格 */
+  &.ant-table-small {
+    .ant-table-tbody > tr > td,
+    .ant-table-thead > tr > th {
+      padding: calc((var(--table-row-height) - 20px) / 2) 8px;
+    }
+  }
+
+  /* large 尺寸的表格 */
+  &.ant-table-large {
+    .ant-table-tbody > tr > td,
+    .ant-table-thead > tr > th {
+      padding: calc((var(--table-row-height) - 20px) / 2) 16px;
+    }
+  }
+}
+
+/* ==================== 其他全局样式 ==================== */
+/* 在这里添加其他需要全局应用的样式 */

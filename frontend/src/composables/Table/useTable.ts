@@ -1,5 +1,6 @@
-import { ref, reactive } from 'vue';
+import { ref, reactive, computed, watch } from 'vue';
 import { message, Modal } from 'ant-design-vue';
+import { getCustomPreferences } from '@vben/preferences';
 
 /**
  * 表格分页配置类型
@@ -209,6 +210,32 @@ export function useTable<T = any>(config: UseTableConfig<T>) {
   const {
     enableRowSelection = false,
   } = tableConfig || {};
+
+  // 获取扩展偏好设置中的表格行高配置
+  const customPreferences = getCustomPreferences<{ tableRowHeight?: number }>();
+  
+  // 根据行高计算表格尺寸（响应式）
+  const tableSize = computed(() => {
+    const rowHeight = customPreferences.tableRowHeight || 36; // 默认 36px
+    
+    if (rowHeight <= 32) {
+      return 'small';
+    } else if (rowHeight >= 48) {
+      return 'large';
+    } else {
+      return 'middle'; // 默认
+    }
+  });
+
+  // 监听行高变化，动态更新 CSS 变量以实现全局自动应用
+  watch(
+    () => customPreferences.tableRowHeight,
+    (newHeight) => {
+      const height = newHeight || 36;
+      document.documentElement.style.setProperty('--table-row-height', `${height}px`);
+    },
+    { immediate: true }
+  );
 
   // 表格数据
   const dataSource = ref<T[]>([]);
@@ -518,6 +545,7 @@ export function useTable<T = any>(config: UseTableConfig<T>) {
     pagination,
     ...(enableRowSelection ? { selectedRowKeys } : {}),
     activeFilters,
+    tableSize, // 新增：返回表格尺寸配置，业务组件可直接使用
     loadData,
     handleDelete,
     ...(enableRowSelection ? { handleBatchDelete, onSelectChange } : {}),

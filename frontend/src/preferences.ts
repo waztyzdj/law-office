@@ -76,7 +76,7 @@ export const preferencesExtension =
       {
         component: 'number',
         componentProps: {
-          max: 60,
+          max: 64,
           min: 24,
           step: 2,
         },
