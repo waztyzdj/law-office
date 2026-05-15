@@ -7,6 +7,9 @@ import { initStores } from '@vben/stores';
 import '@vben/styles';
 import '@vben/styles/antd';
 
+// 导入全局自定义样式（覆盖框架默认样式）
+import '#/assets/styles/index.css';
+
 import { useTitle } from '@vueuse/core';
 
 import { $t, setupI18n } from '#/locales';
