@@ -7,6 +7,7 @@ interface WebAntdPreferencesExtension {
   defaultTableSize: number;
   enableFormFullscreen: boolean;
   reportTitle: string;
+  tableRowHeight: number; // 新增：表格行高配置
   tenantMode: 'multi' | 'single';
 }
 
@@ -20,6 +21,9 @@ export const overridesPreferences = defineOverridesPreferences({
   app: {
     name: import.meta.env.VITE_APP_TITLE,
     accessMode: 'backend', // 使用后端权限控制模式，动态获取菜单
+  },
+  copyright: {
+    settingShow: false, // 隐藏版权设置选项
   },
 });
 
@@ -68,6 +72,18 @@ export const preferencesExtension =
         key: 'reportTitle',
         label: 'preferences.antd.fields.reportTitle.label',
         placeholder: 'preferences.antd.fields.reportTitle.placeholder',
+      },
+      {
+        component: 'number',
+        componentProps: {
+          max: 60,
+          min: 24,
+          step: 2,
+        },
+        defaultValue: 36,
+        key: 'tableRowHeight',
+        label: 'preferences.antd.fields.tableRowHeight.label',
+        tip: 'preferences.antd.fields.tableRowHeight.tip',
       },
     ],
   });

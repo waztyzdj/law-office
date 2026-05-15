@@ -1,0 +1,11 @@
+{
+  "antd": {
+    "tabLabel": "扩展",
+    "fields": {
+      "tableRowHeight": {
+        "label": "表格行高",
+        "tip": "设置表格默认行高（24-60px）"
+      }
+    }
+  }
+}
