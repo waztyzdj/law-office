@@ -1,5 +1,5 @@
 import { h } from 'vue';
-import { Tag } from 'ant-design-vue';
+import { Tag, Tooltip } from 'ant-design-vue';
 import type { ColumnsType } from 'ant-design-vue/es/table';
 import type { TablePaginationConfig } from './useTable';
 import { 
@@ -41,6 +41,38 @@ export interface TableColumnOptions<T = any> {
   selectOptions?: SelectOption[];
   /** 其他 Ant Design Vue 列配置 */
   [key: string]: any;
+}
+
+/**
+ * 创建带 Tooltip 的单元格内容
+ * @param content 要显示的内容
+ * @returns 带 Tooltip 包裹的内容
+ */
+function createTooltipCell(content: any) {
+  // 如果内容是字符串或数字，添加 Tooltip
+  if (typeof content === 'string' || typeof content === 'number') {
+    return h(
+      Tooltip,
+      { title: String(content) },
+      {
+        default: () =>
+          h(
+            'div',
+            {
+              style: {
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap',
+              },
+            },
+            String(content)
+          ),
+      }
+    );
+  }
+  
+  // 如果内容已经是 VNode 或其他类型，直接返回
+  return content;
 }
 
 /**
@@ -111,6 +143,7 @@ export function defineTableColumn<T = any>(
     dataIndex,
     key: dataIndex,
     align: 'center',
+    ellipsis: true, // 启用省略号显示
     ...restOptions,
   };
 
@@ -124,9 +157,21 @@ export function defineTableColumn<T = any>(
     column.fixed = fixed;
   }
 
-  // 添加自定义渲染
+  // 添加自定义渲染或默认的 Tooltip 渲染
   if (customRender) {
-    column.customRender = customRender;
+    // 如果有自定义渲染，包装一层以支持 Tooltip
+    const originalCustomRender = customRender;
+    column.customRender = (params: { record: T; index: number; text: any }) => {
+      const renderedContent = originalCustomRender(params);
+      // 对于自定义渲染的内容，如果是简单文本则添加 Tooltip
+      return createTooltipCell(renderedContent);
+    };
+  } else {
+    // 没有自定义渲染时，使用默认的 Tooltip 渲染
+    column.customRender = ({ record }: { record: T }) => {
+      const value = record[dataIndex as keyof T];
+      return createTooltipCell(value);
+    };
   }
 
   // 处理筛选和排序
