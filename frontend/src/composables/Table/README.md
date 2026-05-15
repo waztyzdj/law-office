@@ -13,6 +13,391 @@ composables/Table/
 └── README.md                   # 本文档
 ```
 
+## ✨ 新特性（v2.0）
+
+### 1. 列宽拖拽调整 🆕
+- ✅ **默认启用**: 所有通过 `defineTableColumn` 或 `defineTableColumns` 定义的列自动支持列宽拖拽
+- ✅ **持久化存储**: 调整后的列宽自动保存到 localStorage，页面刷新后恢复
+- ✅ **宽度限制**: 最小 60px，最大 800px
+- ✅ **视觉反馈**: 鼠标移到列头右侧边缘时显示 `col-resize` 光标
+
+### 2. 自动横向滚动 🆕
+- ✅ **智能判断**: 当总列宽超过表格容器宽度时，自动启用横向滚动条
+- ✅ **固定列兼容**: 自动计算非固定列 + 右侧固定列的总宽度，避免遮挡
+
+### 3. 操作列自动冻结 🆕
+- ✅ **自动识别**: 检测到 `dataIndex` 为 `'action'` 的列时，自动固定在右侧
+- ✅ **可配置**: 支持自定义操作列标识和禁用自动冻结
+
+### 4. SmartTable 智能表格组件 🆕
+- ✅ **零配置**: 业务代码无需任何修改，自动享受所有新功能
+- ✅ **自动处理**: 内部自动处理操作列冻结、横向滚动、列宽调整
+- ✅ **完全兼容**: 保留 Ant Design Vue Table 的所有 API 和插槽
+- ✅ **可覆盖**: 业务代码可传入自定义 `scroll` 配置覆盖默认行为
+
+---
+
+## SmartTable - 智能表格组件（推荐使用）
+
+### 核心优势
+
+**业务代码零修改**，只需将 `<Table>` 替换为 `<SmartTable>`，即可自动享受：
+- 列宽拖拽调整
+- 操作列自动冻结
+- 智能横向滚动
+- 固定列不遮挡内容
+
+### 使用示例
+
+#### 基础使用（推荐）
+
+``vue
+<script setup lang="ts">
+import { computed } from 'vue';
+import { SmartTable } from '#/composables/Table';
+import { getUserColumns } from './hooks/useUserColumns';
+
+const columns = computed(() => getUserColumns(filterState, emit, pagination));
+</script>
+
+<template>
+  <!-- 只需替换 Table 为 SmartTable，其他完全一样 -->
+  <SmartTable
+    :columns="columns"
+    :data-source="dataSource"
+    :loading="loading"
+    :pagination="pagination"
+    row-key="id"
+    bordered
+  />
+</template>
+```
+
+#### 保留自定义配置
+
+如果业务代码需要自定义 `scroll` 配置，可以传入覆盖默认行为：
+
+``vue
+<template>
+  <SmartTable
+    :columns="columns"
+    :scroll="{ x: 1500, y: 500 }"
+    ...
+  />
+</template>
+```
+
+#### 使用所有 Ant Design Vue Table API
+
+[SmartTable](file://e:\project\law-office\frontend\src\composables\Table\TableWrapper.vue) 完全透传 Ant Design Vue Table 的所有属性和事件：
+
+``vue
+<template>
+  <SmartTable
+    :columns="columns"
+    :data-source="dataSource"
+    :row-selection="rowSelection"
+    :custom-row="customRow"
+    :custom-header-row="customHeaderRow"
+    @expand="handleExpand"
+    @resize-column="handleResize"
+  >
+    <!-- 支持所有插槽 -->
+    <template #bodyCell="{ column, record }">
+      <!-- 自定义单元格渲染 -->
+    </template>
+  </SmartTable>
+</template>
+```
+
+---
+
+## 📖 使用指南
+
+### 零配置使用（推荐）
+
+**好消息！** 如果你已经在使用 `defineTableColumn` 或 `defineTableColumns`，那么：
+
+✅ **列宽拖拽调整已自动启用** - 无需任何修改  
+✅ **单元格省略号和 Tooltip 已自动启用** - 无需任何修改  
+✅ **列标题不换行已自动启用** - 无需任何修改  
+
+``vue
+<!-- 现有代码保持不变，即可享受新功能 -->
+<script setup lang="ts">
+import { getUserColumns } from './hooks/useUserColumns';
+
+const columns = computed(() => getUserColumns(filterState, emit, pagination));
+</script>
+
+<template>
+  <Table :columns="columns" ... />
+</template>
+```
+
+### 可选增强配置
+
+如果你需要以下功能，可以添加少量配置：
+
+#### 1. 自动冻结操作列 + 智能横向滚动
+
+``vue
+<script setup lang="ts">
+import { computed } from 'vue';
+import { Table } from 'ant-design-vue';
+import { 
+  generateTableScroll, 
+  autoFreezeActionColumn 
+} from '#/composables/Table';
+import { getUserColumns } from './hooks/useUserColumns';
+
+// 基础列定义（来自 hooks）
+const baseColumns = computed(() => 
+  getUserColumns(filterState, emit, pagination)
+);
+
+// 自动处理操作列冻结
+const columns = computed(() => 
+  autoFreezeActionColumn(baseColumns.value)
+);
+
+// 生成智能 scroll 配置
+const scrollConfig = computed(() => 
+  generateTableScroll(columns.value, {
+    enableScroll: true,        // 启用横向滚动（默认 true）
+    minTableWidth: 800,        // 最小表格宽度（默认 800）
+  })
+);
+</script>
+
+<template>
+  <Table
+    :columns="columns"
+    :scroll="scrollConfig"     <!-- 添加这一行 -->
+    ...
+  />
+</template>
+```
+
+#### 2. 禁用自动冻结操作列
+
+如果某些表格不需要自动冻结操作列：
+
+``typescript
+const columns = autoFreezeActionColumn(baseColumns.value, {
+  autoFreezeActionColumn: false, // 禁用自动冻结
+});
+```
+
+#### 3. 自定义操作列标识
+
+如果你的操作列不是 `action`，而是其他名称（如 `operations`）：
+
+``typescript
+const columns = autoFreezeActionColumn(baseColumns.value, {
+  actionColumnKey: 'operations', // 自定义操作列 key
+});
+```
+
+#### 4. 手动控制操作列冻结
+
+如果你希望在列定义中手动控制（保持原有行为）：
+
+``typescript
+{
+  dataIndex: 'action',
+  title: '操作',
+  options: {
+    width: 150,
+    fixed: 'right' as const, // 手动指定，autoFreezeActionColumn 会跳过此列
+    hasFilter: false,
+  },
+}
+```
+
+---
+
+## 🎯 最佳实践建议
+
+### 场景 1：简单列表页面
+**推荐**: 零配置，直接使用现有代码
+
+``vue
+<Table :columns="columns" />
+```
+
+### 场景 2：复杂表格（多列、大数据量）
+**推荐**: 启用自动冻结和智能滚动
+
+``vue
+<Table 
+  :columns="autoFreezeActionColumn(columns)"
+  :scroll="generateTableScroll(columns)"
+/>
+```
+
+### 场景 3：需要完全自定义
+**推荐**: 在列定义中手动配置所有选项
+
+``typescript
+{
+  dataIndex: 'action',
+  title: '操作',
+  options: {
+    width: 150,
+    fixed: 'right',
+    hasFilter: false,
+    customRender: ...
+  },
+}
+```
+
+---
+
+## 🔧 技术细节
+
+### 列宽持久化存储
+
+- **存储位置**: `localStorage`
+- **键名**: `table_columnWidths`
+- **格式**: `{ "username": 120, "email": 180, ... }`
+- **清除方法**: `localStorage.removeItem('table_columnWidths')`
+
+### 宽度限制
+
+- **最小宽度**: 60px（防止列过窄无法显示内容）
+- **最大宽度**: 800px（防止单列过宽影响布局）
+
+### 操作列识别规则
+
+[autoFreezeActionColumn](file://e:\project\law-office\frontend\src\composables\Table\useTable.ts#L121-L148) 会自动识别并冻结满足以下条件的列：
+1. `dataIndex` 或 `key` 等于配置的 `actionColumnKey`（默认 `'action'`）
+2. **且**未手动设置 `fixed` 属性
+
+如果列已经设置了 `fixed`，则不会覆盖。
+
+---
+
+## ❓ 常见问题
+
+### Q1: 为什么我调整的列宽刷新后没有保存？
+A: 检查浏览器控制台是否有错误，确认 localStorage 未被禁用。
+
+### Q2: 如何让某些列不支持拖拽调整？
+A: 目前所有列都支持拖拽。如需禁用，可以在列定义中设置特殊的样式或事件处理。
+
+### Q3: 操作列没有被自动冻结？
+A: 检查列的 `dataIndex` 是否为 `'action'`，或者通过 `actionColumnKey` 配置自定义标识。
+
+### Q4: 横向滚动条没有出现？
+A: 确保总列宽超过了 `minTableWidth`（默认 800px），可以通过调整列宽或降低 `minTableWidth` 来触发。
+
+---
+
+## 📝 更新日志
+
+### v2.0 (当前版本)
+- ✨ 新增列宽拖拽调整功能
+- ✨ 新增 `generateTableScroll` 智能滚动配置
+- ✨ 新增 `autoFreezeActionColumn` 自动冻结操作列
+- ✨ 新增 `calculateTableWidth` 计算表格总宽度
+- 🔄 优化列定义流程，保持向后兼容
+
+### v1.x
+- 基础表格列定义功能
+- 表头筛选功能
+- 多种列类型支持
+
+## useTable - 表格配置辅助函数
+
+### 核心功能
+
+提供表格配置相关的辅助函数，简化表格的 scroll 配置和操作列处理。
+
+#### 1. calculateTableWidth - 计算表格总宽度
+
+``typescript
+import { calculateTableWidth } from '#/composables/Table';
+
+const columns = [
+  { dataIndex: 'username', width: 120 },
+  { dataIndex: 'email', width: 180 },
+];
+
+const totalWidth = calculateTableWidth(columns); // 300
+```
+
+#### 2. generateTableScroll - 生成表格 scroll 配置
+
+``typescript
+import { generateTableScroll } from '#/composables/Table';
+
+const columns = [
+  { dataIndex: 'username', width: 120 },
+  { dataIndex: 'email', width: 180 },
+  { dataIndex: 'phone', width: 130 },
+];
+
+// 自动生成 scroll 配置
+const scrollConfig = generateTableScroll(columns, {
+  enableScroll: true,        // 是否启用横向滚动，默认 true
+  minTableWidth: 800,        // 最小表格宽度，默认 800
+});
+
+// 在 Table 组件中使用
+<Table :scroll="scrollConfig" ... />
+```
+
+#### 3. autoFreezeActionColumn - 自动冻结操作列
+
+``typescript
+import { autoFreezeActionColumn } from '#/composables/Table';
+
+const columns = [
+  { dataIndex: 'username', title: '用户名' },
+  { dataIndex: 'action', title: '操作' }, // 会自动添加 fixed: 'right'
+];
+
+// 自动处理操作列冻结
+const processedColumns = autoFreezeActionColumn(columns, {
+  autoFreezeActionColumn: true,  // 是否自动冻结，默认 true
+  actionColumnKey: 'action',      // 操作列的 key，默认 'action'
+});
+```
+
+### 在业务代码中的使用示例
+
+``vue
+<script setup lang="ts">
+import { computed } from 'vue';
+import { Table } from 'ant-design-vue';
+import { generateTableScroll, autoFreezeActionColumn } from '#/composables/Table';
+import { getUserColumns } from './hooks/useUserColumns';
+
+const columns = computed(() => {
+  const baseColumns = getUserColumns(filterState, emit, pagination);
+  
+  // 自动冻结操作列
+  return autoFreezeActionColumn(baseColumns);
+});
+
+// 生成 scroll 配置
+const scrollConfig = computed(() => 
+  generateTableScroll(columns.value)
+);
+</script>
+
+<template>
+  <Table
+    :columns="columns"
+    :scroll="scrollConfig"
+    ...
+  />
+</template>
+```
+
+---
+
 ## useTableHelper - 表格列定义辅助函数
 
 ### 核心功能
@@ -25,13 +410,14 @@ composables/Table/
 - ✅ 支持多种列类型（文本、日期、时间、枚举、操作等）
 - ✅ **自动启用单元格内容省略号显示和 Tooltip 提示** 🆕
 - ✅ **列标题自动不换行并显示省略号** 🆕
+- ✅ **默认启用列宽拖拽调整功能** 🆕
 - ✅ 灵活的配置选项
 
 ### 使用示例
 
 #### 1. 简单文本列（带自动筛选）
 
-```typescript
+``typescript
 import { defineTableColumn } from '#/composables/Table';
 
 // 只需指定宽度和标题，其他属性自动添加
@@ -57,7 +443,7 @@ const column = defineTableColumn(
 
 #### 2. 批量定义列（推荐）
 
-```typescript
+``typescript
 import { defineTableColumns } from '#/composables/Table';
 
 export function getUserColumns(filterState, emit, pagination) {
@@ -73,7 +459,7 @@ export function getUserColumns(filterState, emit, pagination) {
 
 #### 3. Select 类型列（多选筛选）🆕
 
-```typescript
+``typescript
 {
   dataIndex: 'status',
   title: '状态',
@@ -97,7 +483,7 @@ export function getUserColumns(filterState, emit, pagination) {
 
 #### 4. DateTime 类型列（日期/时间切换）🆕
 
-```typescript
+``typescript
 {
   dataIndex: 'createTime',
   title: '创建时间',
@@ -129,7 +515,7 @@ export function getUserColumns(filterState, emit, pagination) {
 
 #### 5. 日期列 🆕
 
-```typescript
+``typescript
 {
   dataIndex: 'createTime',
   title: '创建时间',
@@ -147,7 +533,7 @@ export function getUserColumns(filterState, emit, pagination) {
 
 #### 6. 日期时间列 🆕
 
-```typescript
+``typescript
 {
   dataIndex: 'updateTime',
   title: '更新时间',
@@ -165,7 +551,7 @@ export function getUserColumns(filterState, emit, pagination) {
 
 #### 7. 枚举/状态列
 
-```typescript
+``typescript
 import { h } from 'vue';
 import { Tag } from 'ant-design-vue';
 
@@ -194,7 +580,7 @@ import { Tag } from 'ant-design-vue';
 
 #### 8. 操作列（无筛选）
 
-```typescript
+``typescript
 import { h } from 'vue';
 import { Space } from 'ant-design-vue';
 
@@ -245,7 +631,7 @@ import { Space } from 'ant-design-vue';
 
 当 `columnType` 为 `select` 时，需要配置 `selectOptions`：
 
-```typescript
+``typescript
 interface SelectOption {
   label: string;   // 显示文本
   value: any;      // 值

@@ -57,6 +57,111 @@ export interface StorageConfig {
 }
 
 /**
+ * 表格配置接口
+ */
+export interface TableConfigOptions {
+  /** 是否启用横向滚动，默认为 true */
+  enableScroll?: boolean;
+  /** 是否自动冻结操作列，默认为 true */
+  autoFreezeActionColumn?: boolean;
+  /** 操作列的 dataIndex，默认为 'action' */
+  actionColumnKey?: string;
+  /** 最小表格宽度，用于判断是否显示滚动条，默认为 800 */
+  minTableWidth?: number;
+}
+
+/**
+ * 计算表格总宽度（排除固定列）
+ * @param columns 列配置数组
+ * @returns 非固定列的宽度总和
+ */
+export function calculateTableWidth(columns: any[]): number {
+  return columns.reduce((sum, col) => {
+    // 排除固定列（fixed: 'left' 或 'right'）
+    if (col.fixed) {
+      return sum;
+    }
+    // 确保宽度是数字类型
+    const width = Number(col.width || 0);
+    return sum + width;
+  }, 0);
+}
+
+/**
+ * 生成表格 scroll 配置
+ * @param columns 列配置数组
+ * @param options 配置选项
+ * @returns scroll 配置对象
+ */
+export function generateTableScroll(
+  columns: any[],
+  options: TableConfigOptions = {}
+): { x: number | true } | undefined {
+  const {
+    enableScroll = true,
+    minTableWidth = 800,
+  } = options;
+
+  if (!enableScroll) {
+    return undefined;
+  }
+
+  // 只计算非固定列的总宽度
+  const nonFixedWidth = calculateTableWidth(columns);
+  
+  // 如果有右侧固定列，需要额外增加空间
+  const rightFixedWidth = columns
+    .filter(col => col.fixed === 'right')
+    .reduce((sum, col) => sum + Number(col.width || 0), 0);
+  
+  // 总滚动宽度 = 非固定列宽度 + 右侧固定列宽度（确保不被遮挡）
+  const totalScrollWidth = nonFixedWidth + rightFixedWidth;
+  
+  // 如果总宽度超过最小表格宽度，启用横向滚动
+  if (totalScrollWidth > minTableWidth) {
+    return { x: totalScrollWidth };
+  }
+  
+  // 否则使用 true 让表格自适应
+  return { x: true };
+}
+
+/**
+ * 自动处理操作列冻结
+ * @param columns 列配置数组
+ * @param options 配置选项
+ * @returns 处理后的列配置数组
+ */
+export function autoFreezeActionColumn<T = any>(
+  columns: any[],
+  options: TableConfigOptions = {}
+): any[] {
+  const {
+    autoFreezeActionColumn = true,
+    actionColumnKey = 'action',
+  } = options;
+
+  if (!autoFreezeActionColumn) {
+    return columns;
+  }
+
+  // 查找操作列并自动冻结
+  return columns.map((col) => {
+    // 如果列的 dataIndex 或 key 包含 'action' 且未手动设置 fixed
+    if (
+      (col.dataIndex === actionColumnKey || col.key === actionColumnKey) &&
+      !col.fixed
+    ) {
+      return {
+        ...col,
+        fixed: 'right' as const,
+      };
+    }
+    return col;
+  });
+}
+
+/**
  * useTable 配置接口
  */
 export interface UseTableConfig<T = any> {
@@ -72,6 +177,8 @@ export interface UseTableConfig<T = any> {
   delete?: DeleteConfig;
   /** 是否启用行选择功能，默认为 false */
   enableRowSelection?: boolean;
+  /** 表格配置选项（可选） */
+  tableOptions?: TableConfigOptions;
 }
 
 /**

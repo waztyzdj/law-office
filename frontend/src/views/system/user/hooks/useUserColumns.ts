@@ -2,7 +2,7 @@ import { h } from 'vue';
 import { Space } from 'ant-design-vue';
 import type { ColumnsType } from 'ant-design-vue/es/table';
 import type { UserInfo } from '#/api/system/user';
-import type { TablePaginationConfig } from '#/composables/Table';
+import type { TablePaginationConfig, TableColumnsResult } from '#/composables/Table';
 import { defineTableColumns } from '#/composables/Table';
 
 /**
@@ -12,7 +12,7 @@ export function getUserColumns(
   filterState: any,
   emit: any,
   pagination: TablePaginationConfig
-): ColumnsType<UserInfo> {
+): TableColumnsResult {
   // 定义列配置数组
   const columns = [
     {
@@ -97,6 +97,6 @@ export function getUserColumns(
     },
   ];
 
-  // 使用通用列定义函数处理
+  // 使用通用列定义函数处理（返回 { columns, scroll }）
   return defineTableColumns(columns, filterState, emit, pagination);
 }
