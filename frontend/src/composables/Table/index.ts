@@ -7,6 +7,7 @@ export type {
   BaseListParams,
   DeleteConfig,
   StorageConfig,
+  UseTableConfig,
 } from './useTable';
 
 // 表头筛选相关

@@ -57,23 +57,37 @@ export interface StorageConfig {
 }
 
 /**
+ * useTable 配置接口
+ */
+export interface UseTableConfig<T = any> {
+  /** 获取数据的 API 方法（必填） */
+  fetchData: (params: BaseListParams) => Promise<ListResponse<T>>;
+  /** 删除单个项目的 API 方法（可选） */
+  deleteItem?: (id: string | number) => Promise<any>;
+  /** 批量删除的 API 方法（可选） */
+  batchDeleteItems?: (ids: (string | number)[]) => Promise<any>;
+  /** localStorage 配置（可选） */
+  storage?: StorageConfig;
+  /** 删除对话框配置（可选） */
+  delete?: DeleteConfig;
+  /** 是否启用行选择功能，默认为 false */
+  enableRowSelection?: boolean;
+}
+
+/**
  * 通用表格列表组合式函数
- * @param fetchData 获取数据的 API 方法
- * @param deleteItem 删除单个项目的 API 方法（可选）
- * @param batchDeleteItems 批量删除的 API 方法（可选）
- * @param storageConfig localStorage 配置（可选）
- * @param deleteConfig 删除对话框配置（可选）
- * @param enableRowSelection 是否启用行选择功能，默认为 false
+ * @param config 配置对象
  * @returns 表格相关状态和方法
  */
-export function useTable<T = any>(
-  fetchData: (params: BaseListParams) => Promise<ListResponse<T>>,
-  deleteItem?: (id: string | number) => Promise<any>,
-  batchDeleteItems?: (ids: (string | number)[]) => Promise<any>,
-  storageConfig?: StorageConfig,
-  deleteConfig?: DeleteConfig,
-  enableRowSelection: boolean = false
-) {
+export function useTable<T = any>(config: UseTableConfig<T>) {
+  const {
+    fetchData,
+    deleteItem,
+    batchDeleteItems,
+    storage,
+    delete: deleteConfig,
+    enableRowSelection = false,
+  } = config;
   // 表格数据
   const dataSource = ref<T[]>([]);
   const loading = ref(false);
@@ -92,7 +106,7 @@ export function useTable<T = any>(
   const selectedRowKeys = ref<(string | number)[]>(enableRowSelection ? [] : undefined as any);
 
   // 筛选状态（用于列头筛选）- 从 localStorage 初始化
-  const filtersKey = storageConfig?.filtersKey || 'table_list_filters';
+  const filtersKey = storage?.filtersKey || 'table_list_filters';
   const activeFilters = ref<Record<string, FilterCondition | any>>(
     loadFiltersFromStorage(filtersKey)
   );
