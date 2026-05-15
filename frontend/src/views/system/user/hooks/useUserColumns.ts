@@ -1,6 +1,5 @@
 import { h } from 'vue';
 import { Space } from 'ant-design-vue';
-import type { ColumnsType } from 'ant-design-vue/es/table';
 import type { UserInfo } from '#/api/system/user';
 import type { TablePaginationConfig, TableColumnsResult } from '#/composables/Table';
 import { defineTableColumns } from '#/composables/Table';

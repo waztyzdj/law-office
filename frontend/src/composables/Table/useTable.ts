@@ -132,7 +132,7 @@ export function generateTableScroll(
  * @param options 配置选项
  * @returns 处理后的列配置数组
  */
-export function autoFreezeActionColumn<T = any>(
+export function autoFreezeActionColumn(
   columns: any[],
   options: TableConfigOptions = {}
 ): any[] {
