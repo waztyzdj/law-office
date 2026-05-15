@@ -1,6 +1,5 @@
 import { h, ref } from 'vue';
 import { Tag, Tooltip } from 'ant-design-vue';
-import type { ColumnsType } from 'ant-design-vue/es/table';
 import type { TablePaginationConfig } from './useTable';
 import { 
   useTableHeaderFilter, 
