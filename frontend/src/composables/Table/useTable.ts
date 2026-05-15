@@ -59,7 +59,9 @@ export interface StorageConfig {
 /**
  * 表格配置接口
  */
-export interface TableConfigOptions {
+export interface TableConfig {
+  /** 是否启用行选择功能，默认为 false */
+  enableRowSelection?: boolean;
   /** 是否启用横向滚动，默认为 true */
   enableScroll?: boolean;
   /** 是否自动冻结操作列，默认为 true */
@@ -68,6 +70,32 @@ export interface TableConfigOptions {
   actionColumnKey?: string;
   /** 最小表格宽度，用于判断是否显示滚动条，默认为 800 */
   minTableWidth?: number;
+}
+
+/**
+ * API 配置接口
+ */
+export interface ApiConfig<T = any> {
+  /** 获取数据的 API 方法（必填） */
+  fetchData: (params: BaseListParams) => Promise<ListResponse<T>>;
+  /** 删除单个项目的 API 方法（可选） */
+  deleteItem?: (id: string | number) => Promise<any>;
+  /** 批量删除的 API 方法（可选） */
+  batchDeleteItems?: (ids: (string | number)[]) => Promise<any>;
+}
+
+/**
+ * useTable 配置接口
+ */
+export interface UseTableConfig<T = any> {
+  /** API 配置（必填） */
+  apiConfig: ApiConfig<T>;
+  /** localStorage 配置（可选） */
+  storageConfig?: StorageConfig;
+  /** 删除对话框配置（可选） */
+  deleteConfig?: DeleteConfig;
+  /** 表格配置（可选） */
+  tableConfig?: TableConfig;
 }
 
 /**
@@ -95,7 +123,7 @@ export function calculateTableWidth(columns: any[]): number {
  */
 export function generateTableScroll(
   columns: any[],
-  options: TableConfigOptions = {}
+  options: TableConfig = {}
 ): { x: number | true } | undefined {
   const {
     enableScroll = true,
@@ -134,7 +162,7 @@ export function generateTableScroll(
  */
 export function autoFreezeActionColumn(
   columns: any[],
-  options: TableConfigOptions = {}
+  options: TableConfig = {}
 ): any[] {
   const {
     autoFreezeActionColumn = true,
@@ -162,39 +190,26 @@ export function autoFreezeActionColumn(
 }
 
 /**
- * useTable 配置接口
- */
-export interface UseTableConfig<T = any> {
-  /** 获取数据的 API 方法（必填） */
-  fetchData: (params: BaseListParams) => Promise<ListResponse<T>>;
-  /** 删除单个项目的 API 方法（可选） */
-  deleteItem?: (id: string | number) => Promise<any>;
-  /** 批量删除的 API 方法（可选） */
-  batchDeleteItems?: (ids: (string | number)[]) => Promise<any>;
-  /** localStorage 配置（可选） */
-  storage?: StorageConfig;
-  /** 删除对话框配置（可选） */
-  delete?: DeleteConfig;
-  /** 是否启用行选择功能，默认为 false */
-  enableRowSelection?: boolean;
-  /** 表格配置选项（可选） */
-  tableOptions?: TableConfigOptions;
-}
-
-/**
  * 通用表格列表组合式函数
  * @param config 配置对象
  * @returns 表格相关状态和方法
  */
 export function useTable<T = any>(config: UseTableConfig<T>) {
   const {
-    fetchData,
-    deleteItem,
-    batchDeleteItems,
-    storage,
-    delete: deleteConfig,
-    enableRowSelection = false,
+    apiConfig,
+    storageConfig,
+    deleteConfig,
+    tableConfig,
   } = config;
+
+  // 从 apiConfig 中解构 API 方法
+  const { fetchData, deleteItem, batchDeleteItems } = apiConfig;
+
+  // 从 tableConfig 中解构表格配置，并设置默认值
+  const {
+    enableRowSelection = false,
+  } = tableConfig || {};
+
   // 表格数据
   const dataSource = ref<T[]>([]);
   const loading = ref(false);
@@ -213,7 +228,7 @@ export function useTable<T = any>(config: UseTableConfig<T>) {
   const selectedRowKeys = ref<(string | number)[]>(enableRowSelection ? [] : undefined as any);
 
   // 筛选状态（用于列头筛选）- 从 localStorage 初始化
-  const filtersKey = storage?.filtersKey || 'table_list_filters';
+  const filtersKey = storageConfig?.filtersKey || 'table_list_filters';
   const activeFilters = ref<Record<string, FilterCondition | any>>(
     loadFiltersFromStorage(filtersKey)
   );

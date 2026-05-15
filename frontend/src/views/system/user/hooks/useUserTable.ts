@@ -9,31 +9,37 @@ import { getUserListApi, deleteUserApi, batchDeleteUserApi } from '#/api/system/
 export function useUserTable(getSearchParams: () => Partial<UserListParams>) {
   // 使用通用的 useTable（使用配置对象模式）
   const table = useTable<UserInfo>({
-    // 数据获取方法（必填）
-    fetchData: async (params) => {
-      const result = await getUserListApi(params as UserListParams);
-      return {
-        items: result.items || [],
-        total: result.total || 0,
-      };
+    // API 配置（必填）
+    apiConfig: {
+      // 数据获取方法
+      fetchData: async (params) => {
+        const result = await getUserListApi(params as UserListParams);
+        return {
+          items: result.items || [],
+          total: result.total || 0,
+        };
+      },
+      // 删除单个用户（可选）
+      deleteItem: (id: string | number) => deleteUserApi(String(id)),
+      // 批量删除用户（可选）
+      batchDeleteItems: (ids: (string | number)[]) => batchDeleteUserApi(ids.map(id => String(id))),
     },
-    // 删除单个用户（可选）
-    deleteItem: (id: string | number) => deleteUserApi(String(id)),
-    // 批量删除用户（可选）
-    batchDeleteItems: (ids: (string | number)[]) => batchDeleteUserApi(ids.map(id => String(id))),
     // localStorage 配置（可选）
-    storage: {
+    storageConfig: {
       filtersKey: 'user_list_filters',
     },
     // 删除对话框配置（可选）
-    delete: {
+    deleteConfig: {
       title: '确认删除',
       content: (record: UserInfo) => `确定要删除用户"${record.realname}"吗？`,
       batchTitle: '确认批量删除',
       batchContent: (count: number) => `确定要删除选中的 ${count} 个用户吗？`,
     },
-    // 启用行选择功能（可选，默认 false）
-    enableRowSelection: true,
+    // 表格配置（可选）
+    tableConfig: {
+      // 启用行选择功能（默认 false）
+      enableRowSelection: true,
+    },
   });
 
   /**
