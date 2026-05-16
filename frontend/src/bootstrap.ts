@@ -17,6 +17,7 @@ import { $t, setupI18n } from '#/locales';
 import { initComponentAdapter } from './adapter/component';
 import { initSetupVbenForm } from './adapter/form';
 import App from './app.vue';
+import { useGlobalFontSize } from './composables/useGlobalFontSize';
 import { router } from './router';
 
 async function bootstrap(namespace: string) {
@@ -62,6 +63,9 @@ async function bootstrap(namespace: string) {
   // 配置Motion插件
   const { MotionPlugin } = await import('@vben/plugins/motion');
   app.use(MotionPlugin);
+
+  // 初始化全局字体大小监听
+  useGlobalFontSize();
 
   // 动态更新标题
   watchEffect(() => {

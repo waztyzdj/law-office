@@ -13,6 +13,77 @@
   /* 其他全局 CSS 变量可以在这里添加 */
 }
 
+/* ==================== 全局字体大小应用 ==================== */
+
+/**
+ * 基础字体大小应用
+ * body 元素使用 --font-size-base 变量
+ */
+body {
+  font-size: var(--font-size-base);
+}
+
+/**
+ * Ant Design Vue 组件字体强制覆盖
+ * 使用 !important 确保优先级高于组件默认样式
+ */
+.ant-app,
+.ant-table,
+.ant-btn,
+.ant-input,
+.ant-input-affix-wrapper,
+.ant-select,
+.ant-select-selector,
+.ant-form,
+.ant-form-item-label > label,
+.ant-card,
+.ant-card-head,
+.ant-card-body,
+.ant-modal,
+.ant-modal-header,
+.ant-modal-body,
+.ant-drawer,
+.ant-drawer-header,
+.ant-drawer-body,
+.ant-popover,
+.ant-tooltip,
+.ant-menu,
+.ant-menu-item,
+.ant-menu-submenu-title,
+.ant-dropdown,
+.ant-dropdown-menu-item,
+.ant-tabs,
+.ant-tabs-tab,
+.ant-breadcrumb,
+.ant-pagination,
+.ant-steps,
+.ant-steps-title,
+.ant-descriptions,
+.ant-descriptions-item-label,
+.ant-descriptions-item-content,
+.ant-list,
+.ant-list-item,
+.ant-timeline,
+.ant-timeline-item-content,
+.ant-badge,
+.ant-tag,
+.ant-alert,
+.ant-message,
+.ant-notification,
+.ant-result,
+.ant-empty,
+.ant-skeleton,
+.ant-avatar,
+.ant-comment,
+.ant-comment-content-author,
+.ant-statistic,
+.ant-statistic-title,
+.ant-statistic-content,
+.ant-progress,
+.ant-progress-text {
+  font-size: var(--font-size-base) !important;
+}
+
 /* ==================== Ant Design Vue 组件样式覆盖 ==================== */
 
 /**
