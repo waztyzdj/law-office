@@ -1,4 +1,4 @@
-package com.lawoffice.system.dto;
+package com.lawoffice.system.vo;
 
 import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.Data;
@@ -7,7 +7,7 @@ import java.util.List;
 
 @Data
 @Schema(description = "菜单元数据")
-public class MenuMetaDTO {
+public class MenuMetaVO {
     
     @Schema(description = "菜单标题")
     private String title;

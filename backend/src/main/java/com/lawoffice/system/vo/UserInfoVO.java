@@ -1,4 +1,4 @@
-package com.lawoffice.system.dto;
+package com.lawoffice.system.vo;
 
 import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.Data;
@@ -7,7 +7,7 @@ import java.util.List;
 
 @Data
 @Schema(description = "用户详细信息")
-public class UserInfoDTO {
+public class UserInfoVO {
     
     @Schema(description = "用户ID")
     private String userId;

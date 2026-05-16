@@ -4,7 +4,8 @@ import com.lawoffice.framework.result.BaseResult;
 import com.lawoffice.framework.annotation.AutoLog;
 import com.lawoffice.framework.enums.LogType;
 import com.lawoffice.framework.enums.OperateType;
-import com.lawoffice.system.dto.AuthUser;
+import com.lawoffice.system.req.ChangePwdReq;
+import com.lawoffice.system.req.LoginReq;
 import com.lawoffice.system.service.IUserService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -31,10 +32,10 @@ public class AuthController {
     @PostMapping("/login")
     @Operation(summary = "用户登录", description = "通过用户名和密码登录，返回 JWT Token")
     @AutoLog(value = "用户登录", logType = LogType.LOGIN, operateType = OperateType.CUSTOM)
-    public BaseResult<Map<String, Object>> login(@RequestBody AuthUser authUser, HttpServletRequest request) {
+    public BaseResult<Map<String, Object>> login(@RequestBody LoginReq loginReq, HttpServletRequest request) {
         try {
-            String username = authUser.getUsername();
-            String password = authUser.getPassword();
+            String username = loginReq.getUsername();
+            String password = loginReq.getPassword();
 
             if (!StringUtils.hasText(username) || !StringUtils.hasText(password)) {
                 return BaseResult.error(400, "用户名和密码不能为空");
@@ -88,11 +89,11 @@ public class AuthController {
     @PostMapping("/changePassword")
     @Operation(summary = "修改密码", description = "修改当前登录用户的密码")
     @AutoLog(value = "修改密码", logType = LogType.OPERATION, operateType = OperateType.CUSTOM)
-    public BaseResult<Void> changePassword(@RequestBody AuthUser authUser, HttpServletRequest request) {
+    public BaseResult<Void> changePassword(@RequestBody ChangePwdReq changePwdReq, HttpServletRequest request) {
         try {
-            String oldPassword = authUser.getOldPassword();
-            String newPassword = authUser.getNewPassword();
-            String confirmPassword = authUser.getConfirmPassword();
+            String oldPassword = changePwdReq.getOldPassword();
+            String newPassword = changePwdReq.getNewPassword();
+            String confirmPassword = changePwdReq.getConfirmPassword();
 
             if (!StringUtils.hasText(oldPassword) || !StringUtils.hasText(newPassword)) {
                 return BaseResult.error(400, "旧密码和新密码不能为空");

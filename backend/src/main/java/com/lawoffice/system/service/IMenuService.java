@@ -1,6 +1,6 @@
 package com.lawoffice.system.service;
 
-import com.lawoffice.system.dto.MenuRouteDTO;
+import com.lawoffice.system.vo.MenuRouteVO;
 
 import java.util.List;
 
@@ -14,5 +14,5 @@ public interface IMenuService {
      * @param username 用户名
      * @return 菜单树列表
      */
-    List<MenuRouteDTO> getUserMenuTree(String username);
+    List<MenuRouteVO> getUserMenuTree(String username);
 }

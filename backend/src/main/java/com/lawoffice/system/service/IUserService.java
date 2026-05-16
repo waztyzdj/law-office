@@ -1,6 +1,7 @@
 package com.lawoffice.system.service;
 
 import com.lawoffice.framework.service.IBaseService;
+import com.lawoffice.system.vo.UserInfoVO;
 import com.lawoffice.system.entity.Role;
 import com.lawoffice.system.entity.SysDepart;
 import com.lawoffice.system.entity.Tenant;
@@ -127,5 +128,5 @@ public interface IUserService extends IBaseService<User, UserVO> {
      * @param username 用户名
      * @return 用户详细信息
      */
-    com.lawoffice.system.dto.UserInfoDTO getCurrentUserDetailInfo(String username);
+    UserInfoVO getCurrentUserDetailInfo(String username);
 }

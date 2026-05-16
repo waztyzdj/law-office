@@ -3,7 +3,7 @@ package com.lawoffice.system.controller;
 import com.lawoffice.framework.result.BaseResult;
 import com.lawoffice.framework.controller.BaseController;
 import com.lawoffice.framework.annotation.ModuleInfo;
-import com.lawoffice.system.dto.UserInfoDTO;
+import com.lawoffice.system.vo.UserInfoVO;
 import com.lawoffice.system.entity.User;
 import com.lawoffice.system.req.UserReq;
 import com.lawoffice.system.service.IUserService;
@@ -34,13 +34,13 @@ public class UserController extends BaseController<IUserService, User, UserVO, U
      */
     @GetMapping("/info")
     @Operation(summary = "获取用户详细信息", description = "获取当前登录用户的详细信息，包括角色和权限")
-    public BaseResult<UserInfoDTO> getUserInfo(HttpServletRequest request) {
+    public BaseResult<UserInfoVO> getUserInfo(HttpServletRequest request) {
         try {
             // 从 request 属性中获取用户名（由 JwtAuthFilter 设置）
             String username = (String) request.getAttribute("username");
             
             // 调用 Service 层处理业务逻辑
-            UserInfoDTO userInfo = baseService.getCurrentUserDetailInfo(username);
+            UserInfoVO userInfo = baseService.getCurrentUserDetailInfo(username);
             return BaseResult.success(userInfo);
 
         } catch (RuntimeException e) {

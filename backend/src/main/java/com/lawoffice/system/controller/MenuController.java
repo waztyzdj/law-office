@@ -2,7 +2,7 @@ package com.lawoffice.system.controller;
 
 import com.lawoffice.framework.annotation.ModuleInfo;
 import com.lawoffice.framework.result.BaseResult;
-import com.lawoffice.system.dto.MenuRouteDTO;
+import com.lawoffice.system.vo.MenuRouteVO;
 import com.lawoffice.system.service.IMenuService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -31,7 +31,7 @@ public class MenuController {
      */
     @GetMapping("/all")
     @Operation(summary = "获取所有菜单", description = "获取当前登录用户的菜单列表，返回树形结构")
-    public BaseResult<List<MenuRouteDTO>> getAllMenus(HttpServletRequest request) {
+    public BaseResult<List<MenuRouteVO>> getAllMenus(HttpServletRequest request) {
         try {
             // 从 request 属性中获取用户名（由 JwtAuthFilter 设置）
             String username = (String) request.getAttribute("username");
@@ -41,7 +41,7 @@ public class MenuController {
             }
             
             // 调用 Service 层处理业务逻辑
-            List<MenuRouteDTO> menuTree = menuService.getUserMenuTree(username);
+            List<MenuRouteVO> menuTree = menuService.getUserMenuTree(username);
             
             log.info("获取菜单成功，用户: {}, 菜单数量: {}", username, menuTree.size());
             return BaseResult.success(menuTree);

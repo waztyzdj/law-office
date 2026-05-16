@@ -1,8 +1,8 @@
 package com.lawoffice.system.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
-import com.lawoffice.system.dto.MenuMetaDTO;
-import com.lawoffice.system.dto.MenuRouteDTO;
+import com.lawoffice.system.vo.MenuMetaVO;
+import com.lawoffice.system.vo.MenuRouteVO;
 import com.lawoffice.system.entity.Permission;
 import com.lawoffice.system.entity.User;
 import com.lawoffice.system.mapper.UserMapper;
@@ -31,7 +31,7 @@ public class MenuServiceImpl implements IMenuService {
     private UserMapper userMapper;
 
     @Override
-    public List<MenuRouteDTO> getUserMenuTree(String username) {
+    public List<MenuRouteVO> getUserMenuTree(String username) {
         if (!StringUtils.hasText(username)) {
             throw new RuntimeException("用户名不能为空");
         }
@@ -56,7 +56,7 @@ public class MenuServiceImpl implements IMenuService {
     /**
      * 构建菜单树
      */
-    private List<MenuRouteDTO> buildMenuTree(List<Permission> permissions) {
+    private List<MenuRouteVO> buildMenuTree(List<Permission> permissions) {
         if (permissions == null || permissions.isEmpty()) {
             return new ArrayList<>();
         }
@@ -85,8 +85,8 @@ public class MenuServiceImpl implements IMenuService {
     /**
      * 递归构建菜单路由
      */
-    private MenuRouteDTO buildMenuRoute(Permission permission, List<Permission> allPermissions) {
-        MenuRouteDTO menuRoute = new MenuRouteDTO();
+    private MenuRouteVO buildMenuRoute(Permission permission, List<Permission> allPermissions) {
+        MenuRouteVO menuRoute = new MenuRouteVO();
         
         // 设置path
         menuRoute.setPath(permission.getUrl());
@@ -102,11 +102,11 @@ public class MenuServiceImpl implements IMenuService {
         menuRoute.setRedirect(permission.getRedirect());
         
         // 设置meta
-        MenuMetaDTO meta = buildMenuMeta(permission);
+        MenuMetaVO meta = buildMenuMeta(permission);
         menuRoute.setMeta(meta);
         
         // 递归设置子菜单
-        List<MenuRouteDTO> children = allPermissions.stream()
+        List<MenuRouteVO> children = allPermissions.stream()
                 .filter(p -> permission.getId().equals(p.getParentId()))
                 .sorted((p1, p2) -> {
                     if (p1.getSortNo() == null) return 1;
@@ -126,8 +126,8 @@ public class MenuServiceImpl implements IMenuService {
     /**
      * 构建菜单元数据
      */
-    private MenuMetaDTO buildMenuMeta(Permission permission) {
-        MenuMetaDTO meta = new MenuMetaDTO();
+    private MenuMetaVO buildMenuMeta(Permission permission) {
+        MenuMetaVO meta = new MenuMetaVO();
         
         // 标题
         meta.setTitle(permission.getName());

@@ -3,6 +3,7 @@ package com.lawoffice.system.service.impl;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.lawoffice.framework.dto.BaseDTO;
 import com.lawoffice.framework.service.impl.BaseServiceImpl;
+import com.lawoffice.system.vo.UserInfoVO;
 import com.lawoffice.system.entity.*;
 import com.lawoffice.system.mapper.*;
 import com.lawoffice.system.service.IUserService;
@@ -14,7 +15,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
-import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Collectors;
@@ -479,7 +479,7 @@ public class UserServiceImpl extends BaseServiceImpl<UserMapper, User, UserVO> i
     }
 
     @Override
-    public com.lawoffice.system.dto.UserInfoDTO getCurrentUserDetailInfo(String username) {
+    public UserInfoVO getCurrentUserDetailInfo(String username) {
         if (!StringUtils.hasText(username)) {
             throw new RuntimeException("未登录或登录已过期");
         }
@@ -506,17 +506,17 @@ public class UserServiceImpl extends BaseServiceImpl<UserMapper, User, UserVO> i
         log.info("用户 {} 的角色列表: {}", username, roleCodes);
         
         // 4. 构建返回结果
-        com.lawoffice.system.dto.UserInfoDTO userInfoDTO = new com.lawoffice.system.dto.UserInfoDTO();
-        userInfoDTO.setUserId(user.getId());
-        userInfoDTO.setUsername(user.getUsername());
-        userInfoDTO.setRealName(user.getRealname());
-        userInfoDTO.setPermissions(permissionCodes);
-        userInfoDTO.setRoles(roleCodes);
+        UserInfoVO userInfoVO = new UserInfoVO();
+        userInfoVO.setUserId(user.getId());
+        userInfoVO.setUsername(user.getUsername());
+        userInfoVO.setRealName(user.getRealname());
+        userInfoVO.setPermissions(permissionCodes);
+        userInfoVO.setRoles(roleCodes);
         // homePath 可以根据业务需求设置
-        userInfoDTO.setHomePath("/system/user");
+        userInfoVO.setHomePath("/system/user");
         
         log.info("获取用户详细信息成功：{}, 权限数量: {}, 角色数量: {}", username, permissionCodes.size(), roleCodes.size());
-        return userInfoDTO;
+        return userInfoVO;
     }
 
     /**

@@ -1,4 +1,4 @@
-package com.lawoffice.system.dto;
+package com.lawoffice.system.vo;
 
 import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.Data;
@@ -7,7 +7,7 @@ import java.util.List;
 
 @Data
 @Schema(description = "菜单路由信息")
-public class MenuRouteDTO {
+public class MenuRouteVO {
     
     @Schema(description = "路由路径")
     private String path;
@@ -22,8 +22,8 @@ public class MenuRouteDTO {
     private String redirect;
     
     @Schema(description = "元数据")
-    private MenuMetaDTO meta;
+    private MenuMetaVO meta;
     
     @Schema(description = "子菜单")
-    private List<MenuRouteDTO> children;
+    private List<MenuRouteVO> children;
 }
