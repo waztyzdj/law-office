@@ -37,6 +37,8 @@ export interface BaseListParams {
   current: number;
   size: number;
   queryParams?: Record<string, any>;
+  sortField?: string;
+  sortOrder?: string;
   [key: string]: any;
 }
 
