@@ -20,9 +20,4 @@ public class BasePageReq extends BaseQueryReq {
      * 每页数量
      */
     private int pageSize = 10;
-
-    /**
-     * 排序字段 (例如: createTime,desc)
-     */
-    private String orderBy;
 }

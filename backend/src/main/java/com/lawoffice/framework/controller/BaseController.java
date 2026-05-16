@@ -142,8 +142,8 @@ public class BaseController<S extends IBaseService<E, V>, E extends BaseEntity, 
             initBaseDTO(baseDTO, httpRequest, httpResponse);
 
             // 根据 req 中的条件构建 QueryWrapper
-            if (req != null && req.getQueryParams() != null && !req.getQueryParams().isEmpty()) {
-                baseDTO.setQueryWrapper(QueryWrapperBuilderUtils.build(req.getQueryParams()));
+            if (req != null) {
+                baseDTO.setQueryWrapper(QueryWrapperBuilderUtils.build(req));
             }
 
             doBeforeList(baseDTO, httpRequest, httpResponse);
@@ -199,8 +199,8 @@ public class BaseController<S extends IBaseService<E, V>, E extends BaseEntity, 
                 basePageDTO.setPageNum(req.getPageNum());
                 basePageDTO.setPageSize(req.getPageSize());
                 // 根据 req 中的条件构建 QueryWrapper
-                if (req.getQueryParams() != null && !req.getQueryParams().isEmpty()) {
-                    basePageDTO.setQueryWrapper(QueryWrapperBuilderUtils.build(req.getQueryParams()));
+                if (req != null) {
+                    basePageDTO.setQueryWrapper(QueryWrapperBuilderUtils.build(req));
                 }
             }
 
@@ -595,8 +595,8 @@ public class BaseController<S extends IBaseService<E, V>, E extends BaseEntity, 
             initBaseDTO(baseDTO, httpRequest, httpResponse);
 
             // 根据 req 中的条件构建 QueryWrapper
-            if (req != null && req.getQueryParams() != null && !req.getQueryParams().isEmpty()) {
-                baseDTO.setQueryWrapper(QueryWrapperBuilderUtils.build(req.getQueryParams()));
+            if (req != null) {
+                baseDTO.setQueryWrapper(QueryWrapperBuilderUtils.build(req));
             }
 
             doBeforeExport(baseDTO, httpRequest, httpResponse);

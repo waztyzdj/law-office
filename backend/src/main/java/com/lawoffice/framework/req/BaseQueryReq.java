@@ -15,4 +15,10 @@ public class BaseQueryReq {
 
     @Schema(description = "查询条件（键值对）", example = "{\"name\": \"张三\", \"status\": 1}")
     private Map<String, Object> queryParams;
+
+    @Schema(description = "排序字段", example = "createTime")
+    private String sortField;
+
+    @Schema(description = "排序方向（asc/desc）", example = "desc")
+    private String sortOrder = "desc";
 }
