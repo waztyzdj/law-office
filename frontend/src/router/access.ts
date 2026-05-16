@@ -8,7 +8,7 @@ import { preferences } from '@vben/preferences';
 
 import { message } from 'ant-design-vue';
 
-import { getAllMenusApi } from '#/api';
+import { getAllMenusApi } from '#/api/system';
 import { BasicLayout, IFrameView } from '#/layouts';
 import { $t } from '#/locales';
 

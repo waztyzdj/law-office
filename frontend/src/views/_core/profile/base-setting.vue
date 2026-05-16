@@ -7,7 +7,7 @@ import { computed, onMounted, ref } from 'vue';
 
 import { ProfileBaseSetting } from '@vben/common-ui';
 
-import { getUserInfoApi } from '#/api';
+import { getUserInfoApi } from '#/framework/api';
 
 const profileBaseSettingRef = ref();
 

@@ -1,14 +1,15 @@
-import type { UserInfo as VbenUserInfo } from '@vben/types';
+import type { BaseListParams } from '#/composables/Table/useTable';
 
-import { requestClient } from '#/api/request';
+import { requestClient } from '#/framework/api/request';
+import { BaseApi, type BaseQueryReq } from '#/framework/api/base.api';
 
 /**
- * 用户信息接口（系统管理用）
+ * 用户信息接口
  */
 export interface UserInfo {
-  id: string;
-  username: string;
-  realname: string;
+  id?: string;
+  username?: string;
+  realname?: string;
   avatar?: string;
   birthday?: string;
   sex?: number;
@@ -23,74 +24,45 @@ export interface UserInfo {
   updateTime?: string;
 }
 
-/**
- * 用户列表查询参数
- */
-export interface UserListParams {
-  current?: number;
-  size?: number;
-  username?: string;
-  realname?: string;
-  phone?: string;
-  email?: string;
-  status?: number;
-  queryParams?: Record<string, any>; // 动态查询条件（用于列头筛选）
+// 延迟创建用户管理的 CRUD API 实例（避免循环依赖）
+let _userApi: BaseApi | null = null;
+function getUserApi(): BaseApi {
+  if (!_userApi) {
+    _userApi = new BaseApi('/user');
+  }
+  return _userApi;
 }
 
 /**
- * 用户列表响应
- */
-export interface UserListResult {
-  items: UserInfo[];
-  total: number;
-}
-
-/**
- * 获取当前登录用户信息
+ * 获取当前登录用户信息（特殊接口，不在 BaseController 中）
  */
 export async function getUserInfoApi() {
-  return requestClient.get<VbenUserInfo>('/user/info');
+  return requestClient.get<any>('/user/info');
 }
 
 /**
- * 获取用户列表（分页）
+ * 用户列表查询（分页）- 适配 useTable 的格式
+ * 此函数会被 useTable 自动调用
  */
-export async function getUserListApi(params: UserListParams) {
+export async function getUserListApi(params: BaseListParams) {
   // 转换参数格式：current -> pageNum, size -> pageSize
-  const requestParams: any = {
+  const backendParams = {
     pageNum: params.current || 1,
     pageSize: params.size || 10,
-    queryParams: {} as Record<string, any>,
+    queryParams: params.queryParams || {},
   };
 
-  // 将搜索条件放入 queryParams
-  if (params.username) {
-    requestParams.queryParams.username = params.username;
-  }
-  if (params.realname) {
-    requestParams.queryParams.realname = params.realname;
-  }
-  if (params.phone) {
-    requestParams.queryParams.phone = params.phone;
-  }
-  if (params.email) {
-    requestParams.queryParams.email = params.email;
-  }
-  if (params.status !== undefined) {
-    requestParams.queryParams.status = params.status;
+  // 添加排序参数（在根级别，不在 queryParams 内）
+  if (params.sortField) {
+    Object.assign(backendParams, {
+      sortField: params.sortField,
+      sortOrder: params.sortOrder || 'desc',
+    });
   }
 
-  // 合并额外的 queryParams（来自列头筛选）
-  if (params.queryParams && Object.keys(params.queryParams).length > 0) {
-    requestParams.queryParams = {
-      ...requestParams.queryParams,
-      ...params.queryParams,
-    };
-  }
+  // 直接传递参数给后端
+  const response = await getUserApi().page(backendParams);
 
-  // 调用后端接口
-  const response = await requestClient.post<any>('/user/page', requestParams);
-  
   // 转换响应格式：后端返回 { records, total, pageNum, pageSize, pages }
   // 前端期望 { items, total }
   return {
@@ -103,33 +75,40 @@ export async function getUserListApi(params: UserListParams) {
  * 获取用户详情
  */
 export async function getUserDetailApi(id: string) {
-  return requestClient.get<UserInfo>(`/user/${id}`);
+  return getUserApi().getById({ id });
 }
 
 /**
- * 创建用户
+ * 保存用户（新增或修改）
  */
-export async function createUserApi(data: Partial<UserInfo>) {
-  return requestClient.post('/user', data);
-}
-
-/**
- * 更新用户
- */
-export async function updateUserApi(data: Partial<UserInfo>) {
-  return requestClient.put('/user', data);
+export async function saveUserApi(data: UserInfo) {
+  return getUserApi().save(data);
 }
 
 /**
  * 删除用户
  */
 export async function deleteUserApi(id: string) {
-  return requestClient.delete(`/user/${id}`);
+  return getUserApi().delete({ id });
 }
 
 /**
  * 批量删除用户
  */
 export async function batchDeleteUserApi(ids: string[]) {
-  return requestClient.delete('/user/batch', { data: ids });
+  return getUserApi().batchDelete(ids);
+}
+
+/**
+ * 导出用户 Excel
+ */
+export async function exportUserExcel(params?: BaseQueryReq) {
+  return getUserApi().exportExcel(params);
+}
+
+/**
+ * 导入用户 Excel
+ */
+export async function importUserExcel(file: File) {
+  return getUserApi().importExcel(file);
 }

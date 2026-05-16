@@ -1,4 +1,4 @@
-import { baseRequestClient, requestClient } from '#/api/request';
+import { baseRequestClient, requestClient } from '#/framework/api/request';
 
 export namespace AuthApi {
   /** 登录接口参数 */
@@ -15,6 +15,12 @@ export namespace AuthApi {
     realName: string;
     roles: string[];
     permissions: string[];
+    expireTime?: number;
+  }
+
+  /** 刷新Token接口返回值 */
+  export interface RefreshTokenResult {
+    token: string;
     expireTime?: number;
   }
 }
