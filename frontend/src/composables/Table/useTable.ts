@@ -260,6 +260,15 @@ export function useTable<T = any>(config: UseTableConfig<T>) {
     loadFiltersFromStorage(filtersKey)
   );
 
+  // 当前排序状态
+  const currentSort = reactive<{
+    sortField?: string;
+    sortOrder?: string;
+  }>({
+    sortField: undefined,
+    sortOrder: undefined,
+  });
+
   /**
    * 从 localStorage 加载筛选条件
    */
@@ -379,6 +388,12 @@ export function useTable<T = any>(config: UseTableConfig<T>) {
           ...(params.queryParams || {}),
           ...filterQueryParams,
         };
+      }
+
+      // 如果有排序参数，添加到请求中
+      if (currentSort.sortField) {
+        params.sortField = currentSort.sortField;
+        params.sortOrder = currentSort.sortOrder || 'desc';
       }
 
       const result = await fetchData(params);
@@ -510,17 +525,23 @@ export function useTable<T = any>(config: UseTableConfig<T>) {
 
     // 处理排序参数
     if (sorter && sorter.field) {
-      // const orderMap: Record<string, string> = {
-      //   ascend: 'asc',
-      //   descend: 'desc',
-      // };
-      // const order = orderMap[sorter.order] || '';
-
-      // TODO: 如果需要后端排序,可以将排序信息传递给 loadData
-      // 例如: loadData(extraSearchParams, undefined, { field: sorter.field, order })
+      const orderMap: Record<string, string> = {
+        ascend: 'asc',
+        descend: 'desc',
+      };
+      
+      // 如果排序方向为 null(第三次点击取消排序),则清空排序
+      if (!sorter.order) {
+        currentSort.sortField = undefined;
+        currentSort.sortOrder = undefined;
+      } else {
+        // 更新当前排序状态
+        currentSort.sortField = sorter.field;
+        currentSort.sortOrder = orderMap[sorter.order] || 'desc';
+      }
     }
 
-    // 重新加载数据(带上筛选条件)
+    // 重新加载数据(带上筛选和排序条件)
     loadData();
   }
 
