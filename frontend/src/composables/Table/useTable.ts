@@ -506,18 +506,27 @@ export function useTable<T = any>(config: UseTableConfig<T>) {
     pagination.pageSize = pag.pageSize;
 
     // 更新筛选状态并持久化 - 使用合并策略
+    // 关键修复：当点击列头排序时，filters 参数会传入状态标记值（如 ['filtered']），
+    // 而不是实际的筛选值。我们需要忽略这些状态标记，保留 activeFilters 中的实际筛选值。
     if (filters) {
       // 合并新旧筛选条件,保留未被修改的列的筛选条件
       // 当filters中某列为undefined时,表示该列被重置,应从activeFilters中移除
       const updatedFilters: Record<string, any> = { ...activeFilters.value };
 
       Object.keys(filters).forEach((key) => {
-        if (filters[key] === undefined) {
+        const filterValue = filters[key];
+        
+        if (filterValue === undefined) {
           // 重置的列,从activeFilters中移除
           delete updatedFilters[key];
+        } else if (filterValue === 'filtered' || (Array.isArray(filterValue) && filterValue.includes('filtered'))) {
+          // 这是 Ant Design Vue 的状态标记，不是实际的筛选值
+          // 保留已有的实际筛选值，不做任何操作
+          // 例如：用户输入"员"后点击排序，filters[key] 会是 ['filtered']，而不是实际的筛选值
         } else {
-          // 更新或新增筛选条件
-          updatedFilters[key] = filters[key];
+          // 只有当筛选值是实际的数组或对象时，才更新筛选条件
+          // 这表示用户通过筛选器明确修改了筛选条件
+          updatedFilters[key] = filterValue;
         }
       });
 
