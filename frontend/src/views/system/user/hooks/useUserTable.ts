@@ -8,7 +8,7 @@ import { pageUsers, deleteUser, batchDeleteUsers } from '#/api/system/user';
  */
 export function useUserTable(_getSearchParams?: () => any) {
   // 使用通用的 useTable（使用配置对象模式）
-  const table = useTable<UserInfo>({
+  const table = useTable({
     // API 配置（必填）
     apiConfig: {
       // 数据获取方法 - 直接使用便捷方法
@@ -29,11 +29,8 @@ export function useUserTable(_getSearchParams?: () => any) {
       batchTitle: '确认批量删除',
       batchContent: (count: number) => `确定要删除选中的 ${count} 个用户吗？`,
     },
-    // 表格配置（可选）
-    tableConfig: {
-      // 启用行选择功能（默认 false）
-      enableRowSelection: true,
-    },
+    // 启用行选择功能（默认 false）
+    enableRowSelection: true,
   });
 
   /**
