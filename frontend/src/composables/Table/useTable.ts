@@ -7,7 +7,7 @@ import type { BasePageReq } from '#/framework/api/base.api';
  * 表格分页配置类型
  */
 export interface TablePaginationConfig {
-  current: number;
+  pageNum: number;
   pageSize: number;
   total: number;
   showSizeChanger?: boolean;
@@ -43,7 +43,7 @@ export interface StorageConfig {
 /**
  * API 配置接口
  */
-export interface ApiConfig<T = any> {
+export interface ApiConfig {
   /** 
    * 获取数据的 API 方法（必填）
    * 
@@ -65,9 +65,9 @@ export interface ApiConfig<T = any> {
 /**
  * useTable 配置接口
  */
-export interface UseTableConfig<T = any> {
+export interface UseTableConfig {
   /** API 配置（必填） */
-  apiConfig: ApiConfig<T>;
+  apiConfig: ApiConfig;
   /** localStorage 配置（可选） */
   storageConfig?: StorageConfig;
   /** 删除对话框配置（可选） */
@@ -81,7 +81,7 @@ export interface UseTableConfig<T = any> {
  * @param config 配置对象
  * @returns 表格相关状态和方法
  */
-export function useTable<T = any>(config: UseTableConfig<T>) {
+export function useTable(config: UseTableConfig) {
   const {
     apiConfig,
     storageConfig,
@@ -119,12 +119,12 @@ export function useTable<T = any>(config: UseTableConfig<T>) {
   );
 
   // 表格数据
-  const dataSource = ref<T[]>([]);
+  const dataSource = ref<any[]>([]);
   const loading = ref(false);
 
   // 分页配置
   const pagination = reactive<TablePaginationConfig>({
-    current: 1,
+    pageNum: 1,
     pageSize: 10,
     total: 0,
     showSizeChanger: true,
@@ -259,7 +259,7 @@ export function useTable<T = any>(config: UseTableConfig<T>) {
 
       // 构建后端期望的参数格式（BasePageReq）
       const backendParams: BasePageReq = {
-        pageNum: pagination.current,
+        pageNum: pagination.pageNum,
         pageSize: pagination.pageSize,
         queryParams: Object.keys(filterQueryParams).length > 0 ? filterQueryParams : undefined,
         ...extraSearchParams,
@@ -379,7 +379,7 @@ export function useTable<T = any>(config: UseTableConfig<T>) {
    * 分页、排序、筛选变化
    */
   function handleTableChange(pag: any, filters: any, sorter: any) {
-    pagination.current = pag.current;
+    pagination.pageNum = pag.pageNum;
     pagination.pageSize = pag.pageSize;
 
     // 更新筛选状态并持久化 - 使用合并策略
@@ -445,7 +445,7 @@ export function useTable<T = any>(config: UseTableConfig<T>) {
    * 重置分页到第一页
    */
   function resetPagination() {
-    pagination.current = 1;
+    pagination.pageNum = 1;
   }
 
   return {
