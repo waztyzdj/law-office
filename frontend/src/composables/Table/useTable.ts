@@ -1,7 +1,7 @@
 import { ref, reactive, computed, watch } from 'vue';
 import { message, Modal } from 'ant-design-vue';
 import { getCustomPreferences } from '@vben/preferences';
-import type { BaseApi, BasePageReq } from '#/framework/api/base.api';
+import type { BasePageReq } from '#/framework/api/base.api';
 
 /**
  * 表格分页配置类型
@@ -24,26 +24,6 @@ export interface FilterCondition {
 }
 
 /**
- * 列表数据响应结构
- */
-export interface ListResponse<T = any> {
-  items: T[];
-  total: number;
-}
-
-/**
- * 通用列表参数接口
- */
-export interface BaseListParams {
-  current: number;
-  size: number;
-  queryParams?: Record<string, any>;
-  sortField?: string;
-  sortOrder?: string;
-  [key: string]: any;
-}
-
-/**
  * 删除操作配置
  */
 export interface DeleteConfig {
@@ -58,22 +38,6 @@ export interface DeleteConfig {
  */
 export interface StorageConfig {
   filtersKey?: string;
-}
-
-/**
- * 表格配置接口
- */
-export interface TableConfig {
-  /** 是否启用行选择功能，默认为 false */
-  enableRowSelection?: boolean;
-  /** 是否启用横向滚动，默认为 true */
-  enableScroll?: boolean;
-  /** 是否自动冻结操作列，默认为 true */
-  autoFreezeActionColumn?: boolean;
-  /** 操作列的 dataIndex，默认为 'action' */
-  actionColumnKey?: string;
-  /** 最小表格宽度，用于判断是否显示滚动条，默认为 800 */
-  minTableWidth?: number;
 }
 
 /**
@@ -108,99 +72,8 @@ export interface UseTableConfig<T = any> {
   storageConfig?: StorageConfig;
   /** 删除对话框配置（可选） */
   deleteConfig?: DeleteConfig;
-  /** 表格配置（可选） */
-  tableConfig?: TableConfig;
-}
-
-/**
- * 计算表格总宽度（排除固定列）
- * @param columns 列配置数组
- * @returns 非固定列的宽度总和
- */
-export function calculateTableWidth(columns: any[]): number {
-  return columns.reduce((sum, col) => {
-    // 排除固定列（fixed: 'left' 或 'right'）
-    if (col.fixed) {
-      return sum;
-    }
-    // 确保宽度是数字类型
-    const width = Number(col.width || 0);
-    return sum + width;
-  }, 0);
-}
-
-/**
- * 生成表格 scroll 配置
- * @param columns 列配置数组
- * @param options 配置选项
- * @returns scroll 配置对象
- */
-export function generateTableScroll(
-  columns: any[],
-  options: TableConfig = {}
-): { x: number | true } | undefined {
-  const {
-    enableScroll = true,
-    minTableWidth = 800,
-  } = options;
-
-  if (!enableScroll) {
-    return undefined;
-  }
-
-  // 只计算非固定列的总宽度
-  const nonFixedWidth = calculateTableWidth(columns);
-  
-  // 如果有右侧固定列，需要额外增加空间
-  const rightFixedWidth = columns
-    .filter(col => col.fixed === 'right')
-    .reduce((sum, col) => sum + Number(col.width || 0), 0);
-  
-  // 总滚动宽度 = 非固定列宽度 + 右侧固定列宽度（确保不被遮挡）
-  const totalScrollWidth = nonFixedWidth + rightFixedWidth;
-  
-  // 如果总宽度超过最小表格宽度，启用横向滚动
-  if (totalScrollWidth > minTableWidth) {
-    return { x: totalScrollWidth };
-  }
-  
-  // 否则使用 true 让表格自适应
-  return { x: true };
-}
-
-/**
- * 自动处理操作列冻结
- * @param columns 列配置数组
- * @param options 配置选项
- * @returns 处理后的列配置数组
- */
-export function autoFreezeActionColumn(
-  columns: any[],
-  options: TableConfig = {}
-): any[] {
-  const {
-    autoFreezeActionColumn = true,
-    actionColumnKey = 'action',
-  } = options;
-
-  if (!autoFreezeActionColumn) {
-    return columns;
-  }
-
-  // 查找操作列并自动冻结
-  return columns.map((col) => {
-    // 如果列的 dataIndex 或 key 包含 'action' 且未手动设置 fixed
-    if (
-      (col.dataIndex === actionColumnKey || col.key === actionColumnKey) &&
-      !col.fixed
-    ) {
-      return {
-        ...col,
-        fixed: 'right' as const,
-      };
-    }
-    return col;
-  });
+  /** 是否启用行选择功能，默认为 false */
+  enableRowSelection?: boolean;
 }
 
 /**
@@ -213,16 +86,11 @@ export function useTable<T = any>(config: UseTableConfig<T>) {
     apiConfig,
     storageConfig,
     deleteConfig,
-    tableConfig,
+    enableRowSelection = false,
   } = config;
 
   // 从 apiConfig 中解构 API 方法
   const { fetchData, deleteItem, batchDeleteItems } = apiConfig;
-
-  // 从 tableConfig 中解构表格配置，并设置默认值
-  const {
-    enableRowSelection = false,
-  } = tableConfig || {};
 
   // 获取扩展偏好设置中的表格行高配置
   const customPreferences = getCustomPreferences<{ tableRowHeight?: number }>();
