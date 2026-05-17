@@ -1,7 +1,5 @@
-import type { BaseListParams } from '#/composables/Table/useTable';
-
 import { requestClient } from '#/framework/api/request';
-import { BaseApi, type BaseQueryReq } from '#/framework/api/base.api';
+import { BaseApi, type BasePageReq, type BaseQueryReq } from '#/framework/api/base.api';
 
 /**
  * 用户信息接口
@@ -24,14 +22,8 @@ export interface UserInfo {
   updateTime?: string;
 }
 
-// 延迟创建用户管理的 CRUD API 实例（避免循环依赖）
-let _userApi: BaseApi | null = null;
-function getUserApi(): BaseApi {
-  if (!_userApi) {
-    _userApi = new BaseApi('/user');
-  }
-  return _userApi;
-}
+// 创建并导出用户管理的 CRUD API 实例
+export const userApi = new BaseApi('/user');
 
 /**
  * 获取当前登录用户信息（特殊接口，不在 BaseController 中）
@@ -41,74 +33,46 @@ export async function getUserInfoApi() {
 }
 
 /**
- * 用户列表查询（分页）- 适配 useTable 的格式
- * 此函数会被 useTable 自动调用
+ * 用户 CRUD API 便捷方法工厂
+ * 基于 BaseApi 实例生成类型安全的便捷方法
+ * 
+ * @example
+ * const { deleteUser, batchDeleteUsers } = createUserApiMethods();
+ * await deleteUser('123');
+ * await batchDeleteUsers(['1', '2']);
  */
-export async function getUserListApi(params: BaseListParams) {
-  // 转换参数格式：current -> pageNum, size -> pageSize
-  const backendParams = {
-    pageNum: params.current || 1,
-    pageSize: params.size || 10,
-    queryParams: params.queryParams || {},
-  };
-
-  // 添加排序参数（在根级别，不在 queryParams 内）
-  if (params.sortField) {
-    Object.assign(backendParams, {
-      sortField: params.sortField,
-      sortOrder: params.sortOrder || 'desc',
-    });
-  }
-
-  // 直接传递参数给后端
-  const response = await getUserApi().page(backendParams);
-
-  // 转换响应格式：后端返回 { records, total, pageNum, pageSize, pages }
-  // 前端期望 { items, total }
+export function createUserApiMethods() {
   return {
-    items: response.records || [],
-    total: response.total || 0,
+    /** 分页查询用户列表 */
+    pageUsers: (params: BasePageReq) => userApi.page(params),
+    
+    /** 获取单个用户详情 */
+    getUserById: (id: string) => userApi.getById<UserInfo>({ id }),
+    
+    /** 保存用户（新增或修改） */
+    saveUser: (data: UserInfo) => userApi.save<UserInfo>(data),
+    
+    /** 删除单个用户 - 自动转换 ID 类型 */
+    deleteUser: (id: string | number) => userApi.delete({ id: String(id) }),
+    
+    /** 批量删除用户 - 自动转换 ID 类型 */
+    batchDeleteUsers: (ids: (string | number)[]) => userApi.batchDelete(ids.map(id => String(id))),
+    
+    /** 导出用户 Excel */
+    exportUsers: (params?: BaseQueryReq) => userApi.exportExcel(params),
+    
+    /** 导入用户 Excel */
+    importUsers: (file: File) => userApi.importExcel(file),
   };
 }
 
-/**
- * 获取用户详情
- */
-export async function getUserDetailApi(id: string) {
-  return getUserApi().getById({ id });
-}
-
-/**
- * 保存用户（新增或修改）
- */
-export async function saveUserApi(data: UserInfo) {
-  return getUserApi().save(data);
-}
-
-/**
- * 删除用户
- */
-export async function deleteUserApi(id: string) {
-  return getUserApi().delete({ id });
-}
-
-/**
- * 批量删除用户
- */
-export async function batchDeleteUserApi(ids: string[]) {
-  return getUserApi().batchDelete(ids);
-}
-
-/**
- * 导出用户 Excel
- */
-export async function exportUserExcel(params?: BaseQueryReq) {
-  return getUserApi().exportExcel(params);
-}
-
-/**
- * 导入用户 Excel
- */
-export async function importUserExcel(file: File) {
-  return getUserApi().importExcel(file);
-}
+// 导出便捷方法实例（可选，方便直接导入使用）
+export const {
+  pageUsers,
+  getUserById,
+  saveUser,
+  deleteUser,
+  batchDeleteUsers,
+  exportUsers,
+  importUsers,
+} = createUserApiMethods();

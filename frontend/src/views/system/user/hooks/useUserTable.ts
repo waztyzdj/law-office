@@ -1,28 +1,22 @@
 import { useTable } from '#/composables/Table';
-import type { UserInfo, UserListParams } from '#/api/system/user';
-import { getUserListApi, deleteUserApi, batchDeleteUserApi } from '#/api/system/user';
+import type { UserInfo } from '#/api/system/user';
+import { pageUsers, deleteUser, batchDeleteUsers } from '#/api/system/user';
 
 /**
  * 用户表格逻辑组合式函数
- * @param getSearchParams 获取搜索表单参数的方法
+ * @param getSearchParams 获取搜索表单参数的方法（已废弃，保留兼容）
  */
-export function useUserTable(getSearchParams: () => Partial<UserListParams>) {
+export function useUserTable(_getSearchParams?: () => any) {
   // 使用通用的 useTable（使用配置对象模式）
   const table = useTable<UserInfo>({
     // API 配置（必填）
     apiConfig: {
-      // 数据获取方法
-      fetchData: async (params) => {
-        const result = await getUserListApi(params as UserListParams);
-        return {
-          items: result.items || [],
-          total: result.total || 0,
-        };
-      },
-      // 删除单个用户（可选）
-      deleteItem: (id: string | number) => deleteUserApi(String(id)),
-      // 批量删除用户（可选）
-      batchDeleteItems: (ids: (string | number)[]) => batchDeleteUserApi(ids.map(id => String(id))),
+      // 数据获取方法 - 直接使用便捷方法
+      fetchData: pageUsers,
+      // 删除单个用户 - 使用便捷方法
+      deleteItem: deleteUser,
+      // 批量删除用户 - 使用便捷方法
+      batchDeleteItems: batchDeleteUsers,
     },
     // localStorage 配置（可选）
     storageConfig: {
@@ -43,11 +37,10 @@ export function useUserTable(getSearchParams: () => Partial<UserListParams>) {
   });
 
   /**
-   * 加载用户表格数据（包装一层，自动传入搜索参数）
+   * 加载用户表格数据（简化版本，不再需要包装层）
    */
   const loadData = async (extraFilters?: Record<string, any>) => {
-    const searchParams = getSearchParams();
-    await table.loadData(searchParams, extraFilters);
+    await table.loadData({}, extraFilters);
   };
 
   return {

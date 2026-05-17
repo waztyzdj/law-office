@@ -1,6 +1,7 @@
 import { ref, reactive, computed, watch } from 'vue';
 import { message, Modal } from 'ant-design-vue';
 import { getCustomPreferences } from '@vben/preferences';
+import type { BaseApi, BasePageReq } from '#/framework/api/base.api';
 
 /**
  * 表格分页配置类型
@@ -79,8 +80,18 @@ export interface TableConfig {
  * API 配置接口
  */
 export interface ApiConfig<T = any> {
-  /** 获取数据的 API 方法（必填） */
-  fetchData: (params: BaseListParams) => Promise<ListResponse<T>>;
+  /** 
+   * 获取数据的 API 方法（必填）
+   * 
+   * 重要：必须使用箭头函数包装 BaseApi 方法以保持 this 上下文！
+   * 
+   * ✅ 正确示例：
+   * fetchData: (params) => userApi.page(params)
+   * 
+   * ❌ 错误示例（会导致 this 丢失）：
+   * fetchData: userApi.page
+   */
+  fetchData: (params: BasePageReq) => Promise<any>;
   /** 删除单个项目的 API 方法（可选） */
   deleteItem?: (id: string | number) => Promise<any>;
   /** 批量删除的 API 方法（可选） */
@@ -378,29 +389,27 @@ export function useTable<T = any>(config: UseTableConfig<T>) {
       const tableFilters = activeFilters.value;
       const filterQueryParams = convertFiltersToQueryParams(tableFilters);
 
-      const params: BaseListParams = {
-        current: pagination.current,
-        size: pagination.pageSize,
+      // 构建后端期望的参数格式（BasePageReq）
+      const backendParams: BasePageReq = {
+        pageNum: pagination.current,
+        pageSize: pagination.pageSize,
+        queryParams: Object.keys(filterQueryParams).length > 0 ? filterQueryParams : undefined,
         ...extraSearchParams,
       };
 
-      // 如果有筛选条件，添加到 queryParams
-      if (Object.keys(filterQueryParams).length > 0) {
-        params.queryParams = {
-          ...(params.queryParams || {}),
-          ...filterQueryParams,
-        };
-      }
-
-      // 如果有排序参数，添加到请求中
+      // 如果有排序参数，添加到请求中（在根级别，不在 queryParams 内）
       if (currentSort.sortField) {
-        params.sortField = currentSort.sortField;
-        params.sortOrder = currentSort.sortOrder || 'desc';
+        backendParams.sortField = currentSort.sortField;
+        backendParams.sortOrder = currentSort.sortOrder || 'desc';
       }
 
-      const result = await fetchData(params);
-      dataSource.value = result.items || [];
-      pagination.total = result.total || 0;
+      // 调用 API 获取数据
+      const response = await fetchData(backendParams);
+      
+      // 转换响应格式：后端返回 { records, total, pageNum, pageSize, pages }
+      // 前端期望 { items, total }
+      dataSource.value = response.records || [];
+      pagination.total = response.total || 0;
     } catch (error) {
       message.error('加载数据失败');
       console.error('加载数据错误:', error);
