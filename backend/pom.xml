@@ -149,6 +149,14 @@
             <artifactId>spring-boot-starter-data-redis</artifactId>
         </dependency>
 
+        <!-- Spring Boot DevTools (热启动) -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-devtools</artifactId>
+            <scope>runtime</scope>
+            <optional>true</optional>
+        </dependency>
+
         <!-- Lettuce connection pool (Redis 客户端) -->
         <dependency>
             <groupId>org.apache.commons</groupId>
@@ -194,6 +202,7 @@
                             <artifactId>lombok</artifactId>
                         </exclude>
                     </excludes>
+                    <excludeDevtools>false</excludeDevtools>
                 </configuration>
             </plugin>
         </plugins>

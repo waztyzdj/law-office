@@ -1,6 +1,12 @@
 spring:
   profiles:
     active: ${SPRING_PROFILES_ACTIVE:dev}
+  devtools:
+    restart:
+      enabled: true
+      exclude: static/**,public/**,templates/**
+    livereload:
+      enabled: true
 
 # Jasypt 加密配置
 jasypt:
