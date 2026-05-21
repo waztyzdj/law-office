@@ -23,6 +23,12 @@ import java.util.stream.Collectors;
 @Service
 public class UserServiceImpl extends BaseServiceImpl<UserMapper, User, UserVO> implements IUserService {
 
+    private static final String PASSWORD_PATTERN = "^(?=.*[a-z])(?=.*[A-Z])(?=.*\\d)(?=.*[^\\dA-Za-z]).{8,20}$";
+    private static final String PHONE_PATTERN = "^1[3-9]\\d{9}$";
+    private static final String EMAIL_PATTERN = "^[A-Za-z0-9+_.-]+@[A-Za-z0-9.-]+$";
+    private static final String TELEPHONE_PATTERN = "^(?:\\d{3,4}-?)?\\d{7,8}$";
+    private static final String ID_CARD_PATTERN = "(^\\d{15}$)|(^\\d{17}[\\dXx]$)";
+
     @Autowired
     private UserRoleMapper userRoleMapper;
 
@@ -62,48 +68,116 @@ public class UserServiceImpl extends BaseServiceImpl<UserMapper, User, UserVO> i
         if (user == null) {
             return;
         }
+
+        normalizeUser(user);
+
+        boolean isCreate = !StringUtils.hasText(user.getId());
+        validateUser(user, isCreate);
         
-        if (user.getId() == null || user.getId().isEmpty()) {
+        if (isCreate) {
             log.info("新增用户，用户名: {}", user.getUsername());
-            
-            LambdaQueryWrapper<User> wrapper = new LambdaQueryWrapper<>();
-            wrapper.eq(User::getUsername, user.getUsername())
-                   .eq(User::getDeleteFlag, 0);
-            if (baseMapper.selectCount(wrapper) > 0) {
-                throw new RuntimeException("用户名已存在");
-            }
-            
-            if (StringUtils.hasText(user.getPhone())) {
-                LambdaQueryWrapper<User> phoneWrapper = new LambdaQueryWrapper<>();
-                phoneWrapper.eq(User::getPhone, user.getPhone())
-                           .eq(User::getDeleteFlag, 0);
-                if (baseMapper.selectCount(phoneWrapper) > 0) {
-                    throw new RuntimeException("手机号已被使用");
-                }
-            }
-            
-            if (StringUtils.hasText(user.getIdCard())) {
-                LambdaQueryWrapper<User> idCardWrapper = new LambdaQueryWrapper<>();
-                idCardWrapper.eq(User::getIdCard, user.getIdCard())
-                            .eq(User::getDeleteFlag, 0);
-                if (baseMapper.selectCount(idCardWrapper) > 0) {
-                    throw new RuntimeException("身份证号已被使用");
-                }
-            }
-            
-            if (StringUtils.hasText(user.getPassword())) {
-                user.setPassword(passwordEncoder.encode(user.getPassword()));
-            }
+
+            validateUnique(user, null);
+            user.setPassword(passwordEncoder.encode(user.getPassword()));
             
             if (user.getStatus() == null) {
                 user.setStatus(1);
             }
         } else {
             log.info("修改用户，用户ID: {}", user.getId());
-            
-            if (StringUtils.hasText(user.getPassword())) {
-                user.setPassword(passwordEncoder.encode(user.getPassword()));
-            }
+
+            keepProtectedFields(user);
+            validateUnique(user, user.getId());
+        }
+    }
+
+    private void keepProtectedFields(User user) {
+        User existing = userMapper.selectById(user.getId());
+        if (existing == null || (existing.getDeleteFlag() != null && existing.getDeleteFlag() == 1)) {
+            throw new IllegalArgumentException("用户不存在或已被删除");
+        }
+
+        user.setUsername(existing.getUsername());
+        user.setPassword(null);
+    }
+
+    private void normalizeUser(User user) {
+        user.setUsername(trimToNull(user.getUsername()));
+        user.setRealname(trimToNull(user.getRealname()));
+        user.setPassword(trimToNull(user.getPassword()));
+        user.setEmail(trimToNull(user.getEmail()));
+        user.setPhone(trimToNull(user.getPhone()));
+        user.setWorkNo(trimToNull(user.getWorkNo()));
+        user.setPost(trimToNull(user.getPost()));
+        user.setTelephone(trimToNull(user.getTelephone()));
+        user.setIdCard(trimToNull(user.getIdCard()));
+    }
+
+    private String trimToNull(String value) {
+        if (!StringUtils.hasText(value)) {
+            return null;
+        }
+        return value.trim();
+    }
+
+    private void validateUser(User user, boolean isCreate) {
+        if (!StringUtils.hasText(user.getUsername())) {
+            throw new IllegalArgumentException("用户名不能为空");
+        }
+        if (!StringUtils.hasText(user.getRealname())) {
+            throw new IllegalArgumentException("真实姓名不能为空");
+        }
+        if (isCreate && !StringUtils.hasText(user.getPassword())) {
+            throw new IllegalArgumentException("登录密码不能为空");
+        }
+        if (StringUtils.hasText(user.getPassword()) && !user.getPassword().matches(PASSWORD_PATTERN)) {
+            throw new IllegalArgumentException("密码需为8-20位，包含大小写字母、数字和特殊字符");
+        }
+        if (StringUtils.hasText(user.getPhone()) && !user.getPhone().matches(PHONE_PATTERN)) {
+            throw new IllegalArgumentException("手机号码格式不正确");
+        }
+        if (StringUtils.hasText(user.getEmail()) && !user.getEmail().matches(EMAIL_PATTERN)) {
+            throw new IllegalArgumentException("邮箱格式不正确");
+        }
+        if (StringUtils.hasText(user.getTelephone()) && !user.getTelephone().matches(TELEPHONE_PATTERN)) {
+            throw new IllegalArgumentException("座机号码格式不正确");
+        }
+        if (StringUtils.hasText(user.getIdCard()) && !user.getIdCard().matches(ID_CARD_PATTERN)) {
+            throw new IllegalArgumentException("身份证号格式不正确");
+        }
+        if (user.getSex() != null && user.getSex() != 0 && user.getSex() != 1 && user.getSex() != 2) {
+            throw new IllegalArgumentException("性别参数不正确");
+        }
+        if (user.getStatus() != null && user.getStatus() != 1 && user.getStatus() != 2) {
+            throw new IllegalArgumentException("状态参数不正确");
+        }
+    }
+
+    private void validateUnique(User user, String excludeId) {
+        validateUniqueField(User::getUsername, user.getUsername(), excludeId, "用户名已存在");
+        validateUniqueField(User::getPhone, user.getPhone(), excludeId, "手机号已被使用");
+        validateUniqueField(User::getEmail, user.getEmail(), excludeId, "邮箱已被使用");
+        validateUniqueField(User::getWorkNo, user.getWorkNo(), excludeId, "工号已被使用");
+        validateUniqueField(User::getIdCard, user.getIdCard(), excludeId, "身份证号已被使用");
+    }
+
+    private void validateUniqueField(
+            com.baomidou.mybatisplus.core.toolkit.support.SFunction<User, ?> column,
+            String value,
+            String excludeId,
+            String message) {
+        if (!StringUtils.hasText(value)) {
+            return;
+        }
+
+        LambdaQueryWrapper<User> wrapper = new LambdaQueryWrapper<>();
+        wrapper.eq(column, value)
+               .eq(User::getDeleteFlag, 0);
+        if (StringUtils.hasText(excludeId)) {
+            wrapper.ne(User::getId, excludeId);
+        }
+        if (baseMapper.selectCount(wrapper) > 0) {
+            throw new IllegalArgumentException(message);
         }
     }
 

@@ -8,6 +8,7 @@ export interface UserInfo {
   id?: string;
   username?: string;
   realname?: string;
+  password?: string;
   avatar?: string;
   birthday?: string;
   sex?: number;
@@ -18,6 +19,11 @@ export interface UserInfo {
   post?: string;
   telephone?: string;
   idCard?: string;
+  userIdentity?: number;
+  departIds?: string;
+  clientId?: string;
+  loginTenantId?: string;
+  bpmStatus?: string;
   createTime?: string;
   updateTime?: string;
 }

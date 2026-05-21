@@ -48,14 +48,54 @@ public class UserVO extends BaseVO {
     private String phone;
 
     /**
-     * 部门ID
+     * 工号
      */
-    private String departId;
+    private String workNo;
 
     /**
-     * 状态(1-正常,0-冻结)
+     * 职务
+     */
+    private String post;
+
+    /**
+     * 座机号
+     */
+    private String telephone;
+
+    /**
+     * 身份证号
+     */
+    private String idCard;
+
+    /**
+     * 状态(1-正常,2-冻结)
      */
     private Integer status;
+
+    /**
+     * 身份（1普通成员 2上级）
+     */
+    private Integer userIdentity;
+
+    /**
+     * 负责部门
+     */
+    private String departIds;
+
+    /**
+     * 设备ID
+     */
+    private String clientId;
+
+    /**
+     * 上次登录选择租户ID
+     */
+    private String loginTenantId;
+
+    /**
+     * 流程入职离职状态
+     */
+    private String bpmStatus;
 
     /**
      * 删除标识(0-正常,1-已删除)

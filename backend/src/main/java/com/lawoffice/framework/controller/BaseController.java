@@ -21,6 +21,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
+import jakarta.validation.Valid;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import java.io.IOException;
@@ -305,7 +306,7 @@ public class BaseController<S extends IBaseService<E, V>, E extends BaseEntity, 
     @PostMapping("/save")
     @Operation(summary = "保存数据")
     public BaseResult<V> save(
-            @RequestBody R req,
+            @Valid @RequestBody R req,
             HttpServletRequest httpRequest,
             HttpServletResponse httpResponse) {
         try {

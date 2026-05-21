@@ -137,6 +137,9 @@ public class BaseServiceImpl<M extends BaseMapper<E>, E extends BaseEntity, V ex
             V vo = BeanUtil.toBean(entity, getVoClass());
             doAfterSave(saveDTO, vo);
             return BaseResult.success(vo);
+        } catch (IllegalArgumentException e) {
+            log.warn("保存参数校验失败: {}", e.getMessage());
+            return BaseResult.error(400, e.getMessage());
         } catch (Exception e) {
             log.error("保存失败", e);
             return BaseResult.error("保存失败: " + e.getMessage());

@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { onMounted } from 'vue';
-import { message } from 'ant-design-vue';
+import { onMounted, ref } from 'vue';
+import type { UserInfo } from '#/api/system/user';
 import UserTable from './components/UserTable.vue';
+import UserFormDrawer from './components/UserFormDrawer.vue';
 import { useUserTable } from './hooks/useUserTable';
 
 // 使用表格组合式函数（不需要搜索参数）
@@ -17,15 +18,24 @@ const {
 } = useUserTable(() => ({}));
 
 // 编辑用户
-const handleEdit = (record: any) => {
-  message.info(`编辑用户：${record.username}`);
-  // TODO: 打开编辑对话框
+const handleEdit = (record: UserInfo) => {
+  userFormDrawerRef.value?.open({
+    mode: 'edit',
+    record,
+  });
 };
 
 // 新增用户
 const handleAdd = () => {
-  message.info('新增用户功能待实现');
-  // TODO: 打开新增对话框
+  userFormDrawerRef.value?.open({
+    mode: 'create',
+  });
+};
+
+const userFormDrawerRef = ref();
+
+const handleSaveSuccess = () => {
+  loadData();
 };
 
 // 初始化加载
@@ -50,6 +60,7 @@ onMounted(() => {
       @change="handleTableChange"
       @add="handleAdd"
     />
+    <UserFormDrawer ref="userFormDrawerRef" @success="handleSaveSuccess" />
   </div>
 </template>
 
