@@ -99,6 +99,7 @@ export const useAuthStore = defineStore('auth', () => {
       username: userInfo.username || (userInfo as any).username,
       realName: userInfo.realName || (userInfo as any).realName,
       roles: userInfo.roles || (userInfo as any).roles || [],
+      permissions: userInfo.permissions || (userInfo as any).permissions || [],
       homePath: userInfo.homePath || preferences.app.defaultHomePath,
       desc: userInfo.desc || (userInfo as any).desc || '',
       token: accessStore.accessToken || '',

@@ -8,6 +8,7 @@ import {
 } from 'ant-design-vue';
 import type { UserInfo } from '#/api/system/user';
 import type { TablePaginationConfig } from '#/composables/Table';
+import { permissionCodes } from '#/constants/permissions';
 import { getUserColumns } from '../hooks/useUserColumns';
 
 interface Props {
@@ -38,7 +39,13 @@ const tableConfig = computed(() => getUserColumns(filterStateRef, emit, props.pa
   <Card class="table-card" style="margin-top: 16px;">
     <div class="table-toolbar">
       <Space>
-        <Button type="primary" @click="$emit('add')">新增用户</Button>
+        <Button
+          v-access:code="permissionCodes.user.edit"
+          type="primary"
+          @click="$emit('add')"
+        >
+          新增用户
+        </Button>
       </Space>
     </div>
     

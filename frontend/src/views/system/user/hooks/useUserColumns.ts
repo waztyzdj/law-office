@@ -1,8 +1,10 @@
 import { h } from 'vue';
 import { Space } from 'ant-design-vue';
+import { useAccess } from '@vben/access';
 import type { UserInfo } from '#/api/system/user';
 import type { TablePaginationConfig, TableColumnsResult } from '#/composables/Table';
 import { defineTableColumns } from '#/composables/Table';
+import { permissionCodes } from '#/constants/permissions';
 
 /**
  * 用户列表列定义配置
@@ -12,8 +14,11 @@ export function getUserColumns(
   emit: any,
   pagination: TablePaginationConfig
 ): TableColumnsResult {
+  const { hasAccessByCodes } = useAccess();
+  const canEditUser = hasAccessByCodes([permissionCodes.user.edit]);
+
   // 定义列配置数组
-  const columns = [
+  const columns: any[] = [
     {
       dataIndex: 'username',
       title: '用户名',
@@ -77,7 +82,8 @@ export function getUserColumns(
         ],
       },
     },
-    {
+    canEditUser
+      ? {
       dataIndex: 'action',
       title: '操作',
       options: {
@@ -93,9 +99,10 @@ export function getUserColumns(
           });
         },
       },
-    },
+    }
+      : null,
   ];
 
   // 使用通用列定义函数处理（返回 { columns, scroll }）
-  return defineTableColumns(columns, filterState, emit, pagination);
+  return defineTableColumns(columns.filter(Boolean), filterState, emit, pagination);
 }
