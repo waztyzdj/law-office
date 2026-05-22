@@ -8,7 +8,20 @@ import { useVbenDrawer } from '@vben/common-ui';
 
 import { message } from 'ant-design-vue';
 
-import { useVbenForm, z } from '#/adapter/form';
+import {
+  cleanFormPayload,
+  clearAutofillValues,
+  confirmPasswordRule,
+  newPasswordInputProps,
+  noAutofillInputProps,
+  optionalIdCardRule,
+  optionalMobilePhoneRule,
+  optionalString,
+  optionalTelephoneRule,
+  passwordComplexityRule,
+  useVbenForm,
+  z,
+} from '#/adapter/form';
 import { getUserById, saveUser } from '#/api/system/user';
 
 type DrawerMode = 'create' | 'edit';
@@ -29,21 +42,6 @@ const hasSyncedMountedValues = ref(false);
 
 const isCreate = computed(() => mode.value === 'create');
 const drawerTitle = computed(() => (isCreate.value ? '新增用户' : '编辑用户'));
-
-const passwordPattern =
-  /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^\dA-Za-z]).{8,20}$/;
-const phonePattern = /^1[3-9]\d{9}$/;
-const telephonePattern = /^(?:\d{3,4}-?)?\d{7,8}$/;
-
-const optionalString = (schema: z.ZodString) =>
-  z.preprocess(
-    (value) => (value === '' || value === null ? undefined : value),
-    schema.optional(),
-  );
-
-const basePasswordRule = z
-  .string()
-  .regex(passwordPattern, '密码需为8-20位，包含大小写字母、数字和特殊字符');
 
 const getDefaultValue = (fieldName: string, fallback?: any) =>
   initialValues.value[fieldName] ?? fallback;
@@ -68,7 +66,9 @@ function clearCreateAutofillValues() {
     return;
   }
 
-  void formApi.setValues({ ...emptyUserFormValues });
+  clearAutofillValues(formApi, emptyUserFormValues, {
+    enabled: () => isCreate.value,
+  });
 }
 
 const buildPasswordSchemas = (): VbenFormSchema[] => [
@@ -77,36 +77,26 @@ const buildPasswordSchemas = (): VbenFormSchema[] => [
     component: 'VbenInputPassword',
     label: '登录密码',
     defaultValue: undefined,
-    rules: basePasswordRule,
-    componentProps: {
-      autocomplete: 'new-password',
+    rules: passwordComplexityRule(),
+    componentProps: newPasswordInputProps('newUserPassword', {
       maxlength: 20,
-      name: 'newUserPassword',
       passwordStrength: true,
       placeholder: '请输入登录密码',
-    },
+    }),
   },
   {
     fieldName: 'confirmPassword',
     component: 'VbenInputPassword',
     label: '确认密码',
     defaultValue: undefined,
-    componentProps: {
-      autocomplete: 'new-password',
+    componentProps: newPasswordInputProps('newUserConfirmPassword', {
       maxlength: 20,
-      name: 'newUserConfirmPassword',
       passwordStrength: true,
       placeholder: '请再次输入登录密码',
-    },
+    }),
     dependencies: {
       rules(values) {
-        const { password } = values;
-        return z
-          .string({ required_error: '请再次输入登录密码' })
-          .min(1, { message: '请再次输入登录密码' })
-          .refine((value) => value === password, {
-            message: '两次输入的密码不一致',
-          });
+        return confirmPasswordRule(values);
       },
       triggerFields: ['password'],
     },
@@ -124,13 +114,14 @@ const buildFormSchema = (create: boolean): VbenFormSchema[] => {
         .string({ required_error: '请输入用户名' })
         .min(1, { message: '请输入用户名' })
         .max(50, { message: '用户名不能超过50个字符' }),
-      componentProps: {
-        autocomplete: 'off',
-        disabled: !create,
-        maxlength: 50,
-        name: create ? 'newUserAccount' : 'editUserAccount',
-        placeholder: '请输入用户名',
-      },
+      componentProps: noAutofillInputProps(
+        create ? 'newUserAccount' : 'editUserAccount',
+        {
+          disabled: !create,
+          maxlength: 50,
+          placeholder: '请输入用户名',
+        },
+      ),
     },
     {
       fieldName: 'realname',
@@ -141,12 +132,10 @@ const buildFormSchema = (create: boolean): VbenFormSchema[] => {
         .string({ required_error: '请输入真实姓名' })
         .min(1, { message: '请输入真实姓名' })
         .max(50, { message: '真实姓名不能超过50个字符' }),
-      componentProps: {
-        autocomplete: 'off',
+      componentProps: noAutofillInputProps('userRealname', {
         maxlength: 50,
-        name: 'userRealname',
         placeholder: '请输入真实姓名',
-      },
+      }),
     },
   ];
 
@@ -160,15 +149,11 @@ const buildFormSchema = (create: boolean): VbenFormSchema[] => {
       component: 'Input',
       label: '手机号码',
       defaultValue: getDefaultValue('phone', ''),
-      rules: optionalString(
-        z.string().regex(phonePattern, '请输入正确的手机号码'),
-      ),
-      componentProps: {
-        autocomplete: 'off',
+      rules: optionalMobilePhoneRule(),
+      componentProps: noAutofillInputProps('userMobilePhone', {
         maxlength: 11,
-        name: 'userMobilePhone',
         placeholder: '请输入手机号码',
-      },
+      }),
     },
     {
       fieldName: 'email',
@@ -176,12 +161,10 @@ const buildFormSchema = (create: boolean): VbenFormSchema[] => {
       label: '邮箱',
       defaultValue: getDefaultValue('email', ''),
       rules: optionalString(z.string().email('请输入正确的邮箱地址')),
-      componentProps: {
-        autocomplete: 'off',
+      componentProps: noAutofillInputProps('userContactEmail', {
         maxlength: 100,
-        name: 'userContactEmail',
         placeholder: '请输入邮箱',
-      },
+      }),
     },
     {
       fieldName: 'sex',
@@ -216,12 +199,10 @@ const buildFormSchema = (create: boolean): VbenFormSchema[] => {
       label: '工号',
       defaultValue: getDefaultValue('workNo', ''),
       rules: optionalString(z.string().max(50, '工号不能超过50个字符')),
-      componentProps: {
-        autocomplete: 'off',
+      componentProps: noAutofillInputProps('userWorkNo', {
         maxlength: 50,
-        name: 'userWorkNo',
         placeholder: '请输入工号',
-      },
+      }),
     },
     {
       fieldName: 'post',
@@ -229,44 +210,32 @@ const buildFormSchema = (create: boolean): VbenFormSchema[] => {
       label: '职务',
       defaultValue: getDefaultValue('post', ''),
       rules: optionalString(z.string().max(50, '职务不能超过50个字符')),
-      componentProps: {
-        autocomplete: 'off',
+      componentProps: noAutofillInputProps('userPost', {
         maxlength: 50,
-        name: 'userPost',
         placeholder: '请输入职务',
-      },
+      }),
     },
     {
       fieldName: 'telephone',
       component: 'Input',
       label: '座机号',
       defaultValue: getDefaultValue('telephone', ''),
-      rules: optionalString(
-        z.string().regex(telephonePattern, '请输入正确的座机号码'),
-      ),
-      componentProps: {
-        autocomplete: 'off',
+      rules: optionalTelephoneRule(),
+      componentProps: noAutofillInputProps('userTelephone', {
         maxlength: 20,
-        name: 'userTelephone',
         placeholder: '请输入座机号',
-      },
+      }),
     },
     {
       fieldName: 'idCard',
       component: 'Input',
       label: '身份证号',
       defaultValue: getDefaultValue('idCard', ''),
-      rules: optionalString(
-        z
-          .string()
-          .regex(/(^\d{15}$)|(^\d{17}[\dXx]$)/, '请输入正确的身份证号'),
-      ),
-      componentProps: {
-        autocomplete: 'off',
+      rules: optionalIdCardRule(),
+      componentProps: noAutofillInputProps('userIdCard', {
         maxlength: 18,
-        name: 'userIdCard',
         placeholder: '请输入身份证号',
-      },
+      }),
     },
   );
 
@@ -326,8 +295,7 @@ async function syncMountedFormValues() {
   await formApi.resetForm();
   await formApi.setValues(initialValues.value);
   if (isCreate.value) {
-    setTimeout(clearCreateAutofillValues, 0);
-    setTimeout(clearCreateAutofillValues, 120);
+    clearCreateAutofillValues();
   }
   hasSyncedMountedValues.value = true;
 }
@@ -349,19 +317,11 @@ async function refreshDetailSilently() {
 }
 
 function cleanPayload(values: Record<string, any>): UserInfo {
-  const payload = { ...values, id: currentId.value } as UserInfo & {
-    confirmPassword?: string;
-  };
-  for (const key of Object.keys(payload) as Array<keyof UserInfo>) {
-    if (payload[key] === '') {
-      delete payload[key];
-    }
-  }
-  if (!payload.password) {
-    delete payload.password;
-  }
-  delete payload.confirmPassword;
-  return payload;
+  return cleanFormPayload<UserInfo>(values, {
+    id: currentId.value,
+    omit: ['confirmPassword'],
+    removeFalsyKeys: ['password'],
+  });
 }
 
 async function handleSubmit() {
