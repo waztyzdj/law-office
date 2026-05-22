@@ -1,23 +1,16 @@
 package com.lawoffice.system.vo;
 
-import com.lawoffice.framework.vo.BaseVO;
+import com.lawoffice.framework.vo.TreeVO;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
-
-import java.util.List;
 
 /**
  * 菜单权限视图对象
  */
 @Data
 @EqualsAndHashCode(callSuper = true)
-public class PermissionVO extends BaseVO {
+public class PermissionVO extends TreeVO<PermissionVO> {
     private static final long serialVersionUID = 1L;
-
-    /**
-     * 父级ID
-     */
-    private String parentId;
 
     /**
      * 菜单标题
@@ -89,8 +82,4 @@ public class PermissionVO extends BaseVO {
      */
     private Integer deleteFlag;
 
-    /**
-     * 子菜单和按钮权限
-     */
-    private List<PermissionVO> children;
 }

@@ -1,10 +1,11 @@
 package com.lawoffice.system.service.impl;
 
-import cn.hutool.core.bean.BeanUtil;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.lawoffice.framework.dto.BaseDTO;
-import com.lawoffice.framework.service.impl.BaseServiceImpl;
+import com.lawoffice.framework.dto.TreeDTO;
+import com.lawoffice.framework.service.impl.TreeServiceImpl;
 import com.lawoffice.system.constant.PermissionMenuTypes;
 import com.lawoffice.system.entity.DepartPermission;
 import com.lawoffice.system.entity.Permission;
@@ -19,14 +20,11 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
-import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
-import java.util.Map;
-import java.util.stream.Collectors;
 
 @Service
-public class PermissionServiceImpl extends BaseServiceImpl<PermissionMapper, Permission, PermissionVO> implements IPermissionService {
+public class PermissionServiceImpl extends TreeServiceImpl<PermissionMapper, Permission, PermissionVO> implements IPermissionService {
 
     @Autowired
     private RolePermissionMapper rolePermissionMapper;
@@ -57,46 +55,28 @@ public class PermissionServiceImpl extends BaseServiceImpl<PermissionMapper, Per
 
     @Override
     public List<PermissionVO> tree() {
-        LambdaQueryWrapper<Permission> wrapper = new LambdaQueryWrapper<>();
-        wrapper.eq(Permission::getDeleteFlag, 0)
-               .orderByAsc(Permission::getSortNo);
-        List<PermissionVO> nodes = BeanUtil.copyToList(baseMapper.selectList(wrapper), PermissionVO.class);
+        TreeDTO<Permission> treeDTO = new TreeDTO<>();
+        return tree(treeDTO).getData();
+    }
 
-        Map<String, List<PermissionVO>> childrenMap = nodes.stream()
-                .filter(item -> StringUtils.hasText(item.getParentId()))
-                .collect(Collectors.groupingBy(PermissionVO::getParentId));
+    @Override
+    protected void applyTreeOrder(QueryWrapper<Permission> wrapper) {
+        wrapper.orderByAsc("sort_no");
+    }
 
-        nodes.forEach(item -> {
-            List<PermissionVO> children = childrenMap.get(item.getId());
-            if (children != null && !children.isEmpty()) {
-                children.sort(Comparator.comparing(
-                        PermissionVO::getSortNo,
-                        Comparator.nullsLast(Integer::compareTo)
-                ));
-                item.setChildren(children);
-            }
-        });
-
-        return nodes.stream()
-                .filter(item -> !StringUtils.hasText(item.getParentId()))
-                .sorted(Comparator.comparing(
-                        PermissionVO::getSortNo,
-                        Comparator.nullsLast(Integer::compareTo)
-                ))
-                .collect(Collectors.toList());
+    @Override
+    protected Comparator<PermissionVO> treeNodeComparator() {
+        return Comparator.comparing(
+                PermissionVO::getSortNo,
+                Comparator.nullsLast(Integer::compareTo)
+        );
     }
 
     @Override
     protected void doBeforeDelete(BaseDTO<Permission> deleteDTO) {
-        List<String> ids = getDeleteIds(deleteDTO);
-        if (ids.isEmpty()) {
-            return;
-        }
-
-        LambdaQueryWrapper<Permission> childWrapper = new LambdaQueryWrapper<>();
-        childWrapper.in(Permission::getParentId, ids)
-                    .eq(Permission::getDeleteFlag, 0);
-        if (baseMapper.selectCount(childWrapper) > 0) {
+        try {
+            validateNoChildrenBeforeDelete(deleteDTO);
+        } catch (IllegalArgumentException e) {
             throw new IllegalArgumentException("存在子级菜单或按钮，请先删除子级");
         }
     }
@@ -104,7 +84,7 @@ public class PermissionServiceImpl extends BaseServiceImpl<PermissionMapper, Per
     @Override
     @Transactional(rollbackFor = Exception.class)
     protected void doAfterDelete(BaseDTO<Permission> deleteDTO) {
-        List<String> ids = getDeleteIds(deleteDTO);
+        List<String> ids = resolveDeleteIds(deleteDTO);
         if (ids.isEmpty()) {
             return;
         }
@@ -187,7 +167,7 @@ public class PermissionServiceImpl extends BaseServiceImpl<PermissionMapper, Per
             throw new IllegalArgumentException("父级菜单不能选择自身");
         }
         if (StringUtils.hasText(permission.getId()) && StringUtils.hasText(permission.getParentId())) {
-            validateParentNotDescendant(permission.getId(), permission.getParentId());
+            validateParentNotSelfOrDescendant(permission.getId(), permission.getParentId());
         }
         if (StringUtils.hasText(permission.getPerms())) {
             validateUniquePerms(permission);
@@ -233,34 +213,6 @@ public class PermissionServiceImpl extends BaseServiceImpl<PermissionMapper, Per
             wrapper.set(Permission::getRedirect, null);
         }
         baseMapper.update(null, wrapper);
-    }
-
-    private void validateParentNotDescendant(String id, String parentId) {
-        String currentParentId = parentId;
-        while (StringUtils.hasText(currentParentId)) {
-            if (id.equals(currentParentId)) {
-                throw new IllegalArgumentException("父级菜单不能选择自身或子级");
-            }
-
-            Permission parent = baseMapper.selectById(currentParentId);
-            if (parent == null || parent.getDeleteFlag() != null && parent.getDeleteFlag() == 1) {
-                throw new IllegalArgumentException("父级菜单不存在或已被删除");
-            }
-            currentParentId = parent.getParentId();
-        }
-    }
-
-    private List<String> getDeleteIds(BaseDTO<Permission> deleteDTO) {
-        List<String> ids = new ArrayList<>();
-        if (StringUtils.hasText(deleteDTO.getId())) {
-            ids.add(deleteDTO.getId());
-        }
-        if (deleteDTO.getDeleteIds() != null) {
-            ids.addAll(deleteDTO.getDeleteIds().stream()
-                    .filter(StringUtils::hasText)
-                    .collect(Collectors.toList()));
-        }
-        return ids.stream().distinct().collect(Collectors.toList());
     }
 
     private String trimToNull(String value) {

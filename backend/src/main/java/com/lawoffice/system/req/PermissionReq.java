@@ -1,6 +1,6 @@
 package com.lawoffice.system.req;
 
-import com.lawoffice.framework.req.BaseReq;
+import com.lawoffice.framework.req.TreeReq;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
 
@@ -9,13 +9,8 @@ import lombok.EqualsAndHashCode;
  */
 @Data
 @EqualsAndHashCode(callSuper = true)
-public class PermissionReq extends BaseReq {
+public class PermissionReq extends TreeReq {
     private static final long serialVersionUID = 1L;
-
-    /**
-     * 父级ID
-     */
-    private String parentId;
 
     /**
      * 菜单标题

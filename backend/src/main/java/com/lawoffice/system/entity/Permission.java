@@ -3,7 +3,7 @@ package com.lawoffice.system.entity;
 import com.alibaba.excel.annotation.ExcelProperty;
 import com.alibaba.excel.annotation.ExcelIgnore;
 import com.baomidou.mybatisplus.annotation.TableName;
-import com.lawoffice.framework.entity.BaseEntity;
+import com.lawoffice.framework.entity.TreeEntity;
 import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
@@ -12,11 +12,7 @@ import lombok.EqualsAndHashCode;
 @EqualsAndHashCode(callSuper = true)
 @TableName("sys_permission")
 @Schema(description = "菜单权限")
-public class Permission extends BaseEntity {
-
-    @ExcelProperty("父级ID")
-    @Schema(description = "父id")
-    private String parentId;
+public class Permission extends TreeEntity<Permission> {
 
     @ExcelProperty("菜单标题")
     @Schema(description = "菜单标题")

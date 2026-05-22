@@ -46,6 +46,7 @@ public class PermissionAspect {
         METHOD_PERMISSION_MAP.put("getById", "view");
         METHOD_PERMISSION_MAP.put("list", "view");
         METHOD_PERMISSION_MAP.put("page", "view");
+        METHOD_PERMISSION_MAP.put("tree", "view");
         METHOD_PERMISSION_MAP.put("export", "view");
         
         // 编辑权限
