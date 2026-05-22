@@ -7,9 +7,13 @@
 
 /* ==================== CSS 变量定义 ==================== */
 :root {
+  /* 全局字体配置 */
+  --font-size-base: 14px;
+  --menu-font-size: 14px;
+
   /* 表格行高配置 - 会被 useTable 动态更新 */
   --table-row-height: 36px;
-  
+
   /* 其他全局 CSS 变量可以在这里添加 */
 }
 

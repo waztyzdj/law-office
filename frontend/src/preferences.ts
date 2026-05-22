@@ -25,6 +25,9 @@ export const overridesPreferences = defineOverridesPreferences({
   copyright: {
     settingShow: false, // 隐藏版权设置选项
   },
+  theme: {
+    fontSize: 14,
+  },
 });
 
 export const preferencesExtension =
