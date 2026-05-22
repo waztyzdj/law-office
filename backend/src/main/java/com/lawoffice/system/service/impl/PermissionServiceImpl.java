@@ -1,5 +1,7 @@
 package com.lawoffice.system.service.impl;
 
+import cn.hutool.core.lang.Assert;
+import cn.hutool.core.util.StrUtil;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
@@ -15,29 +17,38 @@ import com.lawoffice.system.mapper.PermissionMapper;
 import com.lawoffice.system.mapper.RolePermissionMapper;
 import com.lawoffice.system.service.IPermissionService;
 import com.lawoffice.system.vo.PermissionVO;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
 import java.util.Comparator;
 import java.util.List;
+import java.util.Objects;
 
 @Service
 public class PermissionServiceImpl extends TreeServiceImpl<PermissionMapper, Permission, PermissionVO> implements IPermissionService {
 
-    @Autowired
-    private RolePermissionMapper rolePermissionMapper;
+    private final RolePermissionMapper rolePermissionMapper;
 
-    @Autowired
-    private DepartPermissionMapper departPermissionMapper;
+    private final DepartPermissionMapper departPermissionMapper;
+
+    public PermissionServiceImpl(
+            RolePermissionMapper rolePermissionMapper,
+            DepartPermissionMapper departPermissionMapper) {
+        this.rolePermissionMapper = rolePermissionMapper;
+        this.departPermissionMapper = departPermissionMapper;
+    }
+
+    @Override
+    public List<PermissionVO> tree() {
+        TreeDTO<Permission> treeDTO = new TreeDTO<>();
+        return tree(treeDTO).getData();
+    }
 
     @Override
     protected void doBeforeSave(BaseDTO<Permission> saveDTO) {
         Permission permission = saveDTO.getEntity();
-        if (permission == null) {
-            return;
-        }
+        Assert.notNull(permission, "菜单权限数据不能为空");
 
         normalizePermission(permission);
         validatePermission(permission);
@@ -51,12 +62,6 @@ public class PermissionServiceImpl extends TreeServiceImpl<PermissionMapper, Per
         }
 
         clearUnusedFields(vo.getId(), permission.getMenuType());
-    }
-
-    @Override
-    public List<PermissionVO> tree() {
-        TreeDTO<Permission> treeDTO = new TreeDTO<>();
-        return tree(treeDTO).getData();
     }
 
     @Override
@@ -99,79 +104,77 @@ public class PermissionServiceImpl extends TreeServiceImpl<PermissionMapper, Per
     }
 
     private void normalizePermission(Permission permission) {
-        permission.setParentId(trimToNull(permission.getParentId()));
-        permission.setName(trimToNull(permission.getName()));
-        permission.setUrl(trimToNull(permission.getUrl()));
-        permission.setComponent(trimToNull(permission.getComponent()));
-        permission.setComponentName(trimToNull(permission.getComponentName()));
-        permission.setPerms(trimToNull(permission.getPerms()));
-        permission.setIcon(trimToNull(permission.getIcon()));
-        permission.setRedirect(trimToNull(permission.getRedirect()));
+        trimTextFields(permission);
+        applyDefaultValues(permission);
 
-        if (permission.getMenuType() == null) {
-            permission.setMenuType(PermissionMenuTypes.SUB_MENU);
-        }
-        if (permission.getSortNo() == null) {
-            permission.setSortNo(0);
-        }
-        if (!StringUtils.hasText(permission.getStatus())) {
-            permission.setStatus("1");
-        }
-        if (permission.getHidden() == null) {
-            permission.setHidden(0);
-        }
-        if (permission.getHideTab() == null) {
-            permission.setHideTab(0);
-        }
-        if (permission.getIsRoute() == null) {
-            permission.setIsRoute(true);
-        }
-
-        if (PermissionMenuTypes.isButtonPermission(permission.getMenuType())) {
-            permission.setHidden(null);
-            permission.setHideTab(null);
-            permission.setKeepAlive(null);
-        } else {
-            permission.setPerms(null);
-            if (PermissionMenuTypes.isSubMenu(permission.getMenuType())) {
-                permission.setRedirect(null);
-            } else if (permission.getKeepAlive() == null) {
-                permission.setKeepAlive(false);
+        switch (permission.getMenuType()) {
+            case PermissionMenuTypes.FIRST_LEVEL_MENU -> {
+                permission.setParentId(null);
+                permission.setPerms(null);
+                permission.setKeepAlive(null);
             }
+            case PermissionMenuTypes.SUB_MENU -> {
+                permission.setPerms(null);
+                permission.setRedirect(null);
+                permission.setKeepAlive(Objects.requireNonNullElse(permission.getKeepAlive(), false));
+            }
+            case PermissionMenuTypes.BUTTON_PERMISSION -> clearButtonMenuFields(permission);
+            default -> throw new IllegalArgumentException("菜单类型参数不正确");
         }
     }
 
+    private void trimTextFields(Permission permission) {
+        permission.setParentId(StrUtil.trimToNull(permission.getParentId()));
+        permission.setName(StrUtil.trimToNull(permission.getName()));
+        permission.setUrl(StrUtil.trimToNull(permission.getUrl()));
+        permission.setComponent(StrUtil.trimToNull(permission.getComponent()));
+        permission.setComponentName(StrUtil.trimToNull(permission.getComponentName()));
+        permission.setPerms(StrUtil.trimToNull(permission.getPerms()));
+        permission.setIcon(StrUtil.trimToNull(permission.getIcon()));
+        permission.setRedirect(StrUtil.trimToNull(permission.getRedirect()));
+    }
+
+    private void applyDefaultValues(Permission permission) {
+        permission.setMenuType(Objects.requireNonNullElse(permission.getMenuType(), PermissionMenuTypes.SUB_MENU));
+        permission.setSortNo(Objects.requireNonNullElse(permission.getSortNo(), 0));
+        permission.setStatus(StrUtil.blankToDefault(permission.getStatus(), "1"));
+        permission.setHidden(Objects.requireNonNullElse(permission.getHidden(), 0));
+        permission.setHideTab(Objects.requireNonNullElse(permission.getHideTab(), 0));
+        permission.setIsRoute(Objects.requireNonNullElse(permission.getIsRoute(), true));
+    }
+
+    private void clearButtonMenuFields(Permission permission) {
+        permission.setUrl(null);
+        permission.setComponent(null);
+        permission.setComponentName(null);
+        permission.setRedirect(null);
+        permission.setIcon(null);
+        permission.setHidden(null);
+        permission.setHideTab(null);
+        permission.setKeepAlive(null);
+    }
+
     private void validatePermission(Permission permission) {
-        if (!StringUtils.hasText(permission.getName())) {
-            throw new IllegalArgumentException("菜单名称不能为空");
+        Assert.notBlank(permission.getName(), "菜单名称不能为空");
+        Assert.isTrue(PermissionMenuTypes.isValid(permission.getMenuType()), "菜单类型参数不正确");
+        Assert.isTrue("0".equals(permission.getStatus()) || "1".equals(permission.getStatus()), "状态参数不正确");
+        Assert.isTrue(isBinary(permission.getHidden()), "显示状态参数不正确");
+        Assert.isTrue(isBinary(permission.getHideTab()), "标签页状态参数不正确");
+
+        if (PermissionMenuTypes.isButtonPermission(permission.getMenuType())) {
+            Assert.notBlank(permission.getPerms(), "按钮权限编码不能为空");
+        } else {
+            Assert.notBlank(permission.getUrl(), "菜单路径不能为空");
         }
-        if (!PermissionMenuTypes.isValid(permission.getMenuType())) {
-            throw new IllegalArgumentException("菜单类型参数不正确");
-        }
-        if (!"0".equals(permission.getStatus()) && !"1".equals(permission.getStatus())) {
-            throw new IllegalArgumentException("状态参数不正确");
-        }
-        if (permission.getHidden() != null && permission.getHidden() != 0 && permission.getHidden() != 1) {
-            throw new IllegalArgumentException("显示状态参数不正确");
-        }
-        if (permission.getHideTab() != null && permission.getHideTab() != 0 && permission.getHideTab() != 1) {
-            throw new IllegalArgumentException("标签页状态参数不正确");
-        }
-        if (PermissionMenuTypes.isButtonPermission(permission.getMenuType()) && !StringUtils.hasText(permission.getPerms())) {
-            throw new IllegalArgumentException("按钮权限编码不能为空");
-        }
-        if (PermissionMenuTypes.isMenu(permission.getMenuType()) && !StringUtils.hasText(permission.getUrl())) {
-            throw new IllegalArgumentException("菜单路径不能为空");
-        }
-        if (StringUtils.hasText(permission.getParentId()) && permission.getParentId().equals(permission.getId())) {
-            throw new IllegalArgumentException("父级菜单不能选择自身");
-        }
-        if (StringUtils.hasText(permission.getId()) && StringUtils.hasText(permission.getParentId())) {
-            validateParentNotSelfOrDescendant(permission.getId(), permission.getParentId());
-        }
+
+        validateParent(permission);
         if (StringUtils.hasText(permission.getPerms())) {
             validateUniquePerms(permission);
         }
+    }
+
+    private boolean isBinary(Integer value) {
+        return value == null || value == 0 || value == 1;
     }
 
     private void validateUniquePerms(Permission permission) {
@@ -190,8 +193,15 @@ public class PermissionServiceImpl extends TreeServiceImpl<PermissionMapper, Per
         LambdaUpdateWrapper<Permission> wrapper = new LambdaUpdateWrapper<>();
         wrapper.eq(Permission::getId, id);
 
-        if (PermissionMenuTypes.isButtonPermission(menuType)) {
-            wrapper
+        switch (menuType) {
+            case PermissionMenuTypes.FIRST_LEVEL_MENU -> wrapper
+                    .set(Permission::getParentId, null)
+                    .set(Permission::getPerms, null)
+                    .set(Permission::getKeepAlive, null);
+            case PermissionMenuTypes.SUB_MENU -> wrapper
+                    .set(Permission::getPerms, null)
+                    .set(Permission::getRedirect, null);
+            case PermissionMenuTypes.BUTTON_PERMISSION -> wrapper
                     .set(Permission::getUrl, null)
                     .set(Permission::getComponent, null)
                     .set(Permission::getComponentName, null)
@@ -200,25 +210,18 @@ public class PermissionServiceImpl extends TreeServiceImpl<PermissionMapper, Per
                     .set(Permission::getHideTab, null)
                     .set(Permission::getKeepAlive, null)
                     .set(Permission::getRedirect, null);
-            baseMapper.update(null, wrapper);
-            return;
-        }
-
-        wrapper.set(Permission::getPerms, null);
-        if (PermissionMenuTypes.isFirstLevelMenu(menuType)) {
-            wrapper
-                    .set(Permission::getParentId, null)
-                    .set(Permission::getKeepAlive, null);
-        } else if (PermissionMenuTypes.isSubMenu(menuType)) {
-            wrapper.set(Permission::getRedirect, null);
+            default -> throw new IllegalArgumentException("菜单类型参数不正确");
         }
         baseMapper.update(null, wrapper);
     }
 
-    private String trimToNull(String value) {
-        if (!StringUtils.hasText(value)) {
-            return null;
+    private void validateParent(Permission permission) {
+        if (!StringUtils.hasText(permission.getParentId())) {
+            return;
         }
-        return value.trim();
+        Assert.isFalse(permission.getParentId().equals(permission.getId()), "父级菜单不能选择自身");
+        if (StringUtils.hasText(permission.getId())) {
+            validateParentNotSelfOrDescendant(permission.getId(), permission.getParentId());
+        }
     }
 }
