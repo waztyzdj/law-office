@@ -28,11 +28,6 @@ public class RoleVO extends BaseVO {
     private String description;
 
     /**
-     * 状态(1-正常,0-冻结)
-     */
-    private Integer status;
-
-    /**
      * 删除标识(0-正常,1-已删除)
      */
     private Integer deleteFlag;

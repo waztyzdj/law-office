@@ -1,6 +1,7 @@
 package com.lawoffice.system.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.lawoffice.system.constant.PermissionMenuTypes;
 import com.lawoffice.system.vo.MenuMetaVO;
 import com.lawoffice.system.vo.MenuRouteVO;
 import com.lawoffice.system.entity.Permission;
@@ -14,6 +15,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
 import java.util.ArrayList;
+import java.util.Map;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -23,6 +25,23 @@ import java.util.stream.Collectors;
 @Slf4j
 @Service
 public class MenuServiceImpl implements IMenuService {
+
+    private static final Map<String, String> LEGACY_ICON_MAP = Map.ofEntries(
+            Map.entry("setting", "lucide:settings"),
+            Map.entry("settings", "lucide:settings"),
+            Map.entry("user", "lucide:user"),
+            Map.entry("users", "lucide:users"),
+            Map.entry("role", "lucide:shield-check"),
+            Map.entry("shield", "lucide:shield-check"),
+            Map.entry("menu", "lucide:menu"),
+            Map.entry("dict", "lucide:book-open-text"),
+            Map.entry("database", "lucide:database"),
+            Map.entry("log", "lucide:scroll-text"),
+            Map.entry("department", "lucide:building-2"),
+            Map.entry("depart", "lucide:building-2"),
+            Map.entry("tenant", "lucide:landmark"),
+            Map.entry("category", "lucide:tags")
+    );
 
     @Autowired
     private IUserService userService;
@@ -61,9 +80,9 @@ public class MenuServiceImpl implements IMenuService {
             return new ArrayList<>();
         }
 
-        // 只处理菜单类型的权限（menuType为0或1）
+        // 只处理菜单类型权限：0 一级菜单、1 子菜单。
         List<Permission> menuPermissions = permissions.stream()
-                .filter(p -> p.getMenuType() != null && (p.getMenuType() == 0 || p.getMenuType() == 1))
+                .filter(p -> PermissionMenuTypes.isMenu(p.getMenuType()))
                 .collect(Collectors.toList());
 
         // 找到所有根节点（parentId为null或空）
@@ -133,7 +152,7 @@ public class MenuServiceImpl implements IMenuService {
         meta.setTitle(permission.getName());
         
         // 图标
-        meta.setIcon(permission.getIcon());
+        meta.setIcon(normalizeIcon(permission.getIcon()));
         
         // 排序号
         meta.setOrder(permission.getSortNo());
@@ -185,5 +204,16 @@ public class MenuServiceImpl implements IMenuService {
         }
         
         return result.length() > 0 ? result.toString() : "Menu";
+    }
+
+    private String normalizeIcon(String icon) {
+        if (!StringUtils.hasText(icon)) {
+            return null;
+        }
+        String normalizedIcon = icon.trim();
+        if (normalizedIcon.contains(":")) {
+            return normalizedIcon;
+        }
+        return LEGACY_ICON_MAP.getOrDefault(normalizedIcon, "lucide:" + normalizedIcon);
     }
 }

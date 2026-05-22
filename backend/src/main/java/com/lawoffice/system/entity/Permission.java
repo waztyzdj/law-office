@@ -43,7 +43,7 @@ public class Permission extends BaseEntity {
     private String redirect;
 
     @ExcelProperty("菜单类型")
-    @Schema(description = "菜单类型(0:一级菜单; 1:子菜单:2:按钮权限)")
+    @Schema(description = "菜单类型(0:一级菜单; 1:子菜单; 2:按钮权限)")
     private Integer menuType;
 
     @ExcelProperty("菜单权限编码")

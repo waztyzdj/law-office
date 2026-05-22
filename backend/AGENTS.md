@@ -182,6 +182,7 @@ public class UserController extends BaseController<IUserService, User, UserVO, U
 - `BaseApi` 前端协议依赖后端分页返回字段 `records`、`total`、`pageNum`、`pageSize`，后端修改时必须同步前端。
 - `BaseServiceImpl` 中的逻辑删除规则是项目默认行为，新查询不得绕过。
 - 权限模块与前端 `src/constants/permissions.ts` 强绑定，新增权限必须双端同步。
+- 涉及数据库字段枚举、状态码或字段含义时，必须先参考 `sql/建表脚本.sql` 对应字段注释；Java 常量/枚举、Req/VO 注释、Service 校验、初始化 SQL 和前端协议必须与建表脚本保持一致。
 - 中文注释或文案出现乱码时，优先确认文件编码和终端编码，不要盲目整文件重写。
 
 ## 持续完善清单

@@ -33,6 +33,7 @@
 - `src/router/`：路由和权限守卫。菜单、权限、懒加载组件必须保持现有路由模式。
 - `src/adapter/`：Vben 与当前 UI 框架的适配层。表单、校验、组件映射优先使用这里的封装。
 - `packages/`：可跨应用复用的基础能力。禁止依赖 `src/views` 或具体业务 API。
+- 业务需求默认不要修改 `packages/`。只有当问题确认为跨应用公共能力缺陷、且无法在 `src/` 内通过组合/封装解决时，才允许改动 `packages/`，并必须说明影响范围和验证方式。
 - `internal/`：构建、lint、格式化配置。除非任务明确要求，不修改工程配置。
 
 ## 命名规范
@@ -81,6 +82,7 @@ const emit = defineEmits<{
 - Ant Design Vue 组件从 `ant-design-vue` 按需导入；不要自行封装一套重复基础组件。
 - 表格优先使用 `src/composables/Table` 的 `useTable`、`defineTableColumns`、列筛选与列宽持久化能力。
 - Table 必须配置：`row-key`、`loading`、`pagination`、必要的 `scroll`，长列设置宽度并允许省略提示。
+- 系统表格表头统一居中；表体按字段语义对齐：普通文本左对齐、数值右对齐、状态/枚举/下拉选项/日期时间/操作列居中。通用 `defineTableColumns` 默认遵循该规则，手写 Ant Design Vue Table 必须显式配置列对齐和表头居中。
 - 操作列固定在右侧，关闭筛选：`fixed: 'right'`、`hasFilter: false`。
 - 表单优先使用 schema 配置和 `#/adapter/form` 中的校验工具；必填、长度、格式、跨字段校验必须在前端声明。
 - 抽屉/弹窗提交时使用 `drawerApi.lock()` / `unlock()` 或等价状态，`finally` 中释放锁。
@@ -109,6 +111,7 @@ const emit = defineEmits<{
 
 - 新页面路由必须使用懒加载组件，保持 `src/router/routes` 现有组织方式。
 - 路由 meta 中的标题、图标、权限、缓存、隐藏菜单等配置要与菜单生成逻辑兼容。
+- 菜单图标统一使用项目已接入的 `@vben/icons` / Iconify 图标体系，优先使用 `lucide:*`，管理端图标选择必须来自 `src/constants/menu-icons.ts` 白名单，不新增图标库或让用户自由输入不可验证的图标名。
 - 不在组件内部绕过路由守卫做全局权限跳转；权限判断统一放守卫或访问控制工具。
 - 新增权限码时同步更新 `src/constants/permissions.ts` 和后端权限数据/SQL（如任务涉及）。
 
@@ -118,6 +121,8 @@ const emit = defineEmits<{
 - 业务组件样式默认 `scoped`；全局样式只放在 `src/styles` 或约定的全局入口。
 - 不在模板中堆大量内联 style。可复用样式抽成 class。
 - 页面布局保持后台管理系统风格：信息密度适中、可扫描、少装饰、操作路径清晰。
+- 抽屉、弹窗等浮层内容要按业务复杂度设置合适宽度和最大高度；列表、树、穿梭框等大块控件应填满可用内容宽度但限制高度，避免在宽屏或少量数据时出现大面积留白。
+- `Switch`、`Checkbox`、`Radio` 等紧凑型控件不能继承输入框的整行宽度；在使用通用表单 `w-full` 配置时必须为这类控件单独设置自然宽度。
 - 不使用会破坏 Ant Design Vue 交互状态的深层覆盖；必须覆盖时限制选择器作用域。
 - 所有可变宽文本必须考虑溢出：表格列用省略和 Tooltip，按钮和标签避免被长文本撑坏。
 - 响应式布局使用断点、栅格、弹性布局和稳定尺寸，避免由内容加载造成明显布局跳动。
@@ -153,6 +158,7 @@ const emit = defineEmits<{
 - 表格筛选状态可持久化到 localStorage，但 key 必须模块唯一，且读取失败时安全返回空对象。
 - `BaseApi` 实例方法如果依赖 `this`，传给组合函数时必须用箭头函数或导出的包装方法，避免上下文丢失。
 - 用户表单当前使用 `UserFormDrawer.vue` 模式：打开前准备 schema 和初始值，打开后同步表单，提交后清洗 payload 并刷新列表。
+- 涉及数据库字段枚举、状态码或字段含义时，必须先参考 `sql/建表脚本.sql` 对应字段注释；前端展示文案、表单选项、TS 类型和 API payload 不得自行定义与建表脚本不一致的含义。
 - 后续遇到中文显示乱码时，优先确认文件真实编码，不要盲目重写整文件。
 
 ## 持续完善清单

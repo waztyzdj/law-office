@@ -48,7 +48,7 @@ public class PermissionReq extends BaseReq {
     private Integer sortNo;
 
     /**
-     * 菜单类型(0-目录,1-菜单,2-按钮)
+     * 菜单类型(0:一级菜单; 1:子菜单; 2:按钮权限)
      */
     private Integer menuType;
 

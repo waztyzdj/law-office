@@ -31,6 +31,13 @@ public interface IUserService extends IBaseService<User, UserVO> {
     List<Role> getUserRoles(String userId);
 
     /**
+     * 获取用户的角色 ID 列表
+     * @param userId 用户ID
+     * @return 角色ID列表
+     */
+    List<String> getUserRoleIds(String userId);
+
+    /**
      * 移除用户的指定角色
      * @param userId 用户ID
      * @param roleIds 角色ID列表

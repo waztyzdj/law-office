@@ -19,9 +19,21 @@
 - `sys_role_permission`
 - `sys_user_role`
 
+初始化脚本：`sql/系统权限初始化.sql`。
+
 ## 接口
 
 资源前缀：`/role`，支持通用 CRUD。
+
+扩展接口：
+
+- `POST /role/permissionIds`：获取角色已分配权限 ID。
+- `POST /role/assignPermissions`：覆盖保存角色权限。
+
+## 页面能力
+
+- 角色列表支持分页、筛选、排序、新增、编辑、删除。
+- 角色授权使用菜单权限树，可同时分配菜单权限和按钮权限。
 
 ## 关键规则
 

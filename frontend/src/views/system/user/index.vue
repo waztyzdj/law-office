@@ -3,6 +3,7 @@ import { onMounted, ref } from 'vue';
 import type { UserInfo } from '#/api/system/user';
 import UserTable from './components/UserTable.vue';
 import UserFormDrawer from './components/UserFormDrawer.vue';
+import UserRoleDrawer from './components/UserRoleDrawer.vue';
 import { useUserTable } from './hooks/useUserTable';
 
 // 使用表格组合式函数（不需要搜索参数）
@@ -33,6 +34,11 @@ const handleAdd = () => {
 };
 
 const userFormDrawerRef = ref();
+const userRoleDrawerRef = ref();
+
+const handleAssignRole = (record: UserInfo) => {
+  userRoleDrawerRef.value?.open(record);
+};
 
 const handleSaveSuccess = () => {
   loadData();
@@ -57,10 +63,12 @@ onMounted(() => {
       :active-filters="activeFilters"
       @edit="handleEdit"
       @delete="handleDelete"
+      @assign-role="handleAssignRole"
       @change="handleTableChange"
       @add="handleAdd"
     />
     <UserFormDrawer ref="userFormDrawerRef" @success="handleSaveSuccess" />
+    <UserRoleDrawer ref="userRoleDrawerRef" @success="handleSaveSuccess" />
   </div>
 </template>
 

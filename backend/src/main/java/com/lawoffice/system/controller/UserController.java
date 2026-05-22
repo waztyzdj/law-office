@@ -3,6 +3,8 @@ package com.lawoffice.system.controller;
 import com.lawoffice.framework.result.BaseResult;
 import com.lawoffice.framework.controller.BaseController;
 import com.lawoffice.framework.annotation.ModuleInfo;
+import com.lawoffice.system.annotation.RequiresPermission;
+import com.lawoffice.system.req.AssignIdsReq;
 import com.lawoffice.system.vo.UserInfoVO;
 import com.lawoffice.system.entity.User;
 import com.lawoffice.system.req.UserReq;
@@ -11,11 +13,16 @@ import com.lawoffice.system.vo.UserVO;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.HttpServletRequest;
+import jakarta.validation.Valid;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+
+import java.util.List;
 
 @Slf4j
 @RestController
@@ -50,6 +57,21 @@ public class UserController extends BaseController<IUserService, User, UserVO, U
             log.error("获取用户信息异常", e);
             return BaseResult.error(500, "获取用户信息失败：" + e.getMessage());
         }
+    }
+
+    @PostMapping("/roleIds")
+    @Operation(summary = "获取用户角色ID列表", description = "获取指定用户已分配的角色ID")
+    @RequiresPermission("user:view")
+    public BaseResult<List<String>> getUserRoleIds(@Valid @RequestBody AssignIdsReq req) {
+        return BaseResult.success(baseService.getUserRoleIds(req.getId()));
+    }
+
+    @PostMapping("/assignRoles")
+    @Operation(summary = "分配用户角色", description = "覆盖保存指定用户的角色")
+    @RequiresPermission("user:edit")
+    public BaseResult<Void> assignRoles(@Valid @RequestBody AssignIdsReq req) {
+        baseService.assignRoles(req.getId(), req.getIds());
+        return BaseResult.success();
     }
     
     // 示例：添加权限控制的方法（需要在实际方法上添加注解）

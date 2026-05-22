@@ -187,6 +187,29 @@ public class UserServiceImpl extends BaseServiceImpl<UserMapper, User, UserVO> i
     }
 
     @Override
+    @Transactional(rollbackFor = Exception.class)
+    protected void doAfterDelete(BaseDTO<User> deleteDTO) {
+        List<String> userIds = getDeleteIds(deleteDTO);
+        if (userIds.isEmpty()) {
+            return;
+        }
+
+        userIds.forEach(this::forceLogoutUserById);
+
+        LambdaQueryWrapper<UserRole> userRoleWrapper = new LambdaQueryWrapper<>();
+        userRoleWrapper.in(UserRole::getUserId, userIds);
+        userRoleMapper.delete(userRoleWrapper);
+
+        LambdaQueryWrapper<UserDepart> userDepartWrapper = new LambdaQueryWrapper<>();
+        userDepartWrapper.in(UserDepart::getUserId, userIds);
+        userDepartMapper.delete(userDepartWrapper);
+
+        LambdaQueryWrapper<UserTenant> userTenantWrapper = new LambdaQueryWrapper<>();
+        userTenantWrapper.in(UserTenant::getUserId, userIds);
+        userTenantMapper.delete(userTenantWrapper);
+    }
+
+    @Override
     public boolean verifyPassword(String rawPassword, String encodedPassword) {
         return passwordEncoder.matches(rawPassword, encodedPassword);
     }
@@ -206,14 +229,26 @@ public class UserServiceImpl extends BaseServiceImpl<UserMapper, User, UserVO> i
     @Override
     @Transactional(rollbackFor = Exception.class)
     public void assignRoles(String userId, List<String> roleIds) {
+        if (!StringUtils.hasText(userId)) {
+            throw new IllegalArgumentException("用户ID不能为空");
+        }
+
+        User user = userMapper.selectById(userId);
+        if (user == null || (user.getDeleteFlag() != null && user.getDeleteFlag() == 1)) {
+            throw new IllegalArgumentException("用户不存在或已被删除");
+        }
+
+        List<String> normalizedRoleIds = normalizeIds(roleIds);
+        validateRoles(normalizedRoleIds);
+
         // 先删除用户现有的所有角色
         LambdaQueryWrapper<UserRole> deleteWrapper = new LambdaQueryWrapper<>();
         deleteWrapper.eq(UserRole::getUserId, userId);
         userRoleMapper.delete(deleteWrapper);
 
         // 批量插入新的角色关联
-        if (roleIds != null && !roleIds.isEmpty()) {
-            List<UserRole> userRoles = roleIds.stream()
+        if (!normalizedRoleIds.isEmpty()) {
+            List<UserRole> userRoles = normalizedRoleIds.stream()
                 .map(roleId -> {
                     UserRole userRole = new UserRole();
                     userRole.setUserId(userId);
@@ -227,7 +262,8 @@ public class UserServiceImpl extends BaseServiceImpl<UserMapper, User, UserVO> i
             }
         }
 
-        log.info("为用户分配角色成功，用户ID: {}, 角色数量: {}", userId, roleIds == null ? 0 : roleIds.size());
+        log.info("为用户分配角色成功，用户ID: {}, 角色数量: {}", userId, normalizedRoleIds.size());
+        forceLogoutUserById(userId);
     }
 
     @Override
@@ -247,8 +283,24 @@ public class UserServiceImpl extends BaseServiceImpl<UserMapper, User, UserVO> i
             .collect(Collectors.toList());
 
         LambdaQueryWrapper<Role> roleWrapper = new LambdaQueryWrapper<>();
-        roleWrapper.in(Role::getId, roleIds);
+        roleWrapper.in(Role::getId, roleIds)
+                   .eq(Role::getDeleteFlag, 0);
         return roleMapper.selectList(roleWrapper);
+    }
+
+    @Override
+    public List<String> getUserRoleIds(String userId) {
+        if (!StringUtils.hasText(userId)) {
+            throw new IllegalArgumentException("用户ID不能为空");
+        }
+
+        LambdaQueryWrapper<UserRole> wrapper = new LambdaQueryWrapper<>();
+        wrapper.eq(UserRole::getUserId, userId);
+        return userRoleMapper.selectList(wrapper).stream()
+                .map(UserRole::getRoleId)
+                .filter(StringUtils::hasText)
+                .distinct()
+                .collect(Collectors.toList());
     }
 
     @Override
@@ -264,6 +316,7 @@ public class UserServiceImpl extends BaseServiceImpl<UserMapper, User, UserVO> i
         userRoleMapper.delete(wrapper);
 
         log.info("移除用户角色成功，用户ID: {}, 移除角色数量: {}", userId, roleIds.size());
+        forceLogoutUserById(userId);
     }
 
     @Override
@@ -456,7 +509,7 @@ public class UserServiceImpl extends BaseServiceImpl<UserMapper, User, UserVO> i
         }
         
         // 2. 检查用户状态
-        if (user.getStatus() != null && user.getStatus() == 0) {
+        if (user.getStatus() == null || user.getStatus() != 1) {
             log.warn("登录失败：用户已被禁用 - {}", username);
             throw new RuntimeException("用户已被禁用，请联系管理员");
         }
@@ -612,5 +665,54 @@ public class UserServiceImpl extends BaseServiceImpl<UserMapper, User, UserVO> i
         
         // 如果没有关联的租户，返回默认租户ID "0"
         return "0";
+    }
+
+    private List<String> normalizeIds(List<String> ids) {
+        if (ids == null || ids.isEmpty()) {
+            return new ArrayList<>();
+        }
+        return ids.stream()
+                .filter(StringUtils::hasText)
+                .map(String::trim)
+                .distinct()
+                .collect(Collectors.toList());
+    }
+
+    private void validateRoles(List<String> roleIds) {
+        if (roleIds.isEmpty()) {
+            return;
+        }
+
+        LambdaQueryWrapper<Role> wrapper = new LambdaQueryWrapper<>();
+        wrapper.in(Role::getId, roleIds)
+               .eq(Role::getDeleteFlag, 0);
+        long count = roleMapper.selectCount(wrapper);
+        if (count != roleIds.size()) {
+            throw new IllegalArgumentException("包含不存在或已删除的角色");
+        }
+    }
+
+    private List<String> getDeleteIds(BaseDTO<User> deleteDTO) {
+        List<String> ids = new ArrayList<>();
+        if (StringUtils.hasText(deleteDTO.getId())) {
+            ids.add(deleteDTO.getId());
+        }
+        if (deleteDTO.getDeleteIds() != null) {
+            ids.addAll(deleteDTO.getDeleteIds().stream()
+                    .filter(StringUtils::hasText)
+                    .collect(Collectors.toList()));
+        }
+        return ids.stream().distinct().collect(Collectors.toList());
+    }
+
+    private void forceLogoutUserById(String userId) {
+        if (!StringUtils.hasText(userId)) {
+            return;
+        }
+
+        User user = userMapper.selectById(userId);
+        if (user != null && StringUtils.hasText(user.getUsername())) {
+            tokenService.forceLogout(user.getUsername());
+        }
     }
 }

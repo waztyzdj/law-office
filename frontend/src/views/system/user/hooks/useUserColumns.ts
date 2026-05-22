@@ -87,12 +87,13 @@ export function getUserColumns(
       dataIndex: 'action',
       title: '操作',
       options: {
-        width: 150,
+        width: 210,
         fixed: 'right' as const,
         hasFilter: false, // 操作列不需要筛选
         customRender: ({ record }: { record: UserInfo }) => {
           return h(Space, { size: 'middle' }, {
             default: () => [
+              h('a', { onClick: () => emit('assignRole', record) }, '分配角色'),
               h('a', { onClick: () => emit('edit', record) }, '编辑'),
               h('a', { style: { color: 'red' }, onClick: () => emit('delete', record) }, '删除'),
             ],

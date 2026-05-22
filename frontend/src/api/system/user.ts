@@ -38,6 +38,12 @@ export async function getUserInfoApi() {
   return requestClient.get<any>('/user/info');
 }
 
+export const getUserRoleIds = (id: string) =>
+  requestClient.post<string[]>('/user/roleIds', { id });
+
+export const assignUserRoles = (id: string, ids: string[]) =>
+  requestClient.post<void>('/user/assignRoles', { id, ids });
+
 /**
  * 用户 CRUD API 便捷方法工厂
  * 基于 BaseApi 实例生成类型安全的便捷方法

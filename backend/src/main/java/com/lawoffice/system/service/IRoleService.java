@@ -29,4 +29,11 @@ public interface IRoleService extends IBaseService<Role, RoleVO> {
      * @param permissionIds 权限ID列表
      */
     void removePermissions(String roleId, List<String> permissionIds);
+
+    /**
+     * 获取角色的权限 ID 列表
+     * @param roleId 角色ID
+     * @return 权限ID列表
+     */
+    List<String> getRolePermissionIds(String roleId);
 }

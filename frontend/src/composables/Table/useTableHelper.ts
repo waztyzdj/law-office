@@ -63,6 +63,7 @@ function createResizableHeaderCell(columnKey: string, initialWidth?: number) {
     return {
       style: {
         position: 'relative',
+        textAlign: 'center',
         userSelect: 'none',
         overflow: 'hidden',
         textOverflow: 'ellipsis',
@@ -128,6 +129,40 @@ function createResizableHeaderCell(columnKey: string, initialWidth?: number) {
  */
 export type ColumnType = 'text' | 'date' | 'datetime' | 'number' | 'select';
 
+export type TableColumnAlign = 'center' | 'left' | 'right';
+
+function getDefaultColumnAlign(
+  dataIndex: string,
+  columnType: ColumnType,
+): TableColumnAlign {
+  if (dataIndex === 'action') {
+    return 'center';
+  }
+
+  if (columnType === 'number') {
+    return 'right';
+  }
+
+  if (['date', 'datetime', 'select'].includes(columnType)) {
+    return 'center';
+  }
+
+  return 'left';
+}
+
+function createBodyCell(align: TableColumnAlign, customCell?: (...args: any[]) => any) {
+  return (...args: any[]) => {
+    const cellProps = customCell?.(...args) || {};
+    return {
+      ...cellProps,
+      style: {
+        ...(cellProps.style || {}),
+        textAlign: align,
+      },
+    };
+  };
+}
+
 /**
  * 表格列配置选项（简化版）
  */
@@ -150,6 +185,8 @@ export interface TableColumnOptions<T = any> {
   columnType?: ColumnType;
   /** Select 选项配置（当 columnType 为 select 时使用） */
   selectOptions?: SelectOption[];
+  /** 单元格内容对齐方式；未设置时按列类型默认推导 */
+  align?: TableColumnAlign;
   /** 其他 Ant Design Vue 列配置 */
   [key: string]: any;
 }
@@ -245,8 +282,11 @@ export function defineTableColumn<T = any>(
     hasFilter = true,
     columnType = 'text',
     selectOptions,
+    align,
+    customCell,
     ...restOptions
   } = options;
+  const bodyAlign = align || getDefaultColumnAlign(dataIndex, columnType);
 
   // 初始化列宽（从 localStorage 恢复或使用默认值）
   const columnKey = dataIndex;
@@ -260,7 +300,7 @@ export function defineTableColumn<T = any>(
     title,
     dataIndex,
     key: dataIndex,
-    align: 'center',
+    customCell: createBodyCell(bodyAlign, customCell),
     ellipsis: true, // 启用省略号显示
     // 列标题不换行，超出显示省略号（支持列宽拖拽）
     customHeaderCell: createResizableHeaderCell(columnKey, width),

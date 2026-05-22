@@ -11,6 +11,7 @@ function createBasePermissionCodes(module: string) {
 }
 
 export const permissionCodes = {
+  permission: createBasePermissionCodes('permission'),
+  role: createBasePermissionCodes('role'),
   user: createBasePermissionCodes('user'),
 } as const;
-

@@ -4,6 +4,8 @@ import com.lawoffice.framework.vo.BaseVO;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
 
+import java.util.List;
+
 /**
  * 菜单权限视图对象
  */
@@ -48,7 +50,7 @@ public class PermissionVO extends BaseVO {
     private Integer sortNo;
 
     /**
-     * 菜单类型(0-目录,1-菜单,2-按钮)
+     * 菜单类型(0:一级菜单; 1:子菜单; 2:按钮权限)
      */
     private Integer menuType;
 
@@ -86,4 +88,9 @@ public class PermissionVO extends BaseVO {
      * 删除标识(0-正常,1-已删除)
      */
     private Integer deleteFlag;
+
+    /**
+     * 子菜单和按钮权限
+     */
+    private List<PermissionVO> children;
 }
