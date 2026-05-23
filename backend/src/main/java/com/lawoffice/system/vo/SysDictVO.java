@@ -30,7 +30,6 @@ public class SysDictVO extends BaseVO {
     /**
      * 状态(1-正常,0-冻结)
      */
-    private Integer status;
 
     /**
      * 删除标识(0-正常,1-已删除)

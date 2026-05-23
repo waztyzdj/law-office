@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import type { VbenFormSchema } from '#/adapter/form';
-import type { RoleInfo } from '#/api/system/role';
+import type { CategoryInfo } from '#/api/system/category';
+import type { StringTreeSelectOption } from '#/composables/Tree/useTree';
 
 import { computed, nextTick, ref } from 'vue';
 
@@ -8,21 +9,21 @@ import { useVbenDrawer } from '@vben/common-ui';
 
 import { message } from 'ant-design-vue';
 
-import {
-  cleanFormPayload,
-  noAutofillInputProps,
-  optionalString,
-  useVbenForm,
-  z,
-} from '#/adapter/form';
-import { getRoleById, saveRole } from '#/api/system/role';
+import { cleanFormPayload, useVbenForm, z } from '#/adapter/form';
+import { getCategoryById, saveCategory } from '#/api/system/category';
+import { filterTreeSelectOptions } from '#/composables/Tree/useTree';
 
 type DrawerMode = 'create' | 'edit';
 
 interface DrawerPayload {
   mode: DrawerMode;
-  record?: RoleInfo;
+  parentId?: string;
+  record?: CategoryInfo;
 }
+
+const props = defineProps<{
+  treeOptions: StringTreeSelectOption[];
+}>();
 
 const emit = defineEmits<{
   success: [];
@@ -34,59 +35,57 @@ const initialValues = ref<Record<string, any>>({});
 const hasSyncedMountedValues = ref(false);
 
 const isCreate = computed(() => mode.value === 'create');
-const drawerTitle = computed(() => (isCreate.value ? '新增角色' : '编辑角色'));
+const drawerTitle = computed(() => (isCreate.value ? '新增通用类型' : '编辑通用类型'));
+const availableTreeOptions = computed(() =>
+  filterTreeSelectOptions(props.treeOptions, currentId.value),
+);
 
-const emptyRoleValues = {
-  roleCode: '',
-  roleName: '',
-  description: '',
+const emptyCategoryValues = {
+  pid: undefined,
+  code: '',
+  name: '',
 };
-
-const getDefaultValue = (fieldName: string, fallback?: any) =>
-  initialValues.value[fieldName] ?? fallback;
 
 const buildFormSchema = (): VbenFormSchema[] => [
   {
-    fieldName: 'roleCode',
-    component: 'Input',
-    label: '角色编码',
-    defaultValue: getDefaultValue('roleCode', ''),
-    rules: z
-      .string({ required_error: '请输入角色编码' })
-      .min(1, '请输入角色编码')
-      .max(64, '角色编码不能超过64个字符')
-      .regex(/^[A-Za-z][A-Za-z0-9_:.-]*$/, '角色编码需以字母开头'),
-    componentProps: noAutofillInputProps('roleCode', {
-      disabled: !isCreate.value,
-      maxlength: 64,
-      placeholder: '请输入角色编码',
-    }),
+    fieldName: 'pid',
+    component: 'TreeSelect',
+    label: '父级类型',
+    defaultValue: initialValues.value.pid,
+    componentProps: {
+      allowClear: true,
+      placeholder: '请选择父级类型',
+      treeData: availableTreeOptions.value,
+      treeDefaultExpandAll: true,
+    },
   },
   {
-    fieldName: 'roleName',
+    fieldName: 'code',
     component: 'Input',
-    label: '角色名称',
-    defaultValue: getDefaultValue('roleName', ''),
+    label: '类型编码',
+    defaultValue: initialValues.value.code ?? '',
     rules: z
-      .string({ required_error: '请输入角色名称' })
-      .min(1, '请输入角色名称')
-      .max(64, '角色名称不能超过64个字符'),
-    componentProps: noAutofillInputProps('roleName', {
+      .string({ required_error: '请输入类型编码' })
+      .min(1, '请输入类型编码')
+      .max(64, '类型编码不能超过64个字符'),
+    componentProps: {
       maxlength: 64,
-      placeholder: '请输入角色名称',
-    }),
+      placeholder: '请输入类型编码',
+    },
   },
   {
-    fieldName: 'description',
-    component: 'Textarea',
-    label: '描述',
-    defaultValue: getDefaultValue('description', ''),
-    rules: optionalString(z.string().max(500, '描述不能超过500个字符')),
-    componentProps: noAutofillInputProps('roleDescription', {
-      maxlength: 500,
-      placeholder: '请输入描述',
-      rows: 4,
-    }),
+    fieldName: 'name',
+    component: 'Input',
+    label: '类型名称',
+    defaultValue: initialValues.value.name ?? '',
+    rules: z
+      .string({ required_error: '请输入类型名称' })
+      .min(1, '请输入类型名称')
+      .max(64, '类型名称不能超过64个字符'),
+    componentProps: {
+      maxlength: 64,
+      placeholder: '请输入类型名称',
+    },
   },
 ];
 
@@ -104,7 +103,7 @@ const [Form, formApi] = useVbenForm({
 });
 
 const [Drawer, drawerApi] = useVbenDrawer({
-  class: 'w-full sm:w-2/5! sm:max-w-none!',
+  class: 'w-full sm:w-[760px]! sm:max-w-none!',
   closeOnClickModal: true,
   confirmText: '保存',
   contentClass: 'px-5 py-4 sm:px-6',
@@ -115,11 +114,16 @@ const [Drawer, drawerApi] = useVbenDrawer({
 
 function buildInitialValues(payload: DrawerPayload) {
   if (payload.mode === 'create') {
-    return { ...emptyRoleValues };
+    return {
+      ...emptyCategoryValues,
+      pid: payload.parentId,
+    };
   }
+
   return {
-    ...emptyRoleValues,
+    ...emptyCategoryValues,
     ...payload.record,
+    pid: payload.record?.pid ?? payload.parentId,
   };
 }
 
@@ -146,19 +150,26 @@ async function refreshDetailSilently() {
   if (!currentId.value) {
     return;
   }
+
   try {
-    const detail = await getRoleById(currentId.value);
+    const detail = await getCategoryById(currentId.value);
     initialValues.value = buildInitialValues({ mode: mode.value, record: detail });
-    await formApi.setValues(detail);
+    await formApi.setValues(initialValues.value);
   } catch {
-    // 请求层会统一提示错误，这里保留已有行数据。
+    // 请求层统一处理错误。
   }
 }
 
-function cleanPayload(values: Record<string, any>): RoleInfo {
-  return cleanFormPayload<RoleInfo>(values, {
+function cleanPayload(values: Record<string, any>): CategoryInfo {
+  const payload = cleanFormPayload<CategoryInfo>(values, {
     id: currentId.value,
   });
+
+  if (!payload.pid) {
+    delete payload.pid;
+  }
+
+  return payload;
 }
 
 async function handleSubmit() {
@@ -170,8 +181,8 @@ async function handleSubmit() {
   try {
     drawerApi.lock();
     const values = await formApi.getValues();
-    await saveRole(cleanPayload(values));
-    message.success(isCreate.value ? '新增角色成功' : '修改角色成功');
+    await saveCategory(cleanPayload(values));
+    message.success(isCreate.value ? '新增类型成功' : '修改类型成功');
     emit('success');
     drawerApi.close();
   } finally {

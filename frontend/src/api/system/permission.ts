@@ -18,7 +18,7 @@ export interface PermissionInfo {
   keepAlive?: boolean;
   redirect?: string;
   status?: number | string;
-  children?: PermissionInfo[];
+  children?: PermissionInfo[] | null;
   createTime?: string;
   updateTime?: string;
 }

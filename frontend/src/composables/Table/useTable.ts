@@ -77,6 +77,55 @@ export interface UseTableConfig {
 }
 
 /**
+ * 将前端筛选条件转换为后端 QueryWrapperBuilderUtils 支持的格式
+ * @param filters Table 组件的 filters 参数
+ * @returns 符合后端规范的查询参数
+ */
+export function convertTableFiltersToQueryParams(filters: Record<string, any>): Record<string, any> {
+  const queryParams: Record<string, any> = {};
+
+  Object.keys(filters).forEach((key) => {
+    const filterValue = filters[key];
+
+    if (!filterValue || (Array.isArray(filterValue) && filterValue.length === 0)) {
+      return;
+    }
+
+    if (filterValue.condition && filterValue.value !== undefined) {
+      const { condition, apiCondition, value } = filterValue;
+      const effectiveCondition = apiCondition || condition;
+
+      if (effectiveCondition === 'like') {
+        queryParams[`${key}_like`] = value;
+      } else {
+        queryParams[`${key}_${effectiveCondition}`] = value;
+      }
+    } else if (Array.isArray(filterValue) && filterValue.length === 2) {
+      const [start, end] = filterValue;
+      if (start && end) {
+        queryParams[`${key}_ge`] =
+          typeof start?.format === 'function' ? start.format('YYYY-MM-DD HH:mm:ss') : start;
+        queryParams[`${key}_le`] =
+          typeof end?.format === 'function' ? end.format('YYYY-MM-DD HH:mm:ss') : end;
+      } else if (start) {
+        queryParams[`${key}_ge`] =
+          typeof start?.format === 'function' ? start.format('YYYY-MM-DD HH:mm:ss') : start;
+      } else if (end) {
+        queryParams[`${key}_le`] =
+          typeof end?.format === 'function' ? end.format('YYYY-MM-DD HH:mm:ss') : end;
+      }
+    } else {
+      const value = Array.isArray(filterValue) ? filterValue[0] : filterValue;
+      if (value !== undefined && value !== null) {
+        queryParams[`${key}_eq`] = value;
+      }
+    }
+  });
+
+  return queryParams;
+}
+
+/**
  * 通用表格列表组合式函数
  * @param config 配置对象
  * @returns 表格相关状态和方法
@@ -182,55 +231,7 @@ export function useTable(config: UseTableConfig) {
    * @returns 符合后端规范的查询参数
    */
   function convertFiltersToQueryParams(filters: Record<string, any>): Record<string, any> {
-    const queryParams: Record<string, any> = {};
-
-    Object.keys(filters).forEach((key) => {
-      const filterValue = filters[key];
-
-      // 如果筛选值为空，跳过
-      if (!filterValue || (Array.isArray(filterValue) && filterValue.length === 0)) {
-        return;
-      }
-
-      // 处理高级筛选（包含 condition 和 value）
-      if (filterValue.condition && filterValue.value !== undefined) {
-        const { condition, apiCondition, value } = filterValue;
-        
-        // 优先使用 apiCondition（转换后的条件），如果不存在则使用 condition
-        const effectiveCondition = apiCondition || condition;
-        
-        // 特殊处理"开头是"和"结尾是"
-        if (effectiveCondition === 'like') {
-          // 判断是否是"开头是"或"结尾是"的逻辑可以在这里扩展
-          // 目前统一使用 like
-          queryParams[`${key}_like`] = value;
-        } else {
-          // 其他条件直接拼接操作符
-          queryParams[`${key}_${effectiveCondition}`] = value;
-        }
-      }
-      // 处理日期范围筛选
-      else if (Array.isArray(filterValue) && filterValue.length === 2) {
-        const [start, end] = filterValue;
-        if (start && end) {
-          queryParams[`${key}_ge`] = start.format('YYYY-MM-DD HH:mm:ss');
-          queryParams[`${key}_le`] = end.format('YYYY-MM-DD HH:mm:ss');
-        } else if (start) {
-          queryParams[`${key}_ge`] = start.format('YYYY-MM-DD HH:mm:ss');
-        } else if (end) {
-          queryParams[`${key}_le`] = end.format('YYYY-MM-DD HH:mm:ss');
-        }
-      }
-      // 处理简单值筛选
-      else {
-        const value = Array.isArray(filterValue) ? filterValue[0] : filterValue;
-        if (value !== undefined && value !== null) {
-          queryParams[`${key}_eq`] = value;
-        }
-      }
-    });
-
-    return queryParams;
+    return convertTableFiltersToQueryParams(filters);
   }
 
   /**

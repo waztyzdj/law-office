@@ -3,19 +3,13 @@ import type { PermissionInfo } from '#/api/system/permission';
 
 import { computed, h, onMounted, ref } from 'vue';
 
-import {
-  Button,
-  Card,
-  Modal,
-  Space,
-  Table,
-  Tag,
-  message,
-} from 'ant-design-vue';
+import { Button, Card, Modal, Space, Table, message } from 'ant-design-vue';
 import { useAccess } from '@vben/access';
 
-import { deletePermission, getPermissionTree } from '#/api/system/permission';
-import { menuTypeOptionMap, menuTypeValues } from '#/constants/menu-types';
+import { deletePermission, listPermissions } from '#/api/system/permission';
+import { defineTableColumns } from '#/composables/Table';
+import { buildTreeFromFlat, buildTreeSelectOptions, useTreeData } from '#/composables/Tree/useTree';
+import { menuTypeOptions } from '#/constants/menu-types';
 import { permissionCodes } from '#/constants/permissions';
 import PermissionFormDrawer from './components/PermissionFormDrawer.vue';
 
@@ -24,150 +18,110 @@ const canEditPermission = computed(() =>
   hasAccessByCodes([permissionCodes.permission.edit]),
 );
 
-const loading = ref(false);
-const dataSource = ref<PermissionInfo[]>([]);
 const permissionFormDrawerRef = ref();
+const {
+  activeFilters,
+  dataSource,
+  loading,
+  pagination: treePagination,
+  handleTableChange,
+  loadData,
+} = useTreeData<PermissionInfo>({
+  fetchData: listPermissions,
+  storageConfig: {
+    filtersKey: 'permission_tree_filters',
+  },
+});
 
-const treeOptions = computed(() => buildTreeOptions(dataSource.value));
+const treeData = computed(() => buildTreeFromFlat(dataSource.value));
+const treeOptions = computed(() => buildTreeSelectOptions(treeData.value));
 
-function createHeaderCell() {
-  return {
-    style: {
-      textAlign: 'center',
-    },
-  };
+function emitTableChange(event: string, ...args: any[]) {
+  if (event === 'change') {
+    handleTableChange(args[0], args[1], args[2]);
+  }
 }
 
-function createBodyCell(textAlign: 'center' | 'left' | 'right') {
-  return {
-    style: {
-      textAlign,
-    },
-  };
-}
-
-const columns = computed(() => {
+const tableConfig = computed(() => {
   const baseColumns: any[] = [
     {
-      title: '名称',
       dataIndex: 'name',
-      key: 'name',
-      width: 220,
-      ellipsis: true,
-      customHeaderCell: createHeaderCell,
-      customCell: () => createBodyCell('left'),
+      title: '名称',
+      options: { width: 220 },
     },
     {
-      title: '类型',
       dataIndex: 'menuType',
-      key: 'menuType',
-      width: 90,
-      customHeaderCell: createHeaderCell,
-      customCell: () => createBodyCell('center'),
-      customRender: ({ record }: { record: PermissionInfo }) => {
-        const item =
-          menuTypeOptionMap[record.menuType ?? menuTypeValues.subMenu] ??
-          menuTypeOptionMap[menuTypeValues.subMenu];
-        return h(Tag, { color: item.color }, () => item.label);
+      title: '类型',
+      options: {
+        width: 90,
+        columnType: 'select' as const,
+        selectOptions: menuTypeOptions,
       },
     },
     {
-      title: '路径',
       dataIndex: 'url',
-      key: 'url',
-      width: 180,
-      ellipsis: true,
-      customHeaderCell: createHeaderCell,
-      customCell: () => createBodyCell('left'),
+      title: '路径',
+      options: { width: 180 },
     },
     {
-      title: '组件',
       dataIndex: 'component',
-      key: 'component',
-      width: 240,
-      ellipsis: true,
-      customHeaderCell: createHeaderCell,
-      customCell: () => createBodyCell('left'),
+      title: '组件',
+      options: { width: 240 },
     },
     {
-      title: '权限码',
       dataIndex: 'perms',
-      key: 'perms',
-      width: 150,
-      ellipsis: true,
-      customHeaderCell: createHeaderCell,
-      customCell: () => createBodyCell('left'),
+      title: '权限码',
+      options: { width: 150 },
     },
     {
-      title: '排序',
       dataIndex: 'sortNo',
-      key: 'sortNo',
-      width: 80,
-      customHeaderCell: createHeaderCell,
-      customCell: () => createBodyCell('right'),
+      title: '排序',
+      options: { width: 80, columnType: 'number' as const },
     },
     {
-      title: '状态',
       dataIndex: 'status',
-      key: 'status',
-      width: 90,
-      customHeaderCell: createHeaderCell,
-      customCell: () => createBodyCell('center'),
-      customRender: ({ record }: { record: PermissionInfo }) => {
-        const enabled = String(record.status ?? '1') === '1';
-        return h(Tag, { color: enabled ? 'green' : 'red' }, () =>
-          enabled ? '正常' : '停用',
-        );
+      title: '状态',
+      options: {
+        width: 90,
+        columnType: 'select' as const,
+        selectOptions: [
+          { label: '正常', value: '1', color: 'green' },
+          { label: '停用', value: '0', color: 'red' },
+        ],
       },
     },
   ];
 
   if (canEditPermission.value) {
     baseColumns.push({
-      title: '操作',
       dataIndex: 'action',
-      key: 'action',
-      fixed: 'right',
-      width: 220,
-      customHeaderCell: createHeaderCell,
-      customCell: () => createBodyCell('center'),
-      customRender: ({ record }: { record: PermissionInfo }) =>
-        h(Space, { size: 'middle' }, () => [
-          h('a', { onClick: () => handleAddChild(record) }, '新增下级'),
-          h('a', { onClick: () => handleEdit(record) }, '编辑'),
-          h(
-            'a',
-            { style: { color: 'red' }, onClick: () => handleDelete(record) },
-            '删除',
-          ),
-        ]),
+      title: '操作',
+      options: {
+        width: 220,
+        fixed: 'right' as const,
+        hasFilter: false,
+        customRender: ({ record }: { record: PermissionInfo }) =>
+          h(Space, { size: 'middle' }, () => [
+            h('a', { onClick: () => handleAddChild(record) }, '新增下级'),
+            h('a', { onClick: () => handleEdit(record) }, '编辑'),
+            h(
+              'a',
+              { style: { color: 'red' }, onClick: () => handleDelete(record) },
+              '删除',
+            ),
+          ]),
+      },
     });
   }
 
-  return baseColumns;
+  return defineTableColumns<PermissionInfo>(
+    baseColumns,
+    activeFilters,
+    emitTableChange,
+    treePagination,
+    { minTableWidth: 1180 },
+  );
 });
-
-function buildTreeOptions(list: PermissionInfo[] = []) {
-  return list
-    .filter((item) => item.id)
-    .map((item) => {
-      const children = buildTreeOptions(item.children || []);
-      return {
-        label: item.name || item.id || '',
-        value: item.id || '',
-        ...(children.length > 0 ? { children } : {}),
-      };
-    });
-}
-
-async function loadData() {
-  loading.value = true;
-  try {
-    dataSource.value = await getPermissionTree();
-  } finally {
-    loading.value = false;
-  }
-}
 
 function handleAdd() {
   permissionFormDrawerRef.value?.open({ mode: 'create' });
@@ -219,18 +173,18 @@ onMounted(loadData);
           >
             新增菜单
           </Button>
-          <Button @click="loadData">刷新</Button>
         </Space>
       </div>
 
       <Table
-        :columns="columns"
-        :data-source="dataSource"
+        :columns="tableConfig.columns"
+        :data-source="treeData"
         :loading="loading"
         :pagination="false"
-        :scroll="{ x: 1180 }"
+        :scroll="tableConfig.scroll"
         bordered
         row-key="id"
+        @change="handleTableChange"
       />
     </Card>
 

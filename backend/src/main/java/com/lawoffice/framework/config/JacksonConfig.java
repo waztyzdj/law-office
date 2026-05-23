@@ -37,6 +37,7 @@ public class JacksonConfig {
     static class FlexibleLocalDateTimeDeserializer extends JsonDeserializer<LocalDateTime> {
         private static final DateTimeFormatter DATE_TIME_FORMATTER = DateTimeFormatter.ofPattern(DATE_TIME_PATTERN);
         private static final DateTimeFormatter DATE_FORMATTER = DateTimeFormatter.ofPattern(DATE_PATTERN);
+        private static final DateTimeFormatter ISO_DATE_TIME_FORMATTER = DateTimeFormatter.ISO_LOCAL_DATE_TIME;
 
         @Override
         public LocalDateTime deserialize(JsonParser p, DeserializationContext ctxt) throws IOException {
@@ -51,7 +52,7 @@ public class JacksonConfig {
             try {
                 // 先尝试解析完整的日期时间格式
                 if (dateString.length() > 10) {
-                    return LocalDateTime.parse(dateString, DATE_TIME_FORMATTER);
+                    return parseDateTime(dateString);
                 } else {
                     // 只有日期，解析后设置时间为 00:00:00
                     LocalDate date = LocalDate.parse(dateString, DATE_FORMATTER);
@@ -61,6 +62,13 @@ public class JacksonConfig {
                 throw new IOException("无法解析日期时间: " + dateString + 
                     "，期望格式: yyyy-MM-dd HH:mm:ss 或 yyyy-MM-dd", e);
             }
+        }
+
+        private LocalDateTime parseDateTime(String dateString) {
+            if (dateString.contains("T")) {
+                return LocalDateTime.parse(dateString, ISO_DATE_TIME_FORMATTER);
+            }
+            return LocalDateTime.parse(dateString, DATE_TIME_FORMATTER);
         }
     }
 

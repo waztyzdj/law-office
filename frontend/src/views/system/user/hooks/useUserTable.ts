@@ -1,6 +1,6 @@
-import { useTable } from '#/composables/Table';
+﻿import { useTable } from '#/composables/Table';
 import type { UserInfo } from '#/api/system/user';
-import { pageUsers, deleteUser, batchDeleteUsers } from '#/api/system/user';
+import { deleteUser, pageUsers } from '#/api/system/user';
 
 /**
  * 用户表格逻辑组合式函数
@@ -15,8 +15,6 @@ export function useUserTable(_getSearchParams?: () => any) {
       fetchData: pageUsers,
       // 删除单个用户 - 使用便捷方法
       deleteItem: deleteUser,
-      // 批量删除用户 - 使用便捷方法
-      batchDeleteItems: batchDeleteUsers,
     },
     // localStorage 配置（可选）
     storageConfig: {
@@ -26,11 +24,7 @@ export function useUserTable(_getSearchParams?: () => any) {
     deleteConfig: {
       title: '确认删除',
       content: (record: UserInfo) => `确定要删除用户"${record.realname}"吗？`,
-      batchTitle: '确认批量删除',
-      batchContent: (count: number) => `确定要删除选中的 ${count} 个用户吗？`,
     },
-    // 启用行选择功能（默认 false）
-    enableRowSelection: true,
   });
 
   /**
@@ -45,3 +39,4 @@ export function useUserTable(_getSearchParams?: () => any) {
     loadData,
   };
 }
+

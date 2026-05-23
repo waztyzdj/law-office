@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import type { RoleInfo } from '#/api/system/role';
 import type { PermissionInfo } from '#/api/system/permission';
-import type { DataNode } from 'ant-design-vue/es/tree';
+import type { DataNode, Key } from 'ant-design-vue/es/vc-tree/interface';
 
 import { computed, nextTick, ref } from 'vue';
 
@@ -11,10 +11,17 @@ import { Alert, Button, Empty, Space, Spin, Tree, message } from 'ant-design-vue
 
 import { getPermissionTree } from '#/api/system/permission';
 import { assignRolePermissions, getRolePermissionIds } from '#/api/system/role';
+import {
+  buildAntTreeData,
+  collectDescendantKeys,
+  collectExpandableKeys,
+  collectExpandedKeysByDepth,
+  collectTreeKeys,
+} from '#/composables/Tree/useTree';
 
 interface CheckedKeysValue {
-  checked: string[];
-  halfChecked?: string[];
+  checked: Key[];
+  halfChecked: Key[];
 }
 
 const emit = defineEmits<{
@@ -23,8 +30,8 @@ const emit = defineEmits<{
 
 const currentRole = ref<RoleInfo>();
 const loading = ref(false);
-const checkedKeys = ref<CheckedKeysValue>({ checked: [] });
-const expandedKeys = ref<string[]>([]);
+const checkedKeys = ref<CheckedKeysValue>({ checked: [], halfChecked: [] });
+const expandedKeys = ref<Key[]>([]);
 const permissionTree = ref<PermissionInfo[]>([]);
 
 const drawerTitle = computed(() =>
@@ -33,8 +40,10 @@ const drawerTitle = computed(() =>
     : '角色授权',
 );
 
-const treeData = computed<DataNode[]>(() => buildTreeData(permissionTree.value));
-const allPermissionKeys = computed(() => collectPermissionKeys(permissionTree.value));
+const treeData = computed<DataNode[]>(() =>
+  buildAntTreeData(permissionTree.value, getPermissionTitle) as DataNode[],
+);
+const allPermissionKeys = computed(() => collectTreeKeys(permissionTree.value));
 const allExpandableKeys = computed(() => collectExpandableKeys(permissionTree.value));
 
 const [Drawer, drawerApi] = useVbenDrawer({
@@ -46,106 +55,23 @@ const [Drawer, drawerApi] = useVbenDrawer({
   title: drawerTitle.value,
 });
 
-function buildTreeData(list: PermissionInfo[] = []): DataNode[] {
-  return list.map((item) => {
-    const titleParts = [item.name];
-    if (item.perms) {
-      titleParts.push(`(${item.perms})`);
-    }
-    const children = buildTreeData(item.children || []);
-
-    return {
-      key: item.id || '',
-      title: titleParts.filter(Boolean).join(' '),
-      ...(children.length > 0 ? { children } : {}),
-    };
-  });
-}
-
-function collectExpandedKeysByDepth(list: PermissionInfo[] = [], maxDepth = 1) {
-  const keys: string[] = [];
-  const walk = (nodes: PermissionInfo[], depth: number) => {
-    nodes.forEach((node) => {
-      if (node.id && node.children?.length && depth <= maxDepth) {
-        keys.push(node.id);
-      }
-      if (node.children?.length) {
-        walk(node.children, depth + 1);
-      }
-    });
-  };
-  walk(list, 1);
-  return keys;
-}
-
-function collectPermissionKeys(list: PermissionInfo[] = []) {
-  const keys: string[] = [];
-  const walk = (nodes: PermissionInfo[]) => {
-    nodes.forEach((node) => {
-      if (node.id) {
-        keys.push(node.id);
-      }
-      if (node.children?.length) {
-        walk(node.children);
-      }
-    });
-  };
-  walk(list);
-  return keys;
-}
-
-function collectExpandableKeys(list: PermissionInfo[] = []) {
-  const keys: string[] = [];
-  const walk = (nodes: PermissionInfo[]) => {
-    nodes.forEach((node) => {
-      if (node.id && node.children?.length) {
-        keys.push(node.id);
-        walk(node.children);
-      }
-    });
-  };
-  walk(list);
-  return keys;
-}
-
-function getCheckedKeyList(keys: CheckedKeysValue | string[]) {
+function getCheckedKeyList(keys: CheckedKeysValue | Key[]) {
   return Array.isArray(keys) ? keys : keys.checked;
 }
 
-function collectDescendantKeys(list: PermissionInfo[] = [], targetKey?: string) {
-  const collect = (nodes: PermissionInfo[]) => {
-    const keys: string[] = [];
-    nodes.forEach((node) => {
-      if (node.id) {
-        keys.push(node.id);
-      }
-      if (node.children?.length) {
-        keys.push(...collect(node.children));
-      }
-    });
-    return keys;
-  };
-
-  const find = (nodes: PermissionInfo[]): PermissionInfo | undefined => {
-    for (const node of nodes) {
-      if (node.id === targetKey) {
-        return node;
-      }
-      const match = find(node.children || []);
-      if (match) {
-        return match;
-      }
-    }
-    return undefined;
-  };
-
-  const target = find(list);
-  return target?.children?.length ? collect(target.children) : [];
+function getPermissionTitle(item: PermissionInfo) {
+  return [item.name, item.perms ? `(${item.perms})` : undefined]
+    .filter(Boolean)
+    .join(' ');
 }
 
-function handleCheck(keys: CheckedKeysValue | string[], event: any) {
+function handleCheck(keys: CheckedKeysValue | Key[], event: any) {
   const nextKeys = new Set(getCheckedKeyList(keys));
-  const nodeKey = String(event?.node?.key ?? '');
+  const nodeKey = event?.node?.key as Key | undefined;
+  if (nodeKey === undefined) {
+    checkedKeys.value = { checked: [...nextKeys], halfChecked: [] };
+    return;
+  }
   const descendantKeys = collectDescendantKeys(permissionTree.value, nodeKey);
 
   if (descendantKeys.length > 0) {
@@ -158,7 +84,7 @@ function handleCheck(keys: CheckedKeysValue | string[], event: any) {
     }
   }
 
-  checkedKeys.value = { checked: [...nextKeys] };
+  checkedKeys.value = { checked: [...nextKeys], halfChecked: [] };
 }
 
 function handleExpandAll() {
@@ -170,11 +96,11 @@ function handleCollapseAll() {
 }
 
 function handleCheckAll() {
-  checkedKeys.value = { checked: allPermissionKeys.value };
+  checkedKeys.value = { checked: allPermissionKeys.value, halfChecked: [] };
 }
 
 function handleUncheckAll() {
-  checkedKeys.value = { checked: [] };
+  checkedKeys.value = { checked: [], halfChecked: [] };
 }
 
 async function loadData(role: RoleInfo) {
@@ -189,7 +115,7 @@ async function loadData(role: RoleInfo) {
       getRolePermissionIds(role.id),
     ]);
     permissionTree.value = tree;
-    checkedKeys.value = { checked: ids };
+    checkedKeys.value = { checked: ids, halfChecked: [] };
     expandedKeys.value = collectExpandedKeysByDepth(tree, 1);
   } finally {
     loading.value = false;
@@ -203,7 +129,10 @@ async function handleSubmit() {
 
   try {
     drawerApi.lock();
-    await assignRolePermissions(currentRole.value.id, checkedKeys.value.checked);
+    await assignRolePermissions(
+      currentRole.value.id,
+      checkedKeys.value.checked.map(String),
+    );
     message.success('角色授权已保存');
     emit('success');
     drawerApi.close();
@@ -215,7 +144,7 @@ async function handleSubmit() {
 async function open(role: RoleInfo) {
   currentRole.value = role;
   permissionTree.value = [];
-  checkedKeys.value = { checked: [] };
+  checkedKeys.value = { checked: [], halfChecked: [] };
   expandedKeys.value = [];
   drawerApi.setState({ loading: false, title: drawerTitle.value }).open();
   await nextTick();

@@ -38,12 +38,8 @@ public class SysDepart extends BaseTenantEntity {
     @Schema(description = "描述")
     private String description;
 
-    @ExcelProperty("机构类别")
-    @Schema(description = "机构类别 1公司，2组织机构，3岗位")
-    private String orgCategory;
-
-    @ExcelProperty("机构类型")
-    @Schema(description = "机构类型 1一级部门 2子部门")
+    @ExcelProperty("类型")
+    @Schema(description = "类型 1-公司 2-分公司 3-子公司 4-组织机构 5-部门 6-子部门 7-组 8-岗位")
     private String orgType;
 
     @ExcelProperty("机构编码")

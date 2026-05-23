@@ -45,6 +45,12 @@ public class JwtUtil {
         return claims.getSubject();
     }
 
+    public String getUserIdFromToken(String token) {
+        Claims claims = parseToken(token);
+        Object userId = claims.get("userId");
+        return userId != null ? userId.toString() : null;
+    }
+
     public boolean isTokenValid(String token) {
         try {
             Claims claims = parseToken(token);

@@ -99,6 +99,7 @@ public class JwtAuthFilter extends OncePerRequestFilter {
 
             // 从Token中获取用户名
             String username = jwtUtil.getUsernameFromToken(token);
+            String userId = jwtUtil.getUserIdFromToken(token);
             
             // 将 SecurityManager 绑定到当前线程上下文
             ThreadContext.bind(securityManager);
@@ -110,6 +111,7 @@ public class JwtAuthFilter extends OncePerRequestFilter {
             
             // 将用户信息存入request属性
             request.setAttribute("username", username);
+            request.setAttribute("userId", userId);
             request.setAttribute("token", token);
             
             log.debug("用户 {} 认证成功", username);

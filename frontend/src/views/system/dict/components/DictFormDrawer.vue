@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { VbenFormSchema } from '#/adapter/form';
-import type { RoleInfo } from '#/api/system/role';
+import type { SysDictInfo } from '#/api/system/dict';
 
 import { computed, nextTick, ref } from 'vue';
 
@@ -8,20 +8,14 @@ import { useVbenDrawer } from '@vben/common-ui';
 
 import { message } from 'ant-design-vue';
 
-import {
-  cleanFormPayload,
-  noAutofillInputProps,
-  optionalString,
-  useVbenForm,
-  z,
-} from '#/adapter/form';
-import { getRoleById, saveRole } from '#/api/system/role';
+import { cleanFormPayload, useVbenForm, z } from '#/adapter/form';
+import { getDictById, saveDict } from '#/api/system/dict';
 
 type DrawerMode = 'create' | 'edit';
 
 interface DrawerPayload {
   mode: DrawerMode;
-  record?: RoleInfo;
+  record?: SysDictInfo;
 }
 
 const emit = defineEmits<{
@@ -34,59 +28,53 @@ const initialValues = ref<Record<string, any>>({});
 const hasSyncedMountedValues = ref(false);
 
 const isCreate = computed(() => mode.value === 'create');
-const drawerTitle = computed(() => (isCreate.value ? '新增角色' : '编辑角色'));
+const drawerTitle = computed(() => (isCreate.value ? '新增字典' : '编辑字典'));
 
-const emptyRoleValues = {
-  roleCode: '',
-  roleName: '',
+const emptyDictValues = {
+  dictCode: '',
+  dictName: '',
   description: '',
 };
 
-const getDefaultValue = (fieldName: string, fallback?: any) =>
-  initialValues.value[fieldName] ?? fallback;
-
 const buildFormSchema = (): VbenFormSchema[] => [
   {
-    fieldName: 'roleCode',
+    fieldName: 'dictCode',
     component: 'Input',
-    label: '角色编码',
-    defaultValue: getDefaultValue('roleCode', ''),
+    label: '字典编码',
+    defaultValue: initialValues.value.dictCode ?? '',
     rules: z
-      .string({ required_error: '请输入角色编码' })
-      .min(1, '请输入角色编码')
-      .max(64, '角色编码不能超过64个字符')
-      .regex(/^[A-Za-z][A-Za-z0-9_:.-]*$/, '角色编码需以字母开头'),
-    componentProps: noAutofillInputProps('roleCode', {
-      disabled: !isCreate.value,
-      maxlength: 64,
-      placeholder: '请输入角色编码',
-    }),
+      .string({ required_error: '请输入字典编码' })
+      .min(1, '请输入字典编码')
+      .max(100, '字典编码不能超过100个字符'),
+    componentProps: {
+      maxlength: 100,
+      placeholder: '请输入字典编码',
+    },
   },
   {
-    fieldName: 'roleName',
+    fieldName: 'dictName',
     component: 'Input',
-    label: '角色名称',
-    defaultValue: getDefaultValue('roleName', ''),
+    label: '字典名称',
+    defaultValue: initialValues.value.dictName ?? '',
     rules: z
-      .string({ required_error: '请输入角色名称' })
-      .min(1, '请输入角色名称')
-      .max(64, '角色名称不能超过64个字符'),
-    componentProps: noAutofillInputProps('roleName', {
-      maxlength: 64,
-      placeholder: '请输入角色名称',
-    }),
+      .string({ required_error: '请输入字典名称' })
+      .min(1, '请输入字典名称')
+      .max(100, '字典名称不能超过100个字符'),
+    componentProps: {
+      maxlength: 100,
+      placeholder: '请输入字典名称',
+    },
   },
   {
     fieldName: 'description',
-    component: 'Textarea',
+    component: 'Input',
     label: '描述',
-    defaultValue: getDefaultValue('description', ''),
-    rules: optionalString(z.string().max(500, '描述不能超过500个字符')),
-    componentProps: noAutofillInputProps('roleDescription', {
-      maxlength: 500,
+    defaultValue: initialValues.value.description ?? '',
+    rules: z.string().max(200, '描述不能超过200个字符').optional(),
+    componentProps: {
+      maxlength: 200,
       placeholder: '请输入描述',
-      rows: 4,
-    }),
+    },
   },
 ];
 
@@ -104,7 +92,7 @@ const [Form, formApi] = useVbenForm({
 });
 
 const [Drawer, drawerApi] = useVbenDrawer({
-  class: 'w-full sm:w-2/5! sm:max-w-none!',
+  class: 'w-full sm:w-1/2! sm:max-w-none!',
   closeOnClickModal: true,
   confirmText: '保存',
   contentClass: 'px-5 py-4 sm:px-6',
@@ -115,10 +103,11 @@ const [Drawer, drawerApi] = useVbenDrawer({
 
 function buildInitialValues(payload: DrawerPayload) {
   if (payload.mode === 'create') {
-    return { ...emptyRoleValues };
+    return { ...emptyDictValues };
   }
+
   return {
-    ...emptyRoleValues,
+    ...emptyDictValues,
     ...payload.record,
   };
 }
@@ -146,17 +135,18 @@ async function refreshDetailSilently() {
   if (!currentId.value) {
     return;
   }
+
   try {
-    const detail = await getRoleById(currentId.value);
+    const detail = await getDictById(currentId.value);
     initialValues.value = buildInitialValues({ mode: mode.value, record: detail });
-    await formApi.setValues(detail);
+    await formApi.setValues(initialValues.value);
   } catch {
-    // 请求层会统一提示错误，这里保留已有行数据。
+    // handled by the request layer
   }
 }
 
-function cleanPayload(values: Record<string, any>): RoleInfo {
-  return cleanFormPayload<RoleInfo>(values, {
+function cleanPayload(values: Record<string, any>): SysDictInfo {
+  return cleanFormPayload<SysDictInfo>(values, {
     id: currentId.value,
   });
 }
@@ -170,8 +160,8 @@ async function handleSubmit() {
   try {
     drawerApi.lock();
     const values = await formApi.getValues();
-    await saveRole(cleanPayload(values));
-    message.success(isCreate.value ? '新增角色成功' : '修改角色成功');
+    await saveDict(cleanPayload(values));
+    message.success(isCreate.value ? '新增字典成功' : '修改字典成功');
     emit('success');
     drawerApi.close();
   } finally {

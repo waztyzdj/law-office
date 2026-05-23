@@ -16,7 +16,9 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
 import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 @Slf4j
@@ -49,6 +51,15 @@ public class UserServiceImpl extends BaseServiceImpl<UserMapper, User, UserVO> i
 
     @Autowired
     private RolePermissionMapper rolePermissionMapper;
+
+    @Autowired
+    private DepartRoleMapper departRoleMapper;
+
+    @Autowired
+    private DepartRolePermissionMapper departRolePermissionMapper;
+
+    @Autowired
+    private DepartRoleUserMapper departRoleUserMapper;
 
     @Autowired
     private PermissionMapper permissionMapper;
@@ -204,6 +215,10 @@ public class UserServiceImpl extends BaseServiceImpl<UserMapper, User, UserVO> i
         userDepartWrapper.in(UserDepart::getUserId, userIds);
         userDepartMapper.delete(userDepartWrapper);
 
+        LambdaQueryWrapper<DepartRoleUser> departRoleUserWrapper = new LambdaQueryWrapper<>();
+        departRoleUserWrapper.in(DepartRoleUser::getUserId, userIds);
+        departRoleUserMapper.delete(departRoleUserWrapper);
+
         LambdaQueryWrapper<UserTenant> userTenantWrapper = new LambdaQueryWrapper<>();
         userTenantWrapper.in(UserTenant::getUserId, userIds);
         userTenantMapper.delete(userTenantWrapper);
@@ -322,14 +337,20 @@ public class UserServiceImpl extends BaseServiceImpl<UserMapper, User, UserVO> i
     @Override
     @Transactional(rollbackFor = Exception.class)
     public void assignDeparts(String userId, List<String> departIds) {
+        List<String> normalizedDepartIds = normalizeIds(departIds);
+
         // 先删除用户现有的所有部门
         LambdaQueryWrapper<UserDepart> deleteWrapper = new LambdaQueryWrapper<>();
         deleteWrapper.eq(UserDepart::getUserId, userId);
         userDepartMapper.delete(deleteWrapper);
 
+        LambdaQueryWrapper<DepartRoleUser> deleteRoleUserWrapper = new LambdaQueryWrapper<>();
+        deleteRoleUserWrapper.eq(DepartRoleUser::getUserId, userId);
+        departRoleUserMapper.delete(deleteRoleUserWrapper);
+
         // 批量插入新的部门关联
-        if (departIds != null && !departIds.isEmpty()) {
-            List<UserDepart> userDeparts = departIds.stream()
+        if (!normalizedDepartIds.isEmpty()) {
+            List<UserDepart> userDeparts = normalizedDepartIds.stream()
                 .map(departId -> {
                     UserDepart userDepart = new UserDepart();
                     userDepart.setUserId(userId);
@@ -341,9 +362,12 @@ public class UserServiceImpl extends BaseServiceImpl<UserMapper, User, UserVO> i
             for (UserDepart userDepart : userDeparts) {
                 userDepartMapper.insert(userDepart);
             }
+
+            assignDefaultDepartRoles(userId, normalizedDepartIds);
         }
 
         log.info("为用户分配部门成功，用户ID: {}, 部门数量: {}", userId, departIds == null ? 0 : departIds.size());
+        forceLogoutUserById(userId);
     }
 
     @Override
@@ -370,16 +394,26 @@ public class UserServiceImpl extends BaseServiceImpl<UserMapper, User, UserVO> i
     @Override
     @Transactional(rollbackFor = Exception.class)
     public void removeDeparts(String userId, List<String> departIds) {
-        if (departIds == null || departIds.isEmpty()) {
+        List<String> normalizedDepartIds = normalizeIds(departIds);
+        if (normalizedDepartIds.isEmpty()) {
             return;
         }
 
         LambdaQueryWrapper<UserDepart> wrapper = new LambdaQueryWrapper<>();
         wrapper.eq(UserDepart::getUserId, userId)
-               .in(UserDepart::getDepId, departIds);
+               .in(UserDepart::getDepId, normalizedDepartIds);
         userDepartMapper.delete(wrapper);
 
+        List<String> departRoleIds = getDepartRoleIds(normalizedDepartIds);
+        if (!departRoleIds.isEmpty()) {
+            LambdaQueryWrapper<DepartRoleUser> roleUserWrapper = new LambdaQueryWrapper<>();
+            roleUserWrapper.eq(DepartRoleUser::getUserId, userId)
+                    .in(DepartRoleUser::getDroleId, departRoleIds);
+            departRoleUserMapper.delete(roleUserWrapper);
+        }
+
         log.info("移除用户部门成功，用户ID: {}, 移除部门数量: {}", userId, departIds.size());
+        forceLogoutUserById(userId);
     }
 
     @Override
@@ -452,9 +486,10 @@ public class UserServiceImpl extends BaseServiceImpl<UserMapper, User, UserVO> i
         LambdaQueryWrapper<UserRole> userRoleWrapper = new LambdaQueryWrapper<>();
         userRoleWrapper.eq(UserRole::getUserId, userId);
         List<UserRole> userRoles = userRoleMapper.selectList(userRoleWrapper);
+        List<Permission> departRolePermissions = getUserDepartRolePermissions(userId);
 
         if (userRoles.isEmpty()) {
-            return new ArrayList<>();
+            return departRolePermissions;
         }
 
         // 2. 获取所有角色的ID
@@ -469,7 +504,7 @@ public class UserServiceImpl extends BaseServiceImpl<UserMapper, User, UserVO> i
         List<RolePermission> rolePermissions = rolePermissionMapper.selectList(rolePermWrapper);
 
         if (rolePermissions.isEmpty()) {
-            return new ArrayList<>();
+            return departRolePermissions;
         }
 
         // 4. 获取所有权限ID
@@ -483,7 +518,7 @@ public class UserServiceImpl extends BaseServiceImpl<UserMapper, User, UserVO> i
         permWrapper.in(Permission::getId, permissionIds)
                    .eq(Permission::getStatus, "1") // 只查询有效的权限
                    .orderByAsc(Permission::getSortNo);
-        return permissionMapper.selectList(permWrapper);
+        return mergePermissions(permissionMapper.selectList(permWrapper), departRolePermissions);
     }
 
     @Override
@@ -529,10 +564,7 @@ public class UserServiceImpl extends BaseServiceImpl<UserMapper, User, UserVO> i
         log.info("用户 {} 的权限列表: {}", username, permissionCodes);
         
         // 6. 获取用户角色列表
-        List<Role> roles = getUserRoles(user.getId());
-        List<String> roleCodes = roles.stream()
-                .map(Role::getRoleCode)
-                .collect(Collectors.toList());
+        List<String> roleCodes = getUserRoleCodes(user.getId());
         log.info("用户 {} 的角色列表: {}", username, roleCodes);
         
         // 7. 强制清除所有旧的 Redis 缓存（包括 Token、权限、角色）
@@ -626,10 +658,7 @@ public class UserServiceImpl extends BaseServiceImpl<UserMapper, User, UserVO> i
         log.info("用户 {} 的权限列表: {}", username, permissionCodes);
         
         // 3. 获取用户角色列表
-        List<Role> roles = getUserRoles(user.getId());
-        List<String> roleCodes = roles.stream()
-                .map(Role::getRoleCode)
-                .collect(Collectors.toList());
+        List<String> roleCodes = getUserRoleCodes(user.getId());
         log.info("用户 {} 的角色列表: {}", username, roleCodes);
         
         // 4. 构建返回结果
@@ -644,6 +673,144 @@ public class UserServiceImpl extends BaseServiceImpl<UserMapper, User, UserVO> i
         
         log.info("获取用户详细信息成功：{}, 权限数量: {}, 角色数量: {}", username, permissionCodes.size(), roleCodes.size());
         return userInfoVO;
+    }
+
+    private void assignDefaultDepartRoles(String userId, List<String> departIds) {
+        List<String> defaultRoleIds = getDefaultDepartRoleIds(departIds);
+        if (defaultRoleIds.isEmpty()) {
+            return;
+        }
+
+        for (String roleId : defaultRoleIds) {
+            DepartRoleUser roleUser = new DepartRoleUser();
+            roleUser.setUserId(userId);
+            roleUser.setDroleId(roleId);
+            departRoleUserMapper.insert(roleUser);
+        }
+    }
+
+    private List<Permission> getUserDepartRolePermissions(String userId) {
+        List<String> departRoleIds = getUserDepartRoleIds(userId);
+        if (departRoleIds.isEmpty()) {
+            return new ArrayList<>();
+        }
+
+        LambdaQueryWrapper<DepartRolePermission> rolePermissionWrapper = new LambdaQueryWrapper<>();
+        rolePermissionWrapper.in(DepartRolePermission::getRoleId, departRoleIds);
+        List<String> permissionIds = departRolePermissionMapper.selectList(rolePermissionWrapper).stream()
+                .map(DepartRolePermission::getPermissionId)
+                .filter(StringUtils::hasText)
+                .distinct()
+                .collect(Collectors.toList());
+
+        if (permissionIds.isEmpty()) {
+            return new ArrayList<>();
+        }
+
+        LambdaQueryWrapper<Permission> permissionWrapper = new LambdaQueryWrapper<>();
+        permissionWrapper.in(Permission::getId, permissionIds)
+                .eq(Permission::getStatus, "1")
+                .orderByAsc(Permission::getSortNo);
+        return permissionMapper.selectList(permissionWrapper);
+    }
+
+    private List<String> getUserRoleCodes(String userId) {
+        Set<String> roleCodes = new LinkedHashSet<>();
+        getUserRoles(userId).stream()
+                .map(Role::getRoleCode)
+                .filter(StringUtils::hasText)
+                .forEach(roleCodes::add);
+
+        List<String> departRoleIds = getUserDepartRoleIds(userId);
+        if (!departRoleIds.isEmpty()) {
+            LambdaQueryWrapper<DepartRole> wrapper = new LambdaQueryWrapper<>();
+            wrapper.in(DepartRole::getId, departRoleIds)
+                    .eq(DepartRole::getDeleteFlag, 0);
+            departRoleMapper.selectList(wrapper).stream()
+                    .map(DepartRole::getRoleCode)
+                    .filter(StringUtils::hasText)
+                    .forEach(roleCodes::add);
+        }
+
+        return new ArrayList<>(roleCodes);
+    }
+
+    private List<String> getUserDepartRoleIds(String userId) {
+        if (!StringUtils.hasText(userId)) {
+            return new ArrayList<>();
+        }
+
+        LambdaQueryWrapper<DepartRoleUser> roleUserWrapper = new LambdaQueryWrapper<>();
+        roleUserWrapper.eq(DepartRoleUser::getUserId, userId);
+        List<String> roleIds = departRoleUserMapper.selectList(roleUserWrapper).stream()
+                .map(DepartRoleUser::getDroleId)
+                .filter(StringUtils::hasText)
+                .distinct()
+                .collect(Collectors.toList());
+
+        if (roleIds.isEmpty()) {
+            return new ArrayList<>();
+        }
+
+        LambdaQueryWrapper<DepartRole> roleWrapper = new LambdaQueryWrapper<>();
+        roleWrapper.in(DepartRole::getId, roleIds)
+                .eq(DepartRole::getDeleteFlag, 0);
+        return departRoleMapper.selectList(roleWrapper).stream()
+                .map(DepartRole::getId)
+                .filter(StringUtils::hasText)
+                .distinct()
+                .collect(Collectors.toList());
+    }
+
+    private List<String> getDefaultDepartRoleIds(List<String> departIds) {
+        List<String> normalizedDepartIds = normalizeIds(departIds);
+        if (normalizedDepartIds.isEmpty()) {
+            return new ArrayList<>();
+        }
+
+        Set<String> departIdSet = new LinkedHashSet<>(normalizedDepartIds);
+        LambdaQueryWrapper<DepartRole> wrapper = new LambdaQueryWrapper<>();
+        wrapper.in(DepartRole::getDepartId, normalizedDepartIds)
+                .eq(DepartRole::getDeleteFlag, 0);
+        return departRoleMapper.selectList(wrapper).stream()
+                .filter(role -> StringUtils.hasText(role.getDepartId()))
+                .filter(role -> departIdSet.contains(role.getDepartId()))
+                .filter(role -> role.getDepartId().equals(role.getRoleCode()))
+                .map(DepartRole::getId)
+                .filter(StringUtils::hasText)
+                .distinct()
+                .collect(Collectors.toList());
+    }
+
+    private List<String> getDepartRoleIds(List<String> departIds) {
+        List<String> normalizedDepartIds = normalizeIds(departIds);
+        if (normalizedDepartIds.isEmpty()) {
+            return new ArrayList<>();
+        }
+
+        LambdaQueryWrapper<DepartRole> wrapper = new LambdaQueryWrapper<>();
+        wrapper.in(DepartRole::getDepartId, normalizedDepartIds);
+        return departRoleMapper.selectList(wrapper).stream()
+                .map(DepartRole::getId)
+                .filter(StringUtils::hasText)
+                .distinct()
+                .collect(Collectors.toList());
+    }
+
+    private List<Permission> mergePermissions(List<Permission> rolePermissions, List<Permission> departRolePermissions) {
+        Set<String> permissionIds = new LinkedHashSet<>();
+        List<Permission> permissions = new ArrayList<>();
+        for (Permission permission : rolePermissions) {
+            if (permission != null && StringUtils.hasText(permission.getId()) && permissionIds.add(permission.getId())) {
+                permissions.add(permission);
+            }
+        }
+        for (Permission permission : departRolePermissions) {
+            if (permission != null && StringUtils.hasText(permission.getId()) && permissionIds.add(permission.getId())) {
+                permissions.add(permission);
+            }
+        }
+        return permissions;
     }
 
     /**

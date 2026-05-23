@@ -13,29 +13,29 @@ public class SysDepartVO extends BaseVO {
     private static final long serialVersionUID = 1L;
 
     /**
-     * 父级ID
+     * 父机构ID
      */
     private String parentId;
 
     /**
-     * 机构名称
+     * 机构/部门名称
      */
     private String departName;
 
     /**
-     * 机构编码
+     * 英文名
      */
-    private String departCode;
+    private String departNameEn;
 
     /**
-     * 机构类型
+     * 缩写
      */
-    private String orgCategory;
+    private String departNameAbbr;
 
     /**
-     * 排序号
+     * 排序
      */
-    private Integer orderNum;
+    private Integer departOrder;
 
     /**
      * 描述
@@ -43,12 +43,47 @@ public class SysDepartVO extends BaseVO {
     private String description;
 
     /**
-     * 状态(1-正常,0-冻结)
+     * 类型
      */
-    private Integer status;
+    private String orgType;
+
+    /**
+     * 机构编码
+     */
+    private String orgCode;
+
+    /**
+     * 手机号
+     */
+    private String mobile;
+
+    /**
+     * 传真
+     */
+    private String fax;
+
+    /**
+     * 地址
+     */
+    private String address;
+
+    /**
+     * 备注
+     */
+    private String memo;
+
+    /**
+     * 状态(1-启用,0-停用)
+     */
+    private String status;
 
     /**
      * 删除标识(0-正常,1-已删除)
      */
     private Integer deleteFlag;
+
+    /**
+     * 是否叶子节点
+     */
+    private Boolean izLeaf;
 }

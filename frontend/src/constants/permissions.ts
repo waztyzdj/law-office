@@ -11,7 +11,13 @@ function createBasePermissionCodes(module: string) {
 }
 
 export const permissionCodes = {
+  category: createBasePermissionCodes('category'),
+  log: createBasePermissionCodes('log'),
   permission: createBasePermissionCodes('permission'),
+  depart: createBasePermissionCodes('depart'),
+  dict: createBasePermissionCodes('dict'),
+  dictItem: createBasePermissionCodes('dict-item'),
   role: createBasePermissionCodes('role'),
+  tenant: createBasePermissionCodes('tenant'),
   user: createBasePermissionCodes('user'),
 } as const;

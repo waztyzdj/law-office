@@ -37,7 +37,7 @@ const tableConfig = computed(() => getUserColumns(filterStateRef, emit, props.pa
 </script>
 
 <template>
-  <Card class="table-card" style="margin-top: 16px;">
+  <Card class="table-card">
     <div class="table-toolbar">
       <Space>
         <Button

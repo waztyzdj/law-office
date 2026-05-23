@@ -16,6 +16,10 @@ import {
   z,
 } from '#/adapter/form';
 import { getPermissionById, savePermission } from '#/api/system/permission';
+import {
+  filterTreeSelectOptions,
+  type StringTreeSelectOption,
+} from '#/composables/Tree/useTree';
 import { menuIconOptions } from '#/constants/menu-icons';
 import { menuTypeOptions, menuTypeValues } from '#/constants/menu-types';
 import MenuIconPicker from './MenuIconPicker.vue';
@@ -28,14 +32,8 @@ interface DrawerPayload {
   record?: PermissionInfo;
 }
 
-interface TreeOption {
-  label: string;
-  value: string;
-  children?: TreeOption[];
-}
-
 const props = defineProps<{
-  treeOptions: TreeOption[];
+  treeOptions: StringTreeSelectOption[];
 }>();
 
 const emit = defineEmits<{
@@ -49,7 +47,9 @@ const hasSyncedMountedValues = ref(false);
 
 const isCreate = computed(() => mode.value === 'create');
 const drawerTitle = computed(() => (isCreate.value ? '新增菜单权限' : '编辑菜单权限'));
-const availableTreeOptions = computed(() => filterTreeOptions(props.treeOptions, currentId.value));
+const availableTreeOptions = computed(() =>
+  filterTreeSelectOptions(props.treeOptions, currentId.value),
+);
 
 const emptyPermissionValues = {
   parentId: undefined,
@@ -68,7 +68,10 @@ const emptyPermissionValues = {
   status: '1',
 };
 
-const legacyIconMap: Record<string, (typeof menuIconOptions)[number]> = {
+type MenuIcon = (typeof menuIconOptions)[number];
+const supportedMenuIcons = menuIconOptions as readonly string[];
+
+const legacyIconMap: Record<string, MenuIcon> = {
   category: 'lucide:tags',
   database: 'lucide:database',
   depart: 'lucide:building-2',
@@ -99,6 +102,10 @@ const isMenu = (menuType?: number) =>
 const menuRequiredRule = (message: string, maxMessage: string, max = 200) =>
   z.string({ required_error: message }).min(1, message).max(max, maxMessage);
 
+const noopRule = z.any().optional();
+const isMenuIcon = (value: string): value is MenuIcon =>
+  supportedMenuIcons.includes(value);
+
 const buildFormSchema = (): VbenFormSchema[] => [
   {
     fieldName: 'menuType',
@@ -120,7 +127,11 @@ const buildFormSchema = (): VbenFormSchema[] => [
     dependencies: {
       required: (values) => !isFirstLevelMenu(values.menuType),
       rules: (values) =>
-        !isFirstLevelMenu(values.menuType) ? 'selectRequired' : undefined,
+        !isFirstLevelMenu(values.menuType)
+          ? z
+              .string({ required_error: '请选择父级菜单' })
+              .min(1, '请选择父级菜单')
+          : noopRule,
       show: (values) => !isFirstLevelMenu(values.menuType),
       triggerFields: ['menuType'],
     },
@@ -154,7 +165,7 @@ const buildFormSchema = (): VbenFormSchema[] => [
       rules: (values) =>
         isMenu(values.menuType)
           ? menuRequiredRule('请输入路径', '路径不能超过200个字符')
-          : undefined,
+          : noopRule,
       show: (values) => isMenu(values.menuType),
       triggerFields: ['menuType'],
     },
@@ -172,7 +183,7 @@ const buildFormSchema = (): VbenFormSchema[] => [
       rules: (values) =>
         isMenu(values.menuType)
           ? menuRequiredRule('请输入组件路径', '组件路径不能超过200个字符')
-          : undefined,
+          : noopRule,
       show: (values) => isMenu(values.menuType),
       triggerFields: ['menuType'],
     },
@@ -212,7 +223,7 @@ const buildFormSchema = (): VbenFormSchema[] => [
                 /^[A-Za-z][A-Za-z0-9_-]*:[A-Za-z][A-Za-z0-9_-]*$/,
                 '权限码格式为 module:action',
               )
-          : undefined,
+          : noopRule,
       show: (values) => isButtonPermission(values.menuType),
       triggerFields: ['menuType'],
     },
@@ -235,7 +246,7 @@ const buildFormSchema = (): VbenFormSchema[] => [
       z
         .string()
         .max(100, '图标不能超过100个字符')
-        .refine((value) => menuIconOptions.includes(value), '请选择系统支持的图标'),
+        .refine(isMenuIcon, '请选择系统支持的图标'),
     ),
     componentProps: {
       icons: menuIconOptions,
@@ -338,19 +349,6 @@ const [Drawer, drawerApi] = useVbenDrawer({
   title: drawerTitle.value,
 });
 
-function filterTreeOptions(options: TreeOption[] = [], excludedId?: string): TreeOption[] {
-  return options
-    .filter((option) => !excludedId || option.value !== excludedId)
-    .map((option) => {
-      const children = filterTreeOptions(option.children || [], excludedId);
-      return {
-        label: option.label,
-        value: option.value,
-        ...(children.length > 0 ? { children } : {}),
-      };
-    });
-}
-
 function buildInitialValues(payload: DrawerPayload) {
   if (payload.mode === 'create') {
     return {
@@ -371,7 +369,7 @@ function normalizeIcon(icon?: string) {
     return '';
   }
   const normalizedIcon = icon.trim();
-  if (menuIconOptions.includes(normalizedIcon as (typeof menuIconOptions)[number])) {
+  if (isMenuIcon(normalizedIcon)) {
     return normalizedIcon;
   }
   return legacyIconMap[normalizedIcon] || '';

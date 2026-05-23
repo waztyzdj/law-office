@@ -16,27 +16,19 @@ export function getRoleColumns(
 
   const columns: any[] = [
     {
-      dataIndex: 'roleName',
-      title: '角色名称',
+      dataIndex: 'roleCode',
+      title: '角色编码',
       options: { width: 160 },
     },
     {
-      dataIndex: 'roleCode',
-      title: '角色编码',
+      dataIndex: 'roleName',
+      title: '角色名称',
       options: { width: 160 },
     },
     {
       dataIndex: 'description',
       title: '描述',
       options: { width: 260 },
-    },
-    {
-      dataIndex: 'createTime',
-      title: '创建时间',
-      options: {
-        width: 180,
-        columnType: 'datetime' as const,
-      },
     },
     canEditRole
       ? {
