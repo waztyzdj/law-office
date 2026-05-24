@@ -1,11 +1,10 @@
 <script setup lang="ts">
 import { computed, toRef } from 'vue';
 
-import { Button, Card, Space, Table } from 'ant-design-vue';
-
 import type { CategoryInfo } from '#/api/system/category';
 import type { TablePaginationConfig } from '#/composables/Table';
 
+import { BaseTable } from '#/components/BaseTable';
 import { permissionCodes } from '#/constants/permissions';
 
 import { getCategoryColumns } from '../hooks/useCategoryColumns';
@@ -30,38 +29,27 @@ const filterStateRef = toRef(props, 'activeFilters');
 const tableConfig = computed(() =>
   getCategoryColumns(filterStateRef, emit, props.pagination),
 );
+const toolbarButtons = computed(() => [
+  {
+    key: 'add',
+    label: '新增类型',
+    permissionCode: permissionCodes.category.edit,
+    type: 'primary' as const,
+    onClick: () => emit('add'),
+  },
+]);
 </script>
 
 <template>
-  <Card>
-    <div class="table-toolbar">
-      <Space>
-        <Button
-          v-access:code="permissionCodes.category.edit"
-          type="primary"
-          @click="$emit('add')"
-        >
-          新增类型
-        </Button>
-      </Space>
-    </div>
-
-    <Table
-      :columns="tableConfig.columns"
-      :data-source="dataSource"
-      :loading="loading"
-      :pagination="false"
-      :scroll="tableConfig.scroll"
-      bordered
-      default-expand-all-rows
-      row-key="id"
-      @change="(pag, filters, sorter) => $emit('change', pag, filters, sorter)"
-    />
-  </Card>
+  <BaseTable
+    :columns="tableConfig.columns"
+    :data-source="dataSource"
+    :loading="loading"
+    :pagination="false"
+    :scroll="tableConfig.scroll"
+    :toolbar-buttons="toolbarButtons"
+    default-expand-all-rows
+    row-key="id"
+    @change="(pag, filters, sorter) => $emit('change', pag, filters, sorter)"
+  />
 </template>
-
-<style scoped>
-.table-toolbar {
-  margin-bottom: 16px;
-}
-</style>

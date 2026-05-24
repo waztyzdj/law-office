@@ -1,11 +1,10 @@
 <script setup lang="ts">
 import { computed, toRef } from 'vue';
 
-import { Button, Card, Space, Table } from 'ant-design-vue';
-
 import type { DepartInfo } from '#/api/system/depart';
 import type { TablePaginationConfig } from '#/composables/Table';
 
+import { BaseTable } from '#/components/BaseTable';
 import { permissionCodes } from '#/constants/permissions';
 
 import { getDepartColumns } from '../hooks/useDepartColumns';
@@ -36,38 +35,27 @@ const tableConfig = computed(() =>
     props.orgTypeSelectOptions,
   ),
 );
+const toolbarButtons = computed(() => [
+  {
+    key: 'add',
+    label: '新增机构',
+    permissionCode: permissionCodes.depart.edit,
+    type: 'primary' as const,
+    onClick: () => emit('add'),
+  },
+]);
 </script>
 
 <template>
-  <Card>
-    <div class="table-toolbar">
-      <Space>
-        <Button
-          v-access:code="permissionCodes.depart.edit"
-          type="primary"
-          @click="$emit('add')"
-        >
-          新增机构
-        </Button>
-      </Space>
-    </div>
-
-    <Table
-      :columns="tableConfig.columns"
-      :data-source="dataSource"
-      :loading="loading"
-      :pagination="false"
-      :scroll="tableConfig.scroll"
-      bordered
-      default-expand-all-rows
-      row-key="id"
-      @change="(pag, filters, sorter) => $emit('change', pag, filters, sorter)"
-    />
-  </Card>
+  <BaseTable
+    :columns="tableConfig.columns"
+    :data-source="dataSource"
+    :loading="loading"
+    :pagination="false"
+    :scroll="tableConfig.scroll"
+    :toolbar-buttons="toolbarButtons"
+    default-expand-all-rows
+    row-key="id"
+    @change="(pag, filters, sorter) => $emit('change', pag, filters, sorter)"
+  />
 </template>
-
-<style scoped>
-.table-toolbar {
-  margin-bottom: 16px;
-}
-</style>

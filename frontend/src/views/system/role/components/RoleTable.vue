@@ -1,9 +1,12 @@
 <script setup lang="ts">
 import { computed, toRef } from 'vue';
-import { Button, Card, Space, Table } from 'ant-design-vue';
+
 import type { RoleInfo } from '#/api/system/role';
 import type { TablePaginationConfig } from '#/composables/Table';
+
+import { BaseTable } from '#/components/BaseTable';
 import { permissionCodes } from '#/constants/permissions';
+
 import { getRoleColumns } from '../hooks/useRoleColumns';
 
 interface Props {
@@ -26,37 +29,27 @@ const filterStateRef = toRef(props, 'activeFilters');
 const tableConfig = computed(() =>
   getRoleColumns(filterStateRef, emit, props.pagination),
 );
+const toolbarButtons = computed(() => [
+  {
+    key: 'add',
+    label: '新增角色',
+    permissionCode: permissionCodes.role.edit,
+    type: 'primary' as const,
+    onClick: () => emit('add'),
+  },
+]);
 </script>
 
 <template>
-  <Card class="table-card">
-    <div class="table-toolbar">
-      <Space>
-        <Button
-          v-access:code="permissionCodes.role.edit"
-          type="primary"
-          @click="$emit('add')"
-        >
-          新增角色
-        </Button>
-      </Space>
-    </div>
-
-    <Table
-      :columns="tableConfig.columns"
-      :data-source="dataSource"
-      :loading="loading"
-      :pagination="pagination"
-      :scroll="tableConfig.scroll"
-      bordered
-      row-key="id"
-      @change="(pag, filters, sorter) => $emit('change', pag, filters, sorter)"
-    />
-  </Card>
+  <BaseTable
+    class="table-card"
+    :columns="tableConfig.columns"
+    :data-source="dataSource"
+    :loading="loading"
+    :pagination="pagination"
+    :scroll="tableConfig.scroll"
+    :toolbar-buttons="toolbarButtons"
+    row-key="id"
+    @change="(pag, filters, sorter) => $emit('change', pag, filters, sorter)"
+  />
 </template>
-
-<style scoped>
-.table-toolbar {
-  margin-bottom: 16px;
-}
-</style>

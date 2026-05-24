@@ -1,11 +1,10 @@
 <script setup lang="ts">
 import { computed, toRef } from 'vue';
 
-import { Card, Table } from 'ant-design-vue';
-
 import type { LogInfo } from '#/api/system/log';
 import type { TablePaginationConfig } from '#/composables/Table';
 
+import { BaseTable } from '#/components/BaseTable';
 import { getLogColumns } from '../hooks/useLogColumns';
 
 interface Props {
@@ -28,16 +27,13 @@ const tableConfig = computed(() =>
 </script>
 
 <template>
-  <Card>
-    <Table
-      :columns="tableConfig.columns"
-      :data-source="dataSource"
-      :loading="loading"
-      :pagination="pagination"
-      :scroll="tableConfig.scroll"
-      bordered
-      row-key="id"
-      @change="(pag, filters, sorter) => $emit('change', pag, filters, sorter)"
-    />
-  </Card>
+  <BaseTable
+    :columns="tableConfig.columns"
+    :data-source="dataSource"
+    :loading="loading"
+    :pagination="pagination"
+    :scroll="tableConfig.scroll"
+    row-key="id"
+    @change="(pag, filters, sorter) => $emit('change', pag, filters, sorter)"
+  />
 </template>
