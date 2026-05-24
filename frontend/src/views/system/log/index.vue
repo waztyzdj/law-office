@@ -45,6 +45,10 @@ const {
     fetchData: pageLogs,
     deleteItem: deleteLog,
   },
+  defaultSort: {
+    sortField: 'createTime',
+    sortOrder: 'desc',
+  },
   storageConfig: {
     filtersKey: 'log_list_filters',
   },
@@ -114,6 +118,11 @@ const tableConfig = computed(() => {
       dataIndex: 'costTime',
       title: '耗时(ms)',
       options: { width: 110, columnType: 'number' as const },
+    },
+    {
+      dataIndex: 'createTime',
+      title: '操作时间',
+      options: { width: 180, columnType: 'datetime' as const },
     },
     {
       dataIndex: 'clientType',

@@ -68,6 +68,11 @@ export interface ApiConfig {
 export interface UseTableConfig {
   /** API 配置（必填） */
   apiConfig: ApiConfig;
+  /** 默认排序配置（可选） */
+  defaultSort?: {
+    sortField: string;
+    sortOrder?: string;
+  };
   /** localStorage 配置（可选） */
   storageConfig?: StorageConfig;
   /** 删除对话框配置（可选） */
@@ -133,6 +138,7 @@ export function convertTableFiltersToQueryParams(filters: Record<string, any>): 
 export function useTable(config: UseTableConfig) {
   const {
     apiConfig,
+    defaultSort,
     storageConfig,
     deleteConfig,
     enableRowSelection = false,
@@ -195,8 +201,8 @@ export function useTable(config: UseTableConfig) {
     sortField?: string;
     sortOrder?: string;
   }>({
-    sortField: undefined,
-    sortOrder: undefined,
+    sortField: defaultSort?.sortField,
+    sortOrder: defaultSort?.sortOrder || 'desc',
   });
 
   /**
@@ -380,8 +386,8 @@ export function useTable(config: UseTableConfig) {
    * 分页、排序、筛选变化
    */
   function handleTableChange(pag: any, filters: any, sorter: any) {
-    pagination.pageNum = pag.pageNum;
-    pagination.pageSize = pag.pageSize;
+    pagination.pageNum = pag?.current ?? pag?.pageNum ?? pagination.pageNum;
+    pagination.pageSize = pag?.pageSize ?? pagination.pageSize;
 
     // 更新筛选状态并持久化 - 使用合并策略
     // 关键修复：当点击列头排序时，filters 参数会传入状态标记值（如 ['filtered']），
