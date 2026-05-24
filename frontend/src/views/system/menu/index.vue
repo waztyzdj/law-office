@@ -1,127 +1,27 @@
 <script setup lang="ts">
+import { onMounted, ref } from 'vue';
+
+import { Modal, message } from 'ant-design-vue';
+
 import type { PermissionInfo } from '#/api/system/permission';
 
-import { computed, h, onMounted, ref } from 'vue';
+import { deletePermission } from '#/api/system/permission';
 
-import { Button, Card, Modal, Space, Table, message } from 'ant-design-vue';
-import { useAccess } from '@vben/access';
-
-import { deletePermission, listPermissions } from '#/api/system/permission';
-import { defineTableColumns } from '#/composables/Table';
-import { buildTreeFromFlat, buildTreeSelectOptions, useTreeData } from '#/composables/Tree/useTree';
-import { menuTypeOptions } from '#/constants/menu-types';
-import { permissionCodes } from '#/constants/permissions';
 import PermissionFormDrawer from './components/PermissionFormDrawer.vue';
+import PermissionTable from './components/PermissionTable.vue';
+import { usePermissionTable } from './hooks/usePermissionTable';
 
-const { hasAccessByCodes } = useAccess();
-const canEditPermission = computed(() =>
-  hasAccessByCodes([permissionCodes.permission.edit]),
-);
-
-const permissionFormDrawerRef = ref();
 const {
   activeFilters,
-  dataSource,
-  loading,
-  pagination: treePagination,
   handleTableChange,
   loadData,
-} = useTreeData<PermissionInfo>({
-  fetchData: listPermissions,
-  storageConfig: {
-    filtersKey: 'permission_tree_filters',
-  },
-});
+  loading,
+  pagination,
+  treeData,
+  treeOptions,
+} = usePermissionTable();
 
-const treeData = computed(() => buildTreeFromFlat(dataSource.value));
-const treeOptions = computed(() => buildTreeSelectOptions(treeData.value));
-
-function emitTableChange(event: string, ...args: any[]) {
-  if (event === 'change') {
-    handleTableChange(args[0], args[1], args[2]);
-  }
-}
-
-const tableConfig = computed(() => {
-  const baseColumns: any[] = [
-    {
-      dataIndex: 'name',
-      title: '名称',
-      options: { width: 220 },
-    },
-    {
-      dataIndex: 'menuType',
-      title: '类型',
-      options: {
-        width: 90,
-        columnType: 'select' as const,
-        selectOptions: menuTypeOptions,
-      },
-    },
-    {
-      dataIndex: 'url',
-      title: '路径',
-      options: { width: 180 },
-    },
-    {
-      dataIndex: 'component',
-      title: '组件',
-      options: { width: 240 },
-    },
-    {
-      dataIndex: 'perms',
-      title: '权限码',
-      options: { width: 150 },
-    },
-    {
-      dataIndex: 'sortNo',
-      title: '排序',
-      options: { width: 80, columnType: 'number' as const },
-    },
-    {
-      dataIndex: 'status',
-      title: '状态',
-      options: {
-        width: 90,
-        columnType: 'select' as const,
-        selectOptions: [
-          { label: '正常', value: '1', color: 'green' },
-          { label: '停用', value: '0', color: 'red' },
-        ],
-      },
-    },
-  ];
-
-  if (canEditPermission.value) {
-    baseColumns.push({
-      dataIndex: 'action',
-      title: '操作',
-      options: {
-        width: 220,
-        fixed: 'right' as const,
-        hasFilter: false,
-        customRender: ({ record }: { record: PermissionInfo }) =>
-          h(Space, { size: 'middle' }, () => [
-            h('a', { onClick: () => handleAddChild(record) }, '新增下级'),
-            h('a', { onClick: () => handleEdit(record) }, '编辑'),
-            h(
-              'a',
-              { style: { color: 'red' }, onClick: () => handleDelete(record) },
-              '删除',
-            ),
-          ]),
-      },
-    });
-  }
-
-  return defineTableColumns<PermissionInfo>(
-    baseColumns,
-    activeFilters,
-    emitTableChange,
-    treePagination,
-    { minTableWidth: 1180 },
-  );
-});
+const permissionFormDrawerRef = ref();
 
 function handleAdd() {
   permissionFormDrawerRef.value?.open({ mode: 'create' });
@@ -163,30 +63,17 @@ onMounted(loadData);
 
 <template>
   <div class="system-menu-container">
-    <Card>
-      <div class="table-toolbar">
-        <Space>
-          <Button
-            v-access:code="permissionCodes.permission.edit"
-            type="primary"
-            @click="handleAdd"
-          >
-            新增菜单
-          </Button>
-        </Space>
-      </div>
-
-      <Table
-        :columns="tableConfig.columns"
-        :data-source="treeData"
-        :loading="loading"
-        :pagination="false"
-        :scroll="tableConfig.scroll"
-        bordered
-        row-key="id"
-        @change="handleTableChange"
-      />
-    </Card>
+    <PermissionTable
+      :active-filters="activeFilters"
+      :data-source="treeData"
+      :loading="loading"
+      :pagination="pagination"
+      @add="handleAdd"
+      @add-child="handleAddChild"
+      @change="handleTableChange"
+      @delete="handleDelete"
+      @edit="handleEdit"
+    />
 
     <PermissionFormDrawer
       ref="permissionFormDrawerRef"
@@ -199,9 +86,5 @@ onMounted(loadData);
 <style scoped>
 .system-menu-container {
   padding: 16px;
-}
-
-.table-toolbar {
-  margin-bottom: 16px;
 }
 </style>
