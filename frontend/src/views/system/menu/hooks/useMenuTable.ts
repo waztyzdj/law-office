@@ -1,19 +1,19 @@
 import { computed } from 'vue';
 
-import type { PermissionInfo } from '#/api/system/permission';
+import type { PermissionInfo as MenuInfo } from '#/api/system/permission';
 
-import { listPermissions } from '#/api/system/permission';
+import { listPermissions as listMenus } from '#/api/system/permission';
 import {
   buildTreeFromFlat,
   buildTreeSelectOptions,
   useTreeData,
 } from '#/composables/Tree/useTree';
 
-export function usePermissionTable() {
-  const table = useTreeData<PermissionInfo>({
-    fetchData: listPermissions,
+export function useMenuTable() {
+  const table = useTreeData<MenuInfo>({
+    fetchData: listMenus,
     storageConfig: {
-      filtersKey: 'permission_tree_filters',
+      filtersKey: 'menu_tree_filters',
     },
   });
 

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { VbenFormSchema } from '#/adapter/form';
-import type { PermissionInfo } from '#/api/system/permission';
+import type { PermissionInfo as MenuInfo } from '#/api/system/permission';
 
 import { computed, markRaw, nextTick, ref } from 'vue';
 
@@ -15,7 +15,10 @@ import {
   useVbenForm,
   z,
 } from '#/adapter/form';
-import { getPermissionById, savePermission } from '#/api/system/permission';
+import {
+  getPermissionById as getMenuById,
+  savePermission as saveMenu,
+} from '#/api/system/permission';
 import {
   filterTreeSelectOptions,
   type StringTreeSelectOption,
@@ -29,7 +32,7 @@ type DrawerMode = 'create' | 'edit';
 interface DrawerPayload {
   mode: DrawerMode;
   parentId?: string;
-  record?: PermissionInfo;
+  record?: MenuInfo;
 }
 
 const props = defineProps<{
@@ -51,7 +54,7 @@ const availableTreeOptions = computed(() =>
   filterTreeSelectOptions(props.treeOptions, currentId.value),
 );
 
-const emptyPermissionValues = {
+const emptyMenuValues = {
   parentId: undefined,
   name: '',
   url: '',
@@ -151,7 +154,7 @@ const buildFormSchema = (): VbenFormSchema[] => [
       .string({ required_error: '请输入名称' })
       .min(1, '请输入名称')
       .max(100, '名称不能超过100个字符'),
-    componentProps: noAutofillInputProps('permissionName', {
+    componentProps: noAutofillInputProps('menuName', {
       maxlength: 100,
       placeholder: '请输入名称',
     }),
@@ -169,7 +172,7 @@ const buildFormSchema = (): VbenFormSchema[] => [
       show: (values) => isMenu(values.menuType),
       triggerFields: ['menuType'],
     },
-    componentProps: noAutofillInputProps('permissionUrl', {
+    componentProps: noAutofillInputProps('menuUrl', {
       maxlength: 200,
       placeholder: '例如 /system/role',
     }),
@@ -187,7 +190,7 @@ const buildFormSchema = (): VbenFormSchema[] => [
       show: (values) => isMenu(values.menuType),
       triggerFields: ['menuType'],
     },
-    componentProps: noAutofillInputProps('permissionComponent', {
+    componentProps: noAutofillInputProps('menuComponent', {
       maxlength: 200,
       placeholder: '例如 /views/system/role/index.vue',
     }),
@@ -202,7 +205,7 @@ const buildFormSchema = (): VbenFormSchema[] => [
       show: (values) => isMenu(values.menuType),
       triggerFields: ['menuType'],
     },
-    componentProps: noAutofillInputProps('permissionComponentName', {
+    componentProps: noAutofillInputProps('menuComponentName', {
       maxlength: 100,
       placeholder: '例如 SystemRole',
     }),
@@ -227,7 +230,7 @@ const buildFormSchema = (): VbenFormSchema[] => [
       show: (values) => isButtonPermission(values.menuType),
       triggerFields: ['menuType'],
     },
-    componentProps: noAutofillInputProps('permissionPerms', {
+    componentProps: noAutofillInputProps('menuPerms', {
       maxlength: 100,
       placeholder: '例如 role:edit',
     }),
@@ -305,7 +308,7 @@ const buildFormSchema = (): VbenFormSchema[] => [
       triggerFields: ['menuType'],
     },
     componentProps: {
-      class: 'permission-keep-alive-switch',
+      class: 'menu-keep-alive-switch',
       style: { width: 'auto' },
     },
   },
@@ -319,7 +322,7 @@ const buildFormSchema = (): VbenFormSchema[] => [
       show: (values) => isFirstLevelMenu(values.menuType),
       triggerFields: ['menuType'],
     },
-    componentProps: noAutofillInputProps('permissionRedirect', {
+    componentProps: noAutofillInputProps('menuRedirect', {
       maxlength: 200,
       placeholder: '请输入重定向路径',
     }),
@@ -352,12 +355,12 @@ const [Drawer, drawerApi] = useVbenDrawer({
 function buildInitialValues(payload: DrawerPayload) {
   if (payload.mode === 'create') {
     return {
-      ...emptyPermissionValues,
+      ...emptyMenuValues,
       parentId: payload.parentId,
     };
   }
   return {
-    ...emptyPermissionValues,
+    ...emptyMenuValues,
     ...payload.record,
     icon: normalizeIcon(payload.record?.icon),
     status: String(payload.record?.status ?? '1'),
@@ -399,7 +402,7 @@ async function refreshDetailSilently() {
     return;
   }
   try {
-    const detail = await getPermissionById(currentId.value);
+    const detail = await getMenuById(currentId.value);
     initialValues.value = buildInitialValues({ mode: mode.value, record: detail });
     await formApi.setValues(initialValues.value);
   } catch {
@@ -407,8 +410,8 @@ async function refreshDetailSilently() {
   }
 }
 
-function cleanPayload(values: Record<string, any>): PermissionInfo {
-  const payload = cleanFormPayload<PermissionInfo>(values, {
+function cleanPayload(values: Record<string, any>): MenuInfo {
+  const payload = cleanFormPayload<MenuInfo>(values, {
     id: currentId.value,
   });
 
@@ -446,7 +449,7 @@ async function handleSubmit() {
   try {
     drawerApi.lock();
     const values = await formApi.getValues();
-    await savePermission(cleanPayload(values));
+    await saveMenu(cleanPayload(values));
     message.success(isCreate.value ? '新增菜单权限成功' : '修改菜单权限成功');
     emit('success');
     drawerApi.close();
@@ -483,7 +486,7 @@ defineExpose({
 </template>
 
 <style scoped>
-:deep(.permission-keep-alive-switch) {
+:deep(.menu-keep-alive-switch) {
   width: auto !important;
   min-width: 44px;
 }

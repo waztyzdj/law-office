@@ -1,17 +1,17 @@
 <script setup lang="ts">
 import { computed, toRef } from 'vue';
 
-import type { PermissionInfo } from '#/api/system/permission';
+import type { PermissionInfo as MenuInfo } from '#/api/system/permission';
 import type { TablePaginationConfig } from '#/composables/Table';
 
 import { BaseTable } from '#/components/BaseTable';
 import { permissionCodes } from '#/constants/permissions';
 
-import { getPermissionColumns } from '../hooks/usePermissionColumns';
+import { getMenuColumns } from '../hooks/useMenuColumns';
 
 interface Props {
   activeFilters: Record<string, any>;
-  dataSource: PermissionInfo[];
+  dataSource: MenuInfo[];
   loading: boolean;
   pagination: TablePaginationConfig;
 }
@@ -19,15 +19,15 @@ interface Props {
 const props = defineProps<Props>();
 const emit = defineEmits<{
   add: [];
-  addChild: [record: PermissionInfo];
+  addChild: [record: MenuInfo];
   change: [pag: any, filters: any, sorter: any];
-  delete: [record: PermissionInfo];
-  edit: [record: PermissionInfo];
+  delete: [record: MenuInfo];
+  edit: [record: MenuInfo];
 }>();
 
 const filterStateRef = toRef(props, 'activeFilters');
 const tableConfig = computed(() =>
-  getPermissionColumns(filterStateRef, emit, props.pagination),
+  getMenuColumns(filterStateRef, emit, props.pagination),
 );
 const toolbarButtons = computed(() => [
   {

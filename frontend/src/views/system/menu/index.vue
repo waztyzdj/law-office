@@ -3,13 +3,13 @@ import { onMounted, ref } from 'vue';
 
 import { Modal, message } from 'ant-design-vue';
 
-import type { PermissionInfo } from '#/api/system/permission';
+import type { PermissionInfo as MenuInfo } from '#/api/system/permission';
 
-import { deletePermission } from '#/api/system/permission';
+import { deletePermission as deleteMenu } from '#/api/system/permission';
 
-import PermissionFormDrawer from './components/PermissionFormDrawer.vue';
-import PermissionTable from './components/PermissionTable.vue';
-import { usePermissionTable } from './hooks/usePermissionTable';
+import MenuFormDrawer from './components/MenuFormDrawer.vue';
+import MenuTable from './components/MenuTable.vue';
+import { useMenuTable } from './hooks/useMenuTable';
 
 const {
   activeFilters,
@@ -19,29 +19,29 @@ const {
   pagination,
   treeData,
   treeOptions,
-} = usePermissionTable();
+} = useMenuTable();
 
-const permissionFormDrawerRef = ref();
+const menuFormDrawerRef = ref();
 
 function handleAdd() {
-  permissionFormDrawerRef.value?.open({ mode: 'create' });
+  menuFormDrawerRef.value?.open({ mode: 'create' });
 }
 
-function handleAddChild(record: PermissionInfo) {
-  permissionFormDrawerRef.value?.open({
+function handleAddChild(record: MenuInfo) {
+  menuFormDrawerRef.value?.open({
     mode: 'create',
     parentId: record.id,
   });
 }
 
-function handleEdit(record: PermissionInfo) {
-  permissionFormDrawerRef.value?.open({
+function handleEdit(record: MenuInfo) {
+  menuFormDrawerRef.value?.open({
     mode: 'edit',
     record,
   });
 }
 
-function handleDelete(record: PermissionInfo) {
+function handleDelete(record: MenuInfo) {
   Modal.confirm({
     title: '确认删除',
     content: `确定要删除"${record.name}"吗？如存在子级，请先处理子级权限。`,
@@ -51,7 +51,7 @@ function handleDelete(record: PermissionInfo) {
       if (!record.id) {
         return;
       }
-      await deletePermission(record.id);
+      await deleteMenu(record.id);
       message.success('删除成功');
       await loadData();
     },
@@ -63,7 +63,7 @@ onMounted(loadData);
 
 <template>
   <div class="system-menu-container">
-    <PermissionTable
+    <MenuTable
       :active-filters="activeFilters"
       :data-source="treeData"
       :loading="loading"
@@ -75,8 +75,8 @@ onMounted(loadData);
       @edit="handleEdit"
     />
 
-    <PermissionFormDrawer
-      ref="permissionFormDrawerRef"
+    <MenuFormDrawer
+      ref="menuFormDrawerRef"
       :tree-options="treeOptions"
       @success="loadData"
     />

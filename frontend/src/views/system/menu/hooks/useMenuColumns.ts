@@ -4,7 +4,7 @@ import { useAccess } from '@vben/access';
 
 import { Space } from 'ant-design-vue';
 
-import type { PermissionInfo } from '#/api/system/permission';
+import type { PermissionInfo as MenuInfo } from '#/api/system/permission';
 import type {
   TableColumnsResult,
   TablePaginationConfig,
@@ -14,13 +14,13 @@ import { defineTableColumns } from '#/composables/Table';
 import { menuTypeOptions } from '#/constants/menu-types';
 import { permissionCodes } from '#/constants/permissions';
 
-export function getPermissionColumns(
+export function getMenuColumns(
   filterState: any,
   emit: any,
   pagination: TablePaginationConfig,
 ): TableColumnsResult {
   const { hasAccessByCodes } = useAccess();
-  const canEditPermission = hasAccessByCodes([permissionCodes.permission.edit]);
+  const canEditMenu = hasAccessByCodes([permissionCodes.permission.edit]);
 
   const columns: any[] = [
     {
@@ -69,7 +69,7 @@ export function getPermissionColumns(
         ],
       },
     },
-    canEditPermission
+    canEditMenu
       ? {
           dataIndex: 'action',
           title: '操作',
@@ -77,7 +77,7 @@ export function getPermissionColumns(
             width: 220,
             fixed: 'right' as const,
             hasFilter: false,
-            customRender: ({ record }: { record: PermissionInfo }) =>
+            customRender: ({ record }: { record: MenuInfo }) =>
               h(Space, { size: 'middle' }, () => [
                 h('a', { onClick: () => emit('addChild', record) }, '新增下级'),
                 h('a', { onClick: () => emit('edit', record) }, '编辑'),
@@ -92,7 +92,7 @@ export function getPermissionColumns(
       : null,
   ];
 
-  return defineTableColumns<PermissionInfo>(
+  return defineTableColumns<MenuInfo>(
     columns.filter(Boolean),
     filterState,
     emit,
