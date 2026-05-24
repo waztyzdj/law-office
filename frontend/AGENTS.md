@@ -36,6 +36,41 @@
 - 业务需求默认不要修改 `packages/`。只有当问题确认为跨应用公共能力缺陷、且无法在 `src/` 内通过组合/封装解决时，才允许改动 `packages/`，并必须说明影响范围和验证方式。
 - `internal/`：构建、lint、格式化配置。除非任务明确要求，不修改工程配置。
 
+## 业务模块文件结构
+
+当前系统管理模块已经形成稳定结构，新增或重写业务管理页必须沿用该结构，不允许把页面、表格、表单、接口和流程逻辑随意混写在一个文件中。标准 CRUD/管理页目录如下：
+
+```text
+src/views/<domain>/<module>/
+  index.vue
+  components/
+    <Module>Table.vue
+    <Module>FormDrawer.vue
+    <Module>ExtraDrawer.vue      # 可选：授权、分配、详情等独立流程
+  hooks/
+    use<Module>Table.ts
+    use<Module>Columns.ts
+```
+
+配套文件必须放在对应边界内：
+
+```text
+src/api/<domain>/<module>.ts      # DTO、BaseApi 实例、接口包装方法
+src/router/routes/modules/*.ts    # 路由入口，保持现有领域路由组织
+src/constants/permissions.ts      # 权限码常量
+```
+
+- `index.vue` 只负责页面组装：调用 `use<Module>Table`，维护子组件 ref，处理 `handleAdd`、`handleEdit`、`handleSaveSuccess` 等跨组件事件。不要在 `index.vue` 中写表格列、表单 schema、分页筛选细节或大段接口流程。
+- `<Module>Table.vue` 只负责列表呈现和事件派发：接收 `dataSource`、`loading`、`pagination`、`activeFilters` 等窄 props，使用 `BaseTable` 或项目既有表格封装，工具栏按钮通过 emits 通知父级。不要在表格组件内直接请求列表、保存筛选缓存或刷新页面数据。
+- `use<Module>Table.ts` 负责表格状态和流程：封装 `useTable` 配置、分页、筛选、删除确认、loading、localStorage key 和 `loadData`。不要在这里写 Vue 模板渲染、表单 schema 或抽屉生命周期。
+- `use<Module>Columns.ts` 负责列定义：使用 `defineTableColumns`，声明列宽、筛选类型、对齐、操作列和权限判断。除操作列必要的 `customRender` 外，不要在列配置里塞入复杂业务流程；复杂交互通过 emit 回到页面入口。
+- `<Module>FormDrawer.vue` 负责新增/编辑浮层：使用 `useVbenDrawer + useVbenForm`，包含 schema 构造、初始值、详情回填、校验、payload 清洗、提交锁定和 `success` 事件。保存成功后只 `emit('success')`，由页面入口刷新列表。
+- 授权、角色分配、详情查看等非主表单流程放入独立 `<Module>ExtraDrawer.vue` 或语义明确的子组件，必须通过 `open(payload)` 暴露命令式入口，并通过窄 props/emits 与页面通信。
+- `src/api/<domain>/<module>.ts` 必须集中维护该模块 DTO、`BaseApi` 实例和导出的包装方法。组件和 hooks 默认只导入这些包装方法，不直接拼 URL；特殊接口可以单独导出，但仍留在 API 文件中。
+- 模块根目录默认只放 `index.vue`。除 `components/`、`hooks/` 外，只有在存在两个以上本模块文件真实复用时，才允许新增 `utils.ts`、`constants.ts` 或 `types.ts`；新增时必须说明职责，不能成为杂物文件。
+- 单文件超过职责边界时优先按上述结构拆分，而不是新增一个“万能组件”或把公共能力提前抽到 `src/composables/`。只有两个以上模块稳定复用后，才考虑上移公共层。
+- 特殊结构页面可以偏离模板，例如树形菜单、字典主从表、日志只读列表，但偏离点必须局部且有业务原因；仍要保留“入口组装、组件呈现、hooks 管流程、API 层封装”的边界。
+
 ## 命名规范
 
 - Vue 组件文件使用 PascalCase：`UserTable.vue`、`UserFormDrawer.vue`。
