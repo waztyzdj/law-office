@@ -180,7 +180,7 @@ public class UserController extends BaseController<IUserService, User, UserVO, U
 ## 项目约定
 
 - 标准 CRUD 优先复用 `BaseController` 的 `/list`、`/page`、`/getById`、`/save`、`/batchSave`、`/delete`、`/batchDelete`、`/import`、`/export`。
-- 树形模块优先继承 `TreeEntity`/`TreeTenantEntity`、`TreeVO`、`TreeReq`、`ITreeService`、`TreeServiceImpl`、`TreeController`；业务侧只保留专属校验、排序字段和关联清理逻辑。
+- 树形管理页默认复用 `BaseController` 的 `/list` 返回扁平数据，由前端根据 `id`/`parentId` 组树；后端保留 `TreeEntity`/`TreeTenantEntity`、`TreeVO`、`TreeUtils` 和 `TreeServiceImpl` 中的父级校验、禁止循环引用、删除前子节点检查等 Service/Util 层能力。只有角色授权树、运行时菜单路由等确实需要服务端裁剪和组装的场景，才提供专用树接口。
 - `BaseApi` 前端协议依赖后端分页返回字段 `records`、`total`、`pageNum`、`pageSize`，后端修改时必须同步前端。
 - `BaseServiceImpl` 中的逻辑删除规则是项目默认行为，新查询不得绕过。
 - 权限模块与前端 `src/constants/permissions.ts` 强绑定，新增权限必须双端同步。
