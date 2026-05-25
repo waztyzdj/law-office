@@ -5,6 +5,7 @@ import com.lawoffice.framework.service.impl.BaseServiceImpl;
 import com.lawoffice.system.entity.SysDictItem;
 import com.lawoffice.system.mapper.SysDictItemMapper;
 import com.lawoffice.system.service.ISysDictItemService;
+import com.lawoffice.system.service.ITenantDefaultDataSyncService;
 import com.lawoffice.system.vo.SysDictItemVO;
 import jakarta.annotation.Resource;
 import org.springframework.stereotype.Service;
@@ -14,7 +15,7 @@ import org.springframework.util.StringUtils;
 public class SysDictItemServiceImpl extends BaseServiceImpl<SysDictItemMapper, SysDictItem, SysDictItemVO> implements ISysDictItemService {
 
     @Resource
-    private TenantDefaultDataSyncService tenantDefaultDataSyncService;
+    private ITenantDefaultDataSyncService tenantDefaultDataSyncService;
 
     @Override
     protected void doAfterSave(BaseDTO<SysDictItem> saveDTO, SysDictItemVO vo) {

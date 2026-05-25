@@ -12,6 +12,7 @@ import com.lawoffice.system.mapper.RolePermissionMapper;
 import com.lawoffice.system.mapper.TenantMapper;
 import com.lawoffice.system.mapper.UserRoleMapper;
 import com.lawoffice.system.mapper.UserTenantMapper;
+import com.lawoffice.system.service.ITenantDefaultDataSyncService;
 import com.lawoffice.system.service.ITenantLifecycleService;
 import com.lawoffice.util.EntityFillUtils;
 import lombok.extern.slf4j.Slf4j;
@@ -41,7 +42,7 @@ public class TenantLifecycleServiceImpl implements ITenantLifecycleService {
     private final UserRoleMapper userRoleMapper;
     private final UserTenantMapper userTenantMapper;
     private final RolePermissionMapper rolePermissionMapper;
-    private final TenantDefaultDataSyncService tenantDefaultDataSyncService;
+    private final ITenantDefaultDataSyncService tenantDefaultDataSyncService;
 
     public TenantLifecycleServiceImpl(
             TenantMapper tenantMapper,
@@ -49,7 +50,7 @@ public class TenantLifecycleServiceImpl implements ITenantLifecycleService {
             UserRoleMapper userRoleMapper,
             UserTenantMapper userTenantMapper,
             RolePermissionMapper rolePermissionMapper,
-            TenantDefaultDataSyncService tenantDefaultDataSyncService) {
+            ITenantDefaultDataSyncService tenantDefaultDataSyncService) {
         this.tenantMapper = tenantMapper;
         this.roleMapper = roleMapper;
         this.userRoleMapper = userRoleMapper;
@@ -69,6 +70,7 @@ public class TenantLifecycleServiceImpl implements ITenantLifecycleService {
         String resolvedOperator = resolveOperator(operator);
         LocalDateTime resolvedOperateTime = operateTime != null ? operateTime : LocalDateTime.now();
 
+        // 租户保存后立即完成初始化，避免新租户缺少管理员角色或基础字典导致无法登录使用。
         ensureTenantAdminRole(tenantId, resolvedOperator, resolvedOperateTime);
         tenantDefaultDataSyncService.syncDefaultDataToTenant(tenantId, resolvedOperator);
 
@@ -122,6 +124,7 @@ public class TenantLifecycleServiceImpl implements ITenantLifecycleService {
         validateTenantId(tenantId);
         String resolvedOperator = resolveOperator(operator);
 
+        // 管理员必须同时是租户成员，先补齐成员关系再同步默认管理员角色。
         ensureTenantUsers(tenantId, userIds);
         Role adminRole = ensureTenantAdminRole(tenantId, resolvedOperator, LocalDateTime.now());
         runWithTenant(tenantId, () -> {
@@ -217,6 +220,9 @@ public class TenantLifecycleServiceImpl implements ITenantLifecycleService {
         roleMapper.updateById(existingRole);
     }
 
+    /**
+     * 覆盖同步租户默认管理员角色下的用户成员。
+     */
     private void syncTenantAdminUsers(String roleId, List<String> targetUserIds, String operator) {
         LambdaQueryWrapper<UserRole> wrapper = new LambdaQueryWrapper<>();
         wrapper.eq(UserRole::getRoleId, roleId)
@@ -237,6 +243,7 @@ public class TenantLifecycleServiceImpl implements ITenantLifecycleService {
                 .collect(Collectors.toList());
 
         if (!deleteIds.isEmpty()) {
+            // 管理员成员采用覆盖保存，取消选择的用户只移出默认管理员角色。
             LambdaQueryWrapper<UserRole> deleteWrapper = new LambdaQueryWrapper<>();
             deleteWrapper.in(UserRole::getId, deleteIds);
             softDeleteUserRoles(deleteWrapper, operator);
@@ -253,12 +260,18 @@ public class TenantLifecycleServiceImpl implements ITenantLifecycleService {
         }
     }
 
+    /**
+     * 设置租户管理员前，先确保这些用户都是该租户成员。
+     */
     private void ensureTenantUsers(String tenantId, List<String> userIds) {
         for (String userId : userIds) {
             upsertUserTenantRelation(userId, tenantId);
         }
     }
 
+    /**
+     * 以租户为主维度差量同步租户成员。
+     */
     private void syncTenantUsers(String tenantId, List<String> targetUserIds, String operator) {
         LambdaQueryWrapper<UserTenant> wrapper = new LambdaQueryWrapper<>();
         wrapper.eq(UserTenant::getTenantId, tenantId);
@@ -287,6 +300,7 @@ public class TenantLifecycleServiceImpl implements ITenantLifecycleService {
                 .collect(Collectors.toList());
 
         if (!deleteIds.isEmpty()) {
+            // 租户成员移除时逻辑删除成员关系，随后同步清理该租户下的用户角色关系。
             LambdaQueryWrapper<UserTenant> deleteWrapper = new LambdaQueryWrapper<>();
             deleteWrapper.in(UserTenant::getId, deleteIds)
                     .eq(UserTenant::getDeleteFlag, 0);
@@ -302,12 +316,16 @@ public class TenantLifecycleServiceImpl implements ITenantLifecycleService {
         }
     }
 
+    /**
+     * 新增、恢复或刷新用户-租户成员关系。
+     */
     private void upsertUserTenantRelation(String userId, String tenantId) {
         LambdaQueryWrapper<UserTenant> wrapper = new LambdaQueryWrapper<>();
         wrapper.eq(UserTenant::getUserId, userId)
                 .eq(UserTenant::getTenantId, tenantId);
         UserTenant existingRelation = userTenantMapper.selectOne(wrapper);
         if (existingRelation != null) {
+            // 关系存在但已逻辑删除时恢复，避免重复插入用户-租户关系。
             if (existingRelation.getDeleteFlag() != null && existingRelation.getDeleteFlag() == 1) {
                 existingRelation.setDeleteFlag(0);
                 existingRelation.setDeleteTime(null);
@@ -327,6 +345,9 @@ public class TenantLifecycleServiceImpl implements ITenantLifecycleService {
         userTenantMapper.insert(userTenant);
     }
 
+    /**
+     * 移出租户成员时，同步逻辑删除这些用户在该租户下的角色关系。
+     */
     private void deleteTenantUserRoles(String tenantId, List<String> userIds, String deleteBy) {
         if (userIds.isEmpty()) {
             return;
@@ -341,6 +362,9 @@ public class TenantLifecycleServiceImpl implements ITenantLifecycleService {
         });
     }
 
+    /**
+     * 查询租户下未删除角色 ID。
+     */
     private List<String> getTenantRoleIds(String tenantId) {
         return runWithTenant(tenantId, () -> {
             LambdaQueryWrapper<Role> wrapper = new LambdaQueryWrapper<>();
@@ -354,6 +378,9 @@ public class TenantLifecycleServiceImpl implements ITenantLifecycleService {
         });
     }
 
+    /**
+     * 删除租户时，逻辑删除该租户角色对应的权限关系。
+     */
     private void deleteTenantRolePermissions(String tenantId, List<String> roleIds, String deleteBy) {
         if (!roleIds.isEmpty()) {
             LambdaQueryWrapper<RolePermission> rolePermissionWrapper = new LambdaQueryWrapper<>();
@@ -368,6 +395,9 @@ public class TenantLifecycleServiceImpl implements ITenantLifecycleService {
         softDeleteRolePermissions(tenantRolePermissionWrapper, deleteBy);
     }
 
+    /**
+     * 删除租户时，逻辑删除该租户角色对应的用户关系。
+     */
     private void deleteTenantUserRoleRelations(String tenantId, List<String> roleIds, String deleteBy) {
         if (!roleIds.isEmpty()) {
             LambdaQueryWrapper<UserRole> userRoleWrapper = new LambdaQueryWrapper<>();
@@ -382,28 +412,43 @@ public class TenantLifecycleServiceImpl implements ITenantLifecycleService {
         softDeleteUserRoles(tenantUserRoleWrapper, deleteBy);
     }
 
+    /**
+     * 按条件逻辑删除角色-权限关系。
+     */
     private void softDeleteRolePermissions(LambdaQueryWrapper<RolePermission> wrapper, String deleteBy) {
         RolePermission rolePermission = new RolePermission();
         EntityFillUtils.fillDeleteFields(rolePermission, deleteBy);
         rolePermissionMapper.update(rolePermission, wrapper);
     }
 
+    /**
+     * 按条件逻辑删除用户-角色关系。
+     */
     private void softDeleteUserRoles(LambdaQueryWrapper<UserRole> wrapper, String deleteBy) {
         UserRole userRole = new UserRole();
         EntityFillUtils.fillDeleteFields(userRole, deleteBy);
         userRoleMapper.update(userRole, wrapper);
     }
 
+    /**
+     * 按条件逻辑删除用户-租户关系。
+     */
     private void softDeleteUserTenants(LambdaQueryWrapper<UserTenant> wrapper, String deleteBy) {
         UserTenant userTenant = new UserTenant();
         EntityFillUtils.fillDeleteFields(userTenant, deleteBy);
         userTenantMapper.update(userTenant, wrapper);
     }
 
+    /**
+     * 校验租户 ID 不为空。
+     */
     private void validateTenantId(String tenantId) {
         getExistingTenant(tenantId);
     }
 
+    /**
+     * 查询未删除租户，不存在时抛出业务异常。
+     */
     private Tenant getExistingTenant(String tenantId) {
         if (!StringUtils.hasText(tenantId)) {
             throw new IllegalArgumentException("租户ID不能为空");
@@ -416,10 +461,16 @@ public class TenantLifecycleServiceImpl implements ITenantLifecycleService {
         return tenant;
     }
 
+    /**
+     * 按约定生成租户默认管理员角色编码。
+     */
     private String buildTenantAdminRoleCode(String tenantId) {
         return TENANT_ADMIN_ROLE_CODE_PREFIX + tenantId.trim();
     }
 
+    /**
+     * 按约定生成租户默认管理员角色名称。
+     */
     private String buildTenantAdminRoleName(Tenant tenant) {
         if (tenant != null && StringUtils.hasText(tenant.getName())) {
             return tenant.getName().trim() + TENANT_ADMIN_ROLE_NAME_SUFFIX;
@@ -427,6 +478,9 @@ public class TenantLifecycleServiceImpl implements ITenantLifecycleService {
         return "租户管理员";
     }
 
+    /**
+     * 解析操作人账号，缺省时使用 system 作为兜底。
+     */
     private String resolveOperator(String operator) {
         if (StringUtils.hasText(operator)) {
             return operator;
@@ -434,6 +488,9 @@ public class TenantLifecycleServiceImpl implements ITenantLifecycleService {
         return "system";
     }
 
+    /**
+     * 临时切换租户上下文执行查询或写入，并在结束后恢复原上下文。
+     */
     private <T> T runWithTenant(String tenantId, Supplier<T> supplier) {
         String previousTenantId = TenantContextHolder.getCurrentTenantId();
         try {

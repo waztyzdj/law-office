@@ -9,6 +9,7 @@ import com.lawoffice.system.entity.SysDictItem;
 import com.lawoffice.system.mapper.SysDictMapper;
 import com.lawoffice.system.mapper.SysDictItemMapper;
 import com.lawoffice.system.service.ISysDictService;
+import com.lawoffice.system.service.ITenantDefaultDataSyncService;
 import com.lawoffice.system.vo.DictOptionVO;
 import com.lawoffice.system.vo.SysDictVO;
 import com.lawoffice.framework.result.BaseResult;
@@ -25,7 +26,7 @@ public class SysDictServiceImpl extends BaseServiceImpl<SysDictMapper, SysDict, 
     private SysDictItemMapper sysDictItemMapper;
 
     @Resource
-    private TenantDefaultDataSyncService tenantDefaultDataSyncService;
+    private ITenantDefaultDataSyncService tenantDefaultDataSyncService;
 
     @Override
     protected void doAfterSave(BaseDTO<SysDict> saveDTO, SysDictVO vo) {

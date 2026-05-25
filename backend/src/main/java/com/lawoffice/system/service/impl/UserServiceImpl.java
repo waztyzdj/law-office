@@ -225,6 +225,9 @@ public class UserServiceImpl extends BaseServiceImpl<UserMapper, User, UserVO> i
         }
     }
 
+    /**
+     * 编辑用户时保留不允许由普通保存接口覆盖的敏感字段。
+     */
     private void keepProtectedFields(User user) {
         User existing = userMapper.selectById(user.getId());
         if (existing == null || (existing.getDeleteFlag() != null && existing.getDeleteFlag() == 1)) {
@@ -235,6 +238,9 @@ public class UserServiceImpl extends BaseServiceImpl<UserMapper, User, UserVO> i
         user.setPassword(null);
     }
 
+    /**
+     * 统一清理用户输入中的空白字符串，避免唯一性校验和保存时出现空串脏数据。
+     */
     private void normalizeUser(User user) {
         user.setUsername(trimToNull(user.getUsername()));
         user.setRealname(trimToNull(user.getRealname()));
@@ -247,6 +253,9 @@ public class UserServiceImpl extends BaseServiceImpl<UserMapper, User, UserVO> i
         user.setIdCard(trimToNull(user.getIdCard()));
     }
 
+    /**
+     * 将字符串 trim 后的空值统一转为 null。
+     */
     private String trimToNull(String value) {
         if (!StringUtils.hasText(value)) {
             return null;
@@ -254,6 +263,9 @@ public class UserServiceImpl extends BaseServiceImpl<UserMapper, User, UserVO> i
         return value.trim();
     }
 
+    /**
+     * 校验用户基础字段和新增时必须提供的密码。
+     */
     private void validateUser(User user, boolean isCreate) {
         if (!StringUtils.hasText(user.getUsername())) {
             throw new IllegalArgumentException("用户名不能为空");
@@ -287,6 +299,9 @@ public class UserServiceImpl extends BaseServiceImpl<UserMapper, User, UserVO> i
         }
     }
 
+    /**
+     * 校验用户名、手机号、邮箱、工号和身份证号的全局唯一性。
+     */
     private void validateUnique(User user, String excludeId) {
         validateUniqueField(User::getUsername, user.getUsername(), excludeId, "用户名已存在");
         validateUniqueField(User::getPhone, user.getPhone(), excludeId, "手机号已被使用");
@@ -295,6 +310,9 @@ public class UserServiceImpl extends BaseServiceImpl<UserMapper, User, UserVO> i
         validateUniqueField(User::getIdCard, user.getIdCard(), excludeId, "身份证号已被使用");
     }
 
+    /**
+     * 按单个字段校验用户唯一性，并排除当前编辑用户。
+     */
     private void validateUniqueField(
             com.baomidou.mybatisplus.core.toolkit.support.SFunction<User, ?> column,
             String value,
@@ -315,6 +333,9 @@ public class UserServiceImpl extends BaseServiceImpl<UserMapper, User, UserVO> i
         }
     }
 
+    /**
+     * 非超级管理员查询用户时，将结果限制在当前租户成员范围内。
+     */
     private void applyTenantMemberScope(BaseDTO<User> baseDTO) {
         if (isPlatformOperator(baseDTO)) {
             return;
@@ -335,9 +356,13 @@ public class UserServiceImpl extends BaseServiceImpl<UserMapper, User, UserVO> i
         wrapper.in("id", memberUserIds);
     }
 
+    /**
+     * 非超级管理员新增用户时，优先复用已存在的全局账号并加入当前租户。
+     */
     private User saveOrJoinTenantUser(BaseDTO<User> saveDTO, User requestUser, String tenantId) {
         User existingUser = findExistingUserForTenantJoin(requestUser);
         if (existingUser != null) {
+            // 多租户下用户主账号全局唯一：命中已有正常账号时，只补齐当前租户成员关系，不覆盖账号资料。
             ensureJoinableUser(existingUser);
             upsertUserTenantRelation(existingUser.getId(), tenantId);
             log.info("已有用户加入当前租户成功，用户ID: {}, 租户ID: {}", existingUser.getId(), tenantId);
@@ -362,6 +387,9 @@ public class UserServiceImpl extends BaseServiceImpl<UserMapper, User, UserVO> i
         return entity;
     }
 
+    /**
+     * 按用户名、手机号或邮箱查找可加入当前租户的已有账号。
+     */
     private User findExistingUserForTenantJoin(User user) {
         List<User> matchedUsers = new ArrayList<>();
         addMatchedUsers(matchedUsers, User::getUsername, user.getUsername());
@@ -380,6 +408,9 @@ public class UserServiceImpl extends BaseServiceImpl<UserMapper, User, UserVO> i
         return userMap.values().iterator().next();
     }
 
+    /**
+     * 按指定字段追加匹配到的已有用户，用于判断是否复用全局账号加入租户。
+     */
     private void addMatchedUsers(
             List<User> matchedUsers,
             com.baomidou.mybatisplus.core.toolkit.support.SFunction<User, ?> column,
@@ -392,6 +423,9 @@ public class UserServiceImpl extends BaseServiceImpl<UserMapper, User, UserVO> i
         matchedUsers.addAll(userMapper.selectList(wrapper));
     }
 
+    /**
+     * 确认已有账号处于可加入新租户的正常状态。
+     */
     private void ensureJoinableUser(User user) {
         if (user.getDeleteFlag() != null && user.getDeleteFlag() == 1) {
             throw new IllegalArgumentException("账号已被删除，不能加入当前租户");
@@ -401,10 +435,14 @@ public class UserServiceImpl extends BaseServiceImpl<UserMapper, User, UserVO> i
         }
     }
 
+    /**
+     * 非超级管理员删除用户时，仅移除当前租户成员关系和当前租户角色关系。
+     */
     private void removeUsersFromCurrentTenant(List<String> userIds, BaseDTO<User> deleteDTO) {
         String tenantId = getRequiredTenantId(deleteDTO);
         String deleteBy = resolveOperator(deleteDTO);
 
+        // 非超级管理员删除用户时只移出当前租户，不能删除全局用户主账号或影响其他租户关系。
         for (String userId : userIds) {
             if (!userBelongsToTenant(userId, tenantId)) {
                 throw new IllegalArgumentException("只能移出当前租户成员");
@@ -499,6 +537,7 @@ public class UserServiceImpl extends BaseServiceImpl<UserMapper, User, UserVO> i
         List<String> normalizedRoleIds = normalizeIds(roleIds);
         validateRoles(normalizedRoleIds);
         boolean platformOperator = isPlatformOperatorUsername(operatorUsername);
+        // 租户管理员只能给当前租户成员分配当前租户角色，且被分配角色的权限不能超过自身权限。
         validateTenantRoleAssignment(userId, normalizedRoleIds, operatorUsername, platformOperator);
 
         // 先删除用户现有的所有角色
@@ -929,6 +968,7 @@ public class UserServiceImpl extends BaseServiceImpl<UserMapper, User, UserVO> i
             throw new IllegalArgumentException("当前用户未分配该租户");
         }
 
+        // 超级管理员切换到业务租户时，会叠加目标租户默认管理员角色权限，保证跨租户运维可用。
         List<String> permissionCodes = getUserPermissionCodesInTenant(user.getId(), tenantId);
         List<String> roleCodes = getUserRoleCodesInTenant(user.getId(), tenantId);
 
@@ -1049,6 +1089,9 @@ public class UserServiceImpl extends BaseServiceImpl<UserMapper, User, UserVO> i
         return userInfoVO;
     }
 
+    /**
+     * 根据用户所属部门补齐部门默认角色。
+     */
     private void assignDefaultDepartRoles(String userId, List<String> departIds) {
         List<String> defaultRoleIds = getDefaultDepartRoleIds(departIds);
         if (defaultRoleIds.isEmpty()) {
@@ -1063,6 +1106,9 @@ public class UserServiceImpl extends BaseServiceImpl<UserMapper, User, UserVO> i
         }
     }
 
+    /**
+     * 查询用户通过部门角色继承得到的权限。
+     */
     private List<Permission> getUserDepartRolePermissions(String userId) {
         List<String> departRoleIds = getUserDepartRoleIds(userId);
         if (departRoleIds.isEmpty()) {
@@ -1090,6 +1136,9 @@ public class UserServiceImpl extends BaseServiceImpl<UserMapper, User, UserVO> i
         return permissionMapper.selectList(permissionWrapper);
     }
 
+    /**
+     * 查询用户直接分配角色的角色编码。
+     */
     private List<String> getUserRoleCodes(String userId) {
         Set<String> roleCodes = new LinkedHashSet<>();
         getUserRoles(userId).stream()
@@ -1111,6 +1160,9 @@ public class UserServiceImpl extends BaseServiceImpl<UserMapper, User, UserVO> i
         return new ArrayList<>(roleCodes);
     }
 
+    /**
+     * 查询用户在指定租户下最终生效的权限编码。
+     */
     private List<String> getUserPermissionCodesInTenant(String userId, String tenantId) {
         return getUserPermissionsInTenant(userId, tenantId).stream()
                 .map(Permission::getPerms)
@@ -1119,6 +1171,9 @@ public class UserServiceImpl extends BaseServiceImpl<UserMapper, User, UserVO> i
                 .collect(Collectors.toList());
     }
 
+    /**
+     * 查询用户在指定租户下最终生效的权限对象。
+     */
     private List<Permission> getUserPermissionsInTenant(String userId, String tenantId) {
         List<Permission> permissions = new ArrayList<>();
         permissions.addAll(runWithTenant(tenantId, () -> getUserPermissions(userId)));
@@ -1131,6 +1186,9 @@ public class UserServiceImpl extends BaseServiceImpl<UserMapper, User, UserVO> i
         return distinctAndSortPermissions(permissions);
     }
 
+    /**
+     * 查询用户在指定租户下最终生效的角色编码。
+     */
     private List<String> getUserRoleCodesInTenant(String userId, String tenantId) {
         Set<String> roleCodes = new LinkedHashSet<>();
         roleCodes.addAll(runWithTenant(tenantId, () -> getUserRoleCodes(userId)));
@@ -1143,12 +1201,18 @@ public class UserServiceImpl extends BaseServiceImpl<UserMapper, User, UserVO> i
         return new ArrayList<>(roleCodes);
     }
 
+    /**
+     * 判断超级管理员切换到业务租户时是否需要叠加目标租户管理员角色权限。
+     */
     private boolean isTenantAdminPermissionsApplied(String userId, String tenantId) {
         return StringUtils.hasText(tenantId)
                 && !SYSTEM_TENANT_ID.equals(tenantId)
                 && isPlatformAdmin(userId);
     }
 
+    /**
+     * 在指定租户上下文中查询指定角色编码对应的权限。
+     */
     private List<Permission> getRolePermissionsInTenant(String tenantId, String roleCode) {
         if (!StringUtils.hasText(tenantId) || !StringUtils.hasText(roleCode)) {
             return new ArrayList<>();
@@ -1185,10 +1249,16 @@ public class UserServiceImpl extends BaseServiceImpl<UserMapper, User, UserVO> i
         });
     }
 
+    /**
+     * 按约定生成租户默认管理员角色编码。
+     */
     private String buildTenantAdminRoleCode(String tenantId) {
         return TENANT_ADMIN_ROLE_CODE_PREFIX + tenantId.trim();
     }
 
+    /**
+     * 临时切换租户上下文执行查询或写入，并在结束后恢复原上下文。
+     */
     private <T> T runWithTenant(String tenantId, java.util.function.Supplier<T> supplier) {
         String previousTenantId = TenantContextHolder.getCurrentTenantId();
         if (StringUtils.hasText(tenantId)) {
@@ -1205,6 +1275,9 @@ public class UserServiceImpl extends BaseServiceImpl<UserMapper, User, UserVO> i
         }
     }
 
+    /**
+     * 查询用户所属部门对应的部门角色 ID。
+     */
     private List<String> getUserDepartRoleIds(String userId) {
         if (!StringUtils.hasText(userId)) {
             return new ArrayList<>();
@@ -1232,6 +1305,9 @@ public class UserServiceImpl extends BaseServiceImpl<UserMapper, User, UserVO> i
                 .collect(Collectors.toList());
     }
 
+    /**
+     * 查询部门默认角色 ID。
+     */
     private List<String> getDefaultDepartRoleIds(List<String> departIds) {
         List<String> normalizedDepartIds = normalizeIds(departIds);
         if (normalizedDepartIds.isEmpty()) {
@@ -1252,6 +1328,9 @@ public class UserServiceImpl extends BaseServiceImpl<UserMapper, User, UserVO> i
                 .collect(Collectors.toList());
     }
 
+    /**
+     * 查询部门显式绑定的部门角色 ID。
+     */
     private List<String> getDepartRoleIds(List<String> departIds) {
         List<String> normalizedDepartIds = normalizeIds(departIds);
         if (normalizedDepartIds.isEmpty()) {
@@ -1267,6 +1346,9 @@ public class UserServiceImpl extends BaseServiceImpl<UserMapper, User, UserVO> i
                 .collect(Collectors.toList());
     }
 
+    /**
+     * 合并直接角色权限和部门角色权限。
+     */
     private List<Permission> mergePermissions(List<Permission> rolePermissions, List<Permission> departRolePermissions) {
         List<Permission> permissions = new ArrayList<>();
         permissions.addAll(rolePermissions);
@@ -1274,6 +1356,9 @@ public class UserServiceImpl extends BaseServiceImpl<UserMapper, User, UserVO> i
         return distinctAndSortPermissions(permissions);
     }
 
+    /**
+     * 对权限列表按 ID 去重，并按 sort 字段排序。
+     */
     private List<Permission> distinctAndSortPermissions(List<Permission> sourcePermissions) {
         Set<String> permissionIds = new LinkedHashSet<>();
         List<Permission> permissions = new ArrayList<>();
@@ -1301,6 +1386,9 @@ public class UserServiceImpl extends BaseServiceImpl<UserMapper, User, UserVO> i
         return isPlatformOperatorUsername(dto.getContext().getUsername());
     }
 
+    /**
+     * 判断指定账号是否属于系统默认 ADMIN 超级管理员角色。
+     */
     private boolean isPlatformOperatorUsername(String username) {
         if (!StringUtils.hasText(username) || "anonymous".equals(username)) {
             return false;
@@ -1309,6 +1397,9 @@ public class UserServiceImpl extends BaseServiceImpl<UserMapper, User, UserVO> i
         return isPlatformAdmin(operator.getId());
     }
 
+    /**
+     * 判断指定用户是否属于系统默认 ADMIN 超级管理员角色。
+     */
     private boolean isPlatformAdmin(String userId) {
         if (!StringUtils.hasText(userId)) {
             return false;
@@ -1317,6 +1408,9 @@ public class UserServiceImpl extends BaseServiceImpl<UserMapper, User, UserVO> i
                 .anyMatch(PLATFORM_ADMIN_ROLE_CODE::equals));
     }
 
+    /**
+     * 查询所有启用且未删除的租户。
+     */
     private List<Tenant> getEnabledTenants() {
         LambdaQueryWrapper<Tenant> wrapper = new LambdaQueryWrapper<>();
         wrapper.eq(Tenant::getDeleteFlag, 0)
@@ -1325,6 +1419,9 @@ public class UserServiceImpl extends BaseServiceImpl<UserMapper, User, UserVO> i
         return tenantMapper.selectList(wrapper);
     }
 
+    /**
+     * 从当前租户上下文中获取必填租户 ID。
+     */
     private String getRequiredTenantId() {
         String tenantId = TenantContextHolder.getCurrentTenantId();
         if (!StringUtils.hasText(tenantId)) {
@@ -1333,6 +1430,9 @@ public class UserServiceImpl extends BaseServiceImpl<UserMapper, User, UserVO> i
         return tenantId;
     }
 
+    /**
+     * 优先从请求上下文获取租户 ID，缺省时回退到线程租户上下文。
+     */
     private String getRequiredTenantId(BaseDTO<User> dto) {
         String tenantId = dto != null && dto.getContext() != null ? dto.getContext().getTenantId() : null;
         if (!StringUtils.hasText(tenantId)) {
@@ -1344,6 +1444,9 @@ public class UserServiceImpl extends BaseServiceImpl<UserMapper, User, UserVO> i
         return tenantId;
     }
 
+    /**
+     * 查询指定租户的正常成员用户 ID。
+     */
     private List<String> getTenantMemberUserIds(String tenantId) {
         LambdaQueryWrapper<UserTenant> wrapper = new LambdaQueryWrapper<>();
         wrapper.eq(UserTenant::getTenantId, tenantId)
@@ -1356,6 +1459,9 @@ public class UserServiceImpl extends BaseServiceImpl<UserMapper, User, UserVO> i
                 .collect(Collectors.toList());
     }
 
+    /**
+     * 获取用户默认登录租户，优先使用最近登录租户。
+     */
     private String getDefaultTenantId(String userId) {
         User user = userMapper.selectById(userId);
         if (user != null && StringUtils.hasText(user.getLoginTenantId())
@@ -1381,6 +1487,9 @@ public class UserServiceImpl extends BaseServiceImpl<UserMapper, User, UserVO> i
         return "0";
     }
 
+    /**
+     * 清洗 ID 列表，去空、去重并保持传入顺序。
+     */
     private List<String> normalizeIds(List<String> ids) {
         if (ids == null || ids.isEmpty()) {
             return new ArrayList<>();
@@ -1392,6 +1501,9 @@ public class UserServiceImpl extends BaseServiceImpl<UserMapper, User, UserVO> i
                 .collect(Collectors.toList());
     }
 
+    /**
+     * 校验角色 ID 列表对应的角色存在且未删除。
+     */
     private void validateRoles(List<String> roleIds) {
         if (roleIds.isEmpty()) {
             return;
@@ -1406,6 +1518,9 @@ public class UserServiceImpl extends BaseServiceImpl<UserMapper, User, UserVO> i
         }
     }
 
+    /**
+     * 校验租户内用户分配角色的边界，包括成员归属、角色租户和权限范围。
+     */
     private void validateTenantRoleAssignment(
             String userId,
             List<String> roleIds,
@@ -1438,6 +1553,9 @@ public class UserServiceImpl extends BaseServiceImpl<UserMapper, User, UserVO> i
         validateRoleGrantWithinOperatorPermissions(roleIds, operatorUsername);
     }
 
+    /**
+     * 批量查询未删除角色。
+     */
     private List<Role> getRolesByIds(List<String> roleIds) {
         if (roleIds.isEmpty()) {
             return new ArrayList<>();
@@ -1449,6 +1567,9 @@ public class UserServiceImpl extends BaseServiceImpl<UserMapper, User, UserVO> i
         return roleMapper.selectList(wrapper);
     }
 
+    /**
+     * 校验被分配角色的权限集合不超过当前操作人自身权限范围。
+     */
     private void validateRoleGrantWithinOperatorPermissions(List<String> roleIds, String operatorUsername) {
         if (roleIds.isEmpty()) {
             return;
@@ -1468,6 +1589,9 @@ public class UserServiceImpl extends BaseServiceImpl<UserMapper, User, UserVO> i
         }
     }
 
+    /**
+     * 查询一批角色拥有的权限编码集合。
+     */
     private Set<String> getPermissionCodesByRoleIds(List<String> roleIds) {
         if (roleIds.isEmpty()) {
             return new LinkedHashSet<>();
@@ -1495,6 +1619,9 @@ public class UserServiceImpl extends BaseServiceImpl<UserMapper, User, UserVO> i
                 .collect(Collectors.toCollection(LinkedHashSet::new));
     }
 
+    /**
+     * 校验租户 ID 列表对应的租户存在且未删除。
+     */
     private void validateTenants(List<String> tenantIds) {
         if (tenantIds.isEmpty()) {
             return;
@@ -1510,6 +1637,9 @@ public class UserServiceImpl extends BaseServiceImpl<UserMapper, User, UserVO> i
         }
     }
 
+    /**
+     * 校验用户 ID 列表对应的用户存在且未删除。
+     */
     private void validateUsers(List<String> userIds) {
         if (userIds.isEmpty()) {
             return;
@@ -1525,6 +1655,9 @@ public class UserServiceImpl extends BaseServiceImpl<UserMapper, User, UserVO> i
         }
     }
 
+    /**
+     * 以用户为主维度差量同步用户可访问租户。
+     */
     private void syncUserTenants(String userId, List<String> targetTenantIds) {
         LambdaQueryWrapper<UserTenant> wrapper = new LambdaQueryWrapper<>();
         wrapper.eq(UserTenant::getUserId, userId);
@@ -1544,6 +1677,7 @@ public class UserServiceImpl extends BaseServiceImpl<UserMapper, User, UserVO> i
                 .map(UserTenant::getId)
                 .filter(StringUtils::hasText)
                 .collect(Collectors.toList());
+        // 覆盖保存时只逻辑删除被取消选择的租户关系，保留未变化的有效关系。
         deleteUserTenantRelations(deleteIds);
 
         for (String tenantId : targetTenantIdSet) {
@@ -1554,6 +1688,9 @@ public class UserServiceImpl extends BaseServiceImpl<UserMapper, User, UserVO> i
         }
     }
 
+    /**
+     * 以租户为主维度差量同步租户成员。
+     */
     private void syncTenantUsers(String tenantId, List<String> targetUserIds) {
         LambdaQueryWrapper<UserTenant> wrapper = new LambdaQueryWrapper<>();
         wrapper.eq(UserTenant::getTenantId, tenantId);
@@ -1573,6 +1710,7 @@ public class UserServiceImpl extends BaseServiceImpl<UserMapper, User, UserVO> i
                 .map(UserTenant::getId)
                 .filter(StringUtils::hasText)
                 .collect(Collectors.toList());
+        // 租户成员调整采用差量同步：取消选择的成员关系逻辑删除，已存在成员不重复插入。
         deleteUserTenantRelations(deleteIds);
 
         for (String userId : targetUserIdSet) {
@@ -1583,6 +1721,9 @@ public class UserServiceImpl extends BaseServiceImpl<UserMapper, User, UserVO> i
         }
     }
 
+    /**
+     * 按关系 ID 逻辑删除用户-租户关系。
+     */
     private void deleteUserTenantRelations(List<String> ids) {
         if (ids.isEmpty()) {
             return;
@@ -1594,18 +1735,27 @@ public class UserServiceImpl extends BaseServiceImpl<UserMapper, User, UserVO> i
         softDeleteUserTenants(wrapper, "system");
     }
 
+    /**
+     * 按条件逻辑删除用户-租户关系。
+     */
     private void softDeleteUserTenants(LambdaQueryWrapper<UserTenant> wrapper, String deleteBy) {
         UserTenant userTenant = new UserTenant();
         EntityFillUtils.fillDeleteFields(userTenant, deleteBy);
         userTenantMapper.update(userTenant, wrapper);
     }
 
+    /**
+     * 按条件逻辑删除用户-角色关系。
+     */
     private void softDeleteUserRoles(LambdaQueryWrapper<UserRole> wrapper, String deleteBy) {
         UserRole userRole = new UserRole();
         EntityFillUtils.fillDeleteFields(userRole, deleteBy);
         userRoleMapper.update(userRole, wrapper);
     }
 
+    /**
+     * 新增、恢复或刷新用户-租户成员关系。
+     */
     private void upsertUserTenantRelation(String userId, String tenantId) {
         LambdaQueryWrapper<UserTenant> wrapper = new LambdaQueryWrapper<>();
         wrapper.eq(UserTenant::getUserId, userId)
@@ -1613,6 +1763,7 @@ public class UserServiceImpl extends BaseServiceImpl<UserMapper, User, UserVO> i
         UserTenant existingRelation = userTenantMapper.selectOne(wrapper);
 
         if (existingRelation != null) {
+            // 关系存在但已逻辑删除时恢复，避免唯一关系被重复插入。
             if (existingRelation.getDeleteFlag() != null && existingRelation.getDeleteFlag() == 1) {
                 existingRelation.setDeleteFlag(0);
                 existingRelation.setDeleteTime(null);
@@ -1631,6 +1782,9 @@ public class UserServiceImpl extends BaseServiceImpl<UserMapper, User, UserVO> i
         userTenantMapper.insert(userTenant);
     }
 
+    /**
+     * 判断用户是否为指定租户的正常成员。
+     */
     private boolean userBelongsToTenant(String userId, String tenantId) {
         if (!StringUtils.hasText(userId) || !StringUtils.hasText(tenantId)) {
             return false;
@@ -1644,6 +1798,9 @@ public class UserServiceImpl extends BaseServiceImpl<UserMapper, User, UserVO> i
         return userTenantMapper.selectCount(wrapper) > 0;
     }
 
+    /**
+     * 查询指定 ID 对应的启用租户。
+     */
     private Tenant getEnabledTenantById(String tenantId) {
         if (!StringUtils.hasText(tenantId)) {
             return null;
@@ -1659,6 +1816,9 @@ public class UserServiceImpl extends BaseServiceImpl<UserMapper, User, UserVO> i
         return tenant;
     }
 
+    /**
+     * 查询指定 ID 对应的启用用户。
+     */
     private User getEnabledUserById(String userId) {
         if (!StringUtils.hasText(userId)) {
             return null;
@@ -1674,6 +1834,9 @@ public class UserServiceImpl extends BaseServiceImpl<UserMapper, User, UserVO> i
         return user;
     }
 
+    /**
+     * 从请求上下文解析操作人账号。
+     */
     private String resolveOperator(BaseDTO<User> dto) {
         if (dto != null && dto.getContext() != null && StringUtils.hasText(dto.getContext().getUsername())) {
             return dto.getContext().getUsername();
@@ -1681,6 +1844,9 @@ public class UserServiceImpl extends BaseServiceImpl<UserMapper, User, UserVO> i
         return "system";
     }
 
+    /**
+     * 在已捕获异常并返回失败响应前，显式标记当前事务回滚。
+     */
     private void markRollbackOnly() {
         try {
             TransactionAspectSupport.currentTransactionStatus().setRollbackOnly();
@@ -1689,10 +1855,16 @@ public class UserServiceImpl extends BaseServiceImpl<UserMapper, User, UserVO> i
         }
     }
 
+    /**
+     * 生成项目统一使用的字符串主键。
+     */
     private String newId() {
         return UUID.randomUUID().toString().replace("-", "");
     }
 
+    /**
+     * 从删除请求中解析单个或批量删除 ID。
+     */
     private List<String> getDeleteIds(BaseDTO<User> deleteDTO) {
         List<String> ids = new ArrayList<>();
         if (StringUtils.hasText(deleteDTO.getId())) {
@@ -1706,6 +1878,9 @@ public class UserServiceImpl extends BaseServiceImpl<UserMapper, User, UserVO> i
         return ids.stream().distinct().collect(Collectors.toList());
     }
 
+    /**
+     * 用户权限或租户关系发生变化后，清理该用户所有登录态。
+     */
     private void forceLogoutUserById(String userId) {
         if (!StringUtils.hasText(userId)) {
             return;

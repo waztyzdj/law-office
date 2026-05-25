@@ -235,6 +235,9 @@ public class RoleServiceImpl extends BaseServiceImpl<RoleMapper, Role, RoleVO> i
                 .collect(Collectors.toList());
     }
 
+    /**
+     * 清洗 ID 列表，去空、去重并保持传入顺序。
+     */
     private List<String> normalizeIds(List<String> ids) {
         if (ids == null || ids.isEmpty()) {
             return new ArrayList<>();
@@ -246,6 +249,9 @@ public class RoleServiceImpl extends BaseServiceImpl<RoleMapper, Role, RoleVO> i
                 .collect(Collectors.toList());
     }
 
+    /**
+     * 校验权限 ID 列表对应的权限存在且未删除。
+     */
     private void validatePermissions(List<String> permissionIds) {
         if (permissionIds.isEmpty()) {
             return;
@@ -260,6 +266,9 @@ public class RoleServiceImpl extends BaseServiceImpl<RoleMapper, Role, RoleVO> i
         }
     }
 
+    /**
+     * 校验角色授权范围不能超过当前操作人自身权限。
+     */
     private void validateGrantWithinOperatorPermissions(List<String> permissionIds, String operatorUsername) {
         if (permissionIds.isEmpty() || !StringUtils.hasText(operatorUsername)) {
             return;
@@ -283,6 +292,9 @@ public class RoleServiceImpl extends BaseServiceImpl<RoleMapper, Role, RoleVO> i
         }
     }
 
+    /**
+     * 补齐被授权权限的父级权限，保证菜单树可正常展示。
+     */
     private List<String> expandPermissionIdsWithAncestors(List<String> permissionIds) {
         if (permissionIds.isEmpty()) {
             return permissionIds;
@@ -313,6 +325,9 @@ public class RoleServiceImpl extends BaseServiceImpl<RoleMapper, Role, RoleVO> i
         return new ArrayList<>(expandedIds);
     }
 
+    /**
+     * 校验角色编码在当前租户内唯一。
+     */
     private void validateUniqueRoleCode(Role role) {
         LambdaQueryWrapper<Role> wrapper = new LambdaQueryWrapper<>();
         wrapper.eq(Role::getRoleCode, role.getRoleCode())
@@ -326,10 +341,16 @@ public class RoleServiceImpl extends BaseServiceImpl<RoleMapper, Role, RoleVO> i
         }
     }
 
+    /**
+     * 判断角色是否为系统默认超级管理员角色。
+     */
     private boolean isSuperAdminRole(Role role) {
         return role != null && SUPER_ADMIN_ROLE_CODE.equals(role.getRoleCode());
     }
 
+    /**
+     * 从删除请求中解析单个或批量删除 ID。
+     */
     private List<String> getDeleteIds(BaseDTO<Role> deleteDTO) {
         List<String> ids = new ArrayList<>();
         if (StringUtils.hasText(deleteDTO.getId())) {
@@ -343,6 +364,9 @@ public class RoleServiceImpl extends BaseServiceImpl<RoleMapper, Role, RoleVO> i
         return ids.stream().distinct().collect(Collectors.toList());
     }
 
+    /**
+     * 角色权限或角色删除后，清理受影响用户的登录态。
+     */
     private void forceLogoutUsersByRoleIds(List<String> roleIds) {
         if (roleIds == null || roleIds.isEmpty()) {
             return;
@@ -369,6 +393,9 @@ public class RoleServiceImpl extends BaseServiceImpl<RoleMapper, Role, RoleVO> i
                 .forEach(tokenService::forceLogout);
     }
 
+    /**
+     * 将字符串 trim 后的空值统一转为 null。
+     */
     private String trimToNull(String value) {
         if (!StringUtils.hasText(value)) {
             return null;

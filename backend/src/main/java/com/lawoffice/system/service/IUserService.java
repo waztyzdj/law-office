@@ -1,175 +1,235 @@
 package com.lawoffice.system.service;
 
 import com.lawoffice.framework.service.IBaseService;
-import com.lawoffice.system.vo.UserInfoVO;
+import com.lawoffice.system.entity.Permission;
 import com.lawoffice.system.entity.Role;
 import com.lawoffice.system.entity.SysDepart;
 import com.lawoffice.system.entity.Tenant;
 import com.lawoffice.system.entity.User;
+import com.lawoffice.system.vo.UserInfoVO;
 import com.lawoffice.system.vo.UserVO;
 
 import java.util.List;
 
 public interface IUserService extends IBaseService<User, UserVO> {
 
+    /**
+     * 校验明文密码与加密密码是否匹配。
+     *
+     * @param rawPassword 明文密码
+     * @param encodedPassword 加密后的密码
+     * @return 是否匹配
+     */
     boolean verifyPassword(String rawPassword, String encodedPassword);
 
+    /**
+     * 重置指定用户密码。
+     *
+     * @param userId 用户 ID
+     * @param newPassword 新密码
+     */
     void resetPassword(String userId, String newPassword);
 
     /**
-     * 为用户分配角色
-     * @param userId 用户ID
-     * @param roleIds 角色ID列表
+     * 为用户覆盖保存角色。
+     *
+     * @param userId 用户 ID
+     * @param roleIds 角色 ID 列表
      */
     void assignRoles(String userId, List<String> roleIds);
 
+    /**
+     * 以指定操作人的授权范围为边界，为用户覆盖保存角色。
+     * <p>
+     * 非超级管理员只能为当前租户成员分配当前租户角色，且角色权限不能超过自身权限范围。
+     *
+     * @param userId 用户 ID
+     * @param roleIds 角色 ID 列表
+     * @param operatorUsername 当前操作人账号
+     */
     void assignRoles(String userId, List<String> roleIds, String operatorUsername);
 
     /**
-     * 获取用户的角色列表
-     * @param userId 用户ID
+     * 查询用户已分配角色。
+     *
+     * @param userId 用户 ID
      * @return 角色列表
      */
     List<Role> getUserRoles(String userId);
 
     /**
-     * 获取用户的角色 ID 列表
-     * @param userId 用户ID
-     * @return 角色ID列表
+     * 查询用户已分配角色 ID。
+     *
+     * @param userId 用户 ID
+     * @return 角色 ID 列表
      */
     List<String> getUserRoleIds(String userId);
 
     /**
-     * 移除用户的指定角色
-     * @param userId 用户ID
-     * @param roleIds 角色ID列表
+     * 移除用户的指定角色。
+     *
+     * @param userId 用户 ID
+     * @param roleIds 角色 ID 列表
      */
     void removeRoles(String userId, List<String> roleIds);
 
     /**
-     * 为用户分配部门
-     * @param userId 用户ID
-     * @param departIds 部门ID列表
+     * 为用户分配部门。
+     *
+     * @param userId 用户 ID
+     * @param departIds 部门 ID 列表
      */
     void assignDeparts(String userId, List<String> departIds);
 
     /**
-     * 获取用户的部门列表
-     * @param userId 用户ID
+     * 查询用户所属部门。
+     *
+     * @param userId 用户 ID
      * @return 部门列表
      */
     List<SysDepart> getUserDeparts(String userId);
 
     /**
-     * 移除用户的指定部门
-     * @param userId 用户ID
-     * @param departIds 部门ID列表
+     * 移除用户的指定部门。
+     *
+     * @param userId 用户 ID
+     * @param departIds 部门 ID 列表
      */
     void removeDeparts(String userId, List<String> departIds);
 
     /**
-     * 为用户分配租户
-     * @param userId 用户ID
-     * @param tenantIds 租户ID列表
+     * 为用户覆盖保存可访问租户。
+     *
+     * @param userId 用户 ID
+     * @param tenantIds 租户 ID 列表
      */
     void assignTenants(String userId, List<String> tenantIds);
 
     /**
-     * 为租户分配用户
-     * @param tenantId 租户ID
-     * @param userIds 用户ID列表
+     * 为租户覆盖保存成员用户。
+     *
+     * @param tenantId 租户 ID
+     * @param userIds 用户 ID 列表
      */
     void assignTenantUsers(String tenantId, List<String> userIds);
 
     /**
-     * 获取用户的租户列表
-     * @param userId 用户ID
+     * 查询用户可访问租户。
+     *
+     * @param userId 用户 ID
      * @return 租户列表
      */
     List<Tenant> getUserTenants(String userId);
 
     /**
-     * 获取租户下的用户 ID 列表
-     * @param tenantId 租户ID
-     * @return 用户ID列表
+     * 查询租户下正常状态的用户 ID。
+     *
+     * @param tenantId 租户 ID
+     * @return 用户 ID 列表
      */
     List<String> getTenantUserIds(String tenantId);
 
     /**
-     * 获取当前用户可切换的租户列表
+     * 查询当前登录用户可切换的租户。
+     * <p>
+     * 超级管理员返回全部启用租户，普通用户返回已分配且启用的租户。
+     *
      * @param username 用户名
-     * @return 租户列表
+     * @return 可切换租户列表
      */
     List<Tenant> getCurrentUserTenants(String username);
 
     /**
-     * 移除用户的指定租户
-     * @param userId 用户ID
-     * @param tenantIds 租户ID列表
+     * 移除用户的指定租户关系。
+     *
+     * @param userId 用户 ID
+     * @param tenantIds 租户 ID 列表
      */
     void removeTenants(String userId, List<String> tenantIds);
 
     /**
-     * 获取用户的权限列表（通过角色关联）
-     * @param userId 用户ID
+     * 查询用户通过角色获得的权限。
+     *
+     * @param userId 用户 ID
      * @return 权限列表
      */
-    List<com.lawoffice.system.entity.Permission> getUserPermissions(String userId);
-
-    List<com.lawoffice.system.entity.Permission> getUserPermissionsInCurrentTenant(String userId);
+    List<Permission> getUserPermissions(String userId);
 
     /**
-     * 获取用户的权限编码列表（用于JWT Token和权限验证）
-     * @param userId 用户ID
-     * @return 权限编码列表（perms字段）
+     * 查询用户在当前租户上下文下的权限。
+     *
+     * @param userId 用户 ID
+     * @return 权限列表
+     */
+    List<Permission> getUserPermissionsInCurrentTenant(String userId);
+
+    /**
+     * 查询用户权限编码。
+     *
+     * @param userId 用户 ID
+     * @return 权限编码列表
      */
     List<String> getUserPermissionCodes(String userId);
 
+    /**
+     * 按用户名查询用户权限编码。
+     *
+     * @param username 用户名
+     * @return 权限编码列表
+     */
     List<String> getUserPermissionCodesByUsername(String username);
 
     /**
-     * 用户登录业务逻辑
+     * 用户名密码登录。
+     *
      * @param username 用户名
-     * @param password 密码
-     * @return 登录结果，包含token、用户信息等
+     * @param password 明文密码
+     * @return 登录结果，包含 token、当前租户和用户信息
      */
     java.util.Map<String, Object> login(String username, String password);
 
     /**
-     * 切换当前用户租户并签发新 Token
+     * 切换当前用户租户并签发新的 token。
+     * <p>
+     * 普通用户只能切换到已分配且启用的租户；超级管理员可切换到任一启用租户。
+     *
      * @param username 用户名
-     * @param tenantId 目标租户ID
-     * @param currentToken 当前Token，可为空
+     * @param tenantId 目标租户 ID
+     * @param currentToken 当前 token，可为空
      * @return 新登录态信息
      */
     java.util.Map<String, Object> switchTenant(String username, String tenantId, String currentToken);
 
     /**
-     * 获取当前用户信息
+     * 查询当前用户基础信息。
+     *
      * @param username 用户名
      * @return 用户信息
      */
     User getCurrentUserInfo(String username);
 
     /**
-     * 用户登出业务逻辑
-     * @param token Token字符串
-     * @param username 用户名（可选，从request中获取）
+     * 用户登出。
+     *
+     * @param token token 字符串
+     * @param username 用户名，可为空
      */
     void logout(String token, String username);
 
     /**
-     * 修改密码业务逻辑
+     * 修改当前用户密码。
+     *
      * @param username 用户名
-     * @param oldPassword 旧密码
+     * @param oldPassword 原密码
      * @param newPassword 新密码
      */
     void changePassword(String username, String oldPassword, String newPassword);
 
     /**
-     * 获取当前用户详细信息（包含角色、权限、菜单）
+     * 查询当前用户详情。
+     *
      * @param username 用户名
-     * @return 用户详细信息
+     * @return 用户详情，包含角色、权限、菜单和当前租户
      */
     UserInfoVO getCurrentUserDetailInfo(String username);
 }

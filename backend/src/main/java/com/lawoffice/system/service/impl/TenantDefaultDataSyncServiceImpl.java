@@ -10,6 +10,7 @@ import com.lawoffice.system.mapper.SysCategoryMapper;
 import com.lawoffice.system.mapper.SysDictItemMapper;
 import com.lawoffice.system.mapper.SysDictMapper;
 import com.lawoffice.system.mapper.TenantMapper;
+import com.lawoffice.system.service.ITenantDefaultDataSyncService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -24,7 +25,7 @@ import java.util.function.Supplier;
 
 @Slf4j
 @Service
-public class TenantDefaultDataSyncService {
+public class TenantDefaultDataSyncServiceImpl implements ITenantDefaultDataSyncService {
 
     private static final String SYSTEM_TENANT_ID = "0";
 
@@ -33,7 +34,7 @@ public class TenantDefaultDataSyncService {
     private final SysDictItemMapper sysDictItemMapper;
     private final SysCategoryMapper sysCategoryMapper;
 
-    public TenantDefaultDataSyncService(
+    public TenantDefaultDataSyncServiceImpl(
             TenantMapper tenantMapper,
             SysDictMapper sysDictMapper,
             SysDictItemMapper sysDictItemMapper,
@@ -44,6 +45,7 @@ public class TenantDefaultDataSyncService {
         this.sysCategoryMapper = sysCategoryMapper;
     }
 
+    @Override
     @Transactional(rollbackFor = Exception.class)
     public void syncDefaultDataToTenant(String tenantId, String operator) {
         if (!StringUtils.hasText(tenantId) || SYSTEM_TENANT_ID.equals(tenantId)) {
@@ -56,6 +58,7 @@ public class TenantDefaultDataSyncService {
         log.info("Default dictionary and category data synced to tenant: {}", tenantId);
     }
 
+    @Override
     @Transactional(rollbackFor = Exception.class)
     public void syncDefaultDictToAllTenants(String dictId, String operator) {
         if (!StringUtils.hasText(dictId)) {
@@ -74,6 +77,7 @@ public class TenantDefaultDataSyncService {
         }
     }
 
+    @Override
     @Transactional(rollbackFor = Exception.class)
     public void syncDefaultDictItemToAllTenants(String dictItemId, String operator) {
         if (!StringUtils.hasText(dictItemId)) {
@@ -97,6 +101,7 @@ public class TenantDefaultDataSyncService {
         }
     }
 
+    @Override
     @Transactional(rollbackFor = Exception.class)
     public void syncDefaultCategoryToAllTenants(String categoryId, String operator) {
         if (!StringUtils.hasText(categoryId)) {
@@ -114,11 +119,15 @@ public class TenantDefaultDataSyncService {
         }
     }
 
+    @Override
     public boolean isSystemTenantContext() {
         String tenantId = TenantContextHolder.getCurrentTenantId();
         return !StringUtils.hasText(tenantId) || SYSTEM_TENANT_ID.equals(tenantId);
     }
 
+    /**
+     * 将默认租户的字典定义同步到目标租户。
+     */
     private void syncDefaultDictionariesToTenant(String tenantId, String operator) {
         List<SysDict> sourceDicts = runWithTenant(SYSTEM_TENANT_ID, () -> sysDictMapper.selectList(
                 new LambdaQueryWrapper<SysDict>()
@@ -135,6 +144,9 @@ public class TenantDefaultDataSyncService {
         }
     }
 
+    /**
+     * 将默认租户指定字典下的字典项同步到目标租户。
+     */
     private void syncDefaultDictItemsToTenant(SysDict sourceDict, String tenantId, String operator) {
         SysDict targetDict = findTenantDictByCode(tenantId, sourceDict.getDictCode());
         if (targetDict == null || isDeleted(targetDict.getDeleteFlag())) {
@@ -154,9 +166,13 @@ public class TenantDefaultDataSyncService {
         }
     }
 
+    /**
+     * 确保目标租户存在指定字典，已逻辑删除的同编码字典会被恢复。
+     */
     private SysDict ensureDictInTenant(SysDict sourceDict, String tenantId, String operator) {
         SysDict existingDict = findTenantDictByCode(tenantId, sourceDict.getDictCode());
         if (existingDict != null) {
+            // 默认数据同步只补齐缺失数据，不覆盖租户已存在的自有配置。
             restoreDictIfDeleted(existingDict, sourceDict, operator);
             return existingDict;
         }
@@ -175,6 +191,9 @@ public class TenantDefaultDataSyncService {
         return targetDict;
     }
 
+    /**
+     * 确保目标租户指定字典下存在对应字典项，已逻辑删除的同编码字典项会被恢复。
+     */
     private void ensureDictItemInTenant(SysDictItem sourceItem, String targetDictId, String tenantId, String operator) {
         if (!StringUtils.hasText(sourceItem.getItemValue())) {
             return;
@@ -187,6 +206,7 @@ public class TenantDefaultDataSyncService {
                         .last("LIMIT 1")
         ));
         if (existingItem != null) {
+            // 已存在的字典项不覆盖；如果之前被逻辑删除，则按默认租户数据恢复。
             restoreDictItemIfDeleted(existingItem, sourceItem, operator);
             return;
         }
@@ -207,6 +227,9 @@ public class TenantDefaultDataSyncService {
         });
     }
 
+    /**
+     * 将默认租户的通用类型同步到目标租户。
+     */
     private void syncDefaultCategoriesToTenant(String tenantId, String operator) {
         List<SysCategory> sourceCategories = runWithTenant(SYSTEM_TENANT_ID, () -> sysCategoryMapper.selectList(
                 new LambdaQueryWrapper<SysCategory>()
@@ -222,6 +245,9 @@ public class TenantDefaultDataSyncService {
         }
     }
 
+    /**
+     * 确保目标租户存在指定通用类型，已逻辑删除的同编码记录会被恢复。
+     */
     private SysCategory ensureCategoryInTenant(
             SysCategory sourceCategory,
             String tenantId,
@@ -233,6 +259,7 @@ public class TenantDefaultDataSyncService {
 
         SysCategory existingCategory = findTenantCategoryByCode(tenantId, sourceCategory.getCode());
         if (existingCategory != null) {
+            // 通用类型同步采用同编码幂等补齐，不覆盖租户已有记录。
             restoreCategoryIfDeleted(existingCategory, sourceCategory, operator);
             sourceToTargetIdMap.put(sourceCategory.getId(), existingCategory.getId());
             return existingCategory;
@@ -256,6 +283,9 @@ public class TenantDefaultDataSyncService {
         return targetCategory;
     }
 
+    /**
+     * 将默认租户通用类型的父级 ID 映射为目标租户中的父级 ID。
+     */
     private String resolveTargetCategoryPid(
             SysCategory sourceCategory,
             String tenantId,
@@ -277,6 +307,9 @@ public class TenantDefaultDataSyncService {
         return targetParent != null ? targetParent.getId() : null;
     }
 
+    /**
+     * 按租户和字典编码查询字典，包含已逻辑删除记录。
+     */
     private SysDict findTenantDictByCode(String tenantId, String dictCode) {
         return runWithTenant(tenantId, () -> sysDictMapper.selectOne(
                 new LambdaQueryWrapper<SysDict>()
@@ -285,6 +318,9 @@ public class TenantDefaultDataSyncService {
         ));
     }
 
+    /**
+     * 按租户和通用类型编码查询通用类型，包含已逻辑删除记录。
+     */
     private SysCategory findTenantCategoryByCode(String tenantId, String code) {
         return runWithTenant(tenantId, () -> sysCategoryMapper.selectOne(
                 new LambdaQueryWrapper<SysCategory>()
@@ -293,6 +329,9 @@ public class TenantDefaultDataSyncService {
         ));
     }
 
+    /**
+     * 恢复目标租户中已逻辑删除的同编码字典。
+     */
     private void restoreDictIfDeleted(SysDict targetDict, SysDict sourceDict, String operator) {
         if (!isDeleted(targetDict.getDeleteFlag())) {
             return;
@@ -306,6 +345,9 @@ public class TenantDefaultDataSyncService {
         });
     }
 
+    /**
+     * 恢复目标租户中已逻辑删除的同编码字典项。
+     */
     private void restoreDictItemIfDeleted(SysDictItem targetItem, SysDictItem sourceItem, String operator) {
         if (!isDeleted(targetItem.getDeleteFlag())) {
             return;
@@ -321,6 +363,9 @@ public class TenantDefaultDataSyncService {
         });
     }
 
+    /**
+     * 恢复目标租户中已逻辑删除的同编码通用类型。
+     */
     private void restoreCategoryIfDeleted(SysCategory targetCategory, SysCategory sourceCategory, String operator) {
         if (!isDeleted(targetCategory.getDeleteFlag())) {
             return;
@@ -334,6 +379,9 @@ public class TenantDefaultDataSyncService {
         });
     }
 
+    /**
+     * 查询需要补齐默认数据的启用业务租户，不包含默认租户 0。
+     */
     private List<Tenant> getEnabledBusinessTenants() {
         return tenantMapper.selectList(
                 new LambdaQueryWrapper<Tenant>()
@@ -344,12 +392,18 @@ public class TenantDefaultDataSyncService {
         );
     }
 
+    /**
+     * 为复制出的新记录填充创建审计字段。
+     */
     private void fillCreateFields(com.lawoffice.framework.entity.BaseEntity entity, String operator) {
         entity.setCreateBy(operator);
         entity.setCreateTime(LocalDateTime.now());
         entity.setDeleteFlag(0);
     }
 
+    /**
+     * 为被恢复的逻辑删除记录填充恢复审计字段。
+     */
     private void fillRestoreFields(com.lawoffice.framework.entity.BaseEntity entity, String operator) {
         entity.setDeleteFlag(0);
         entity.setDeleteTime(null);
@@ -358,18 +412,30 @@ public class TenantDefaultDataSyncService {
         entity.setUpdateTime(LocalDateTime.now());
     }
 
+    /**
+     * 判断逻辑删除标记是否表示已删除。
+     */
     private boolean isDeleted(Integer deleteFlag) {
         return deleteFlag != null && deleteFlag == 1;
     }
 
+    /**
+     * 解析操作人账号，缺省时使用 system 作为兜底。
+     */
     private String resolveOperator(String operator) {
         return StringUtils.hasText(operator) ? operator : "system";
     }
 
+    /**
+     * 生成项目统一使用的字符串主键。
+     */
     private String newId() {
         return UUID.randomUUID().toString().replace("-", "");
     }
 
+    /**
+     * 临时切换租户上下文执行查询或写入，并在结束后恢复原上下文。
+     */
     private <T> T runWithTenant(String tenantId, Supplier<T> supplier) {
         String previousTenantId = TenantContextHolder.getCurrentTenantId();
         if (StringUtils.hasText(tenantId)) {

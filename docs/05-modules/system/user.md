@@ -16,6 +16,12 @@
 - 前端表单：`frontend/src/views/system/user/components/UserFormDrawer.vue`
 - 前端表格：`frontend/src/views/system/user/components/UserTable.vue`
 
+## 后端职责边界
+
+- `UserServiceImpl`：承接用户管理用例入口，包括用户保存、编辑、删除、分配角色、用户详情和登录态相关用户信息查询。
+- 租户成员同步、用户角色关系同步、权限授权范围校验和租户上下文切换属于可抽取的协作能力，后续不应继续在 `UserServiceImpl` 中扩散。
+- 非超级管理员的用户管理行为必须保持当前租户范围内生效，不能删除全局用户主账号，也不能影响其他租户的角色和成员关系。
+
 ## 数据表
 
 - `sys_user`

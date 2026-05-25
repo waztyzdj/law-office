@@ -5,6 +5,7 @@ import com.lawoffice.framework.service.impl.BaseServiceImpl;
 import com.lawoffice.system.entity.SysCategory;
 import com.lawoffice.system.mapper.SysCategoryMapper;
 import com.lawoffice.system.service.ISysCategoryService;
+import com.lawoffice.system.service.ITenantDefaultDataSyncService;
 import com.lawoffice.system.vo.SysCategoryVO;
 import jakarta.annotation.Resource;
 import org.springframework.stereotype.Service;
@@ -14,7 +15,7 @@ import org.springframework.util.StringUtils;
 public class SysCategoryServiceImpl extends BaseServiceImpl<SysCategoryMapper, SysCategory, SysCategoryVO> implements ISysCategoryService {
 
     @Resource
-    private TenantDefaultDataSyncService tenantDefaultDataSyncService;
+    private ITenantDefaultDataSyncService tenantDefaultDataSyncService;
 
     @Override
     protected void doAfterSave(BaseDTO<SysCategory> saveDTO, SysCategoryVO vo) {

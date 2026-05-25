@@ -13,6 +13,13 @@
 - Entity：`backend/src/main/java/com/lawoffice/system/entity/Tenant.java`
 - 前端页面：`frontend/src/views/system/tenant/index.vue`
 
+## 后端职责边界
+
+- `TenantServiceImpl`：承接租户管理页面的用例入口，包括租户保存、删除、设置用户、设置管理员和管理员授权。
+- `TenantLifecycleServiceImpl`：承接租户生命周期协作流程，包括默认管理员角色、默认数据复制、租户管理员成员同步和删除租户时的关联关系逻辑删除。
+- `ITenantDefaultDataSyncService` / `TenantDefaultDataSyncServiceImpl`：承接默认租户 `0` 的数据字典、字典项和通用类型复制，不处理租户成员或角色授权。
+- 用户-租户关系、角色-权限关系和租户上下文切换后续应继续抽成独立协作服务，避免在多个业务 Service 中重复写底层同步逻辑。
+
 ## 数据表
 
 - `sys_tenant`

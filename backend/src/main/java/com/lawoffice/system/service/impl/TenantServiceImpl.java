@@ -214,12 +214,16 @@ public class TenantServiceImpl extends BaseServiceImpl<TenantMapper, Tenant, Ten
         Role adminRole = tenantLifecycleService.ensureTenantAdminRole(tenantId, resolveOperator(operatorUsername), LocalDateTime.now());
         List<String> normalizedPermissionIds = expandPermissionIdsWithAncestors(normalizeIds(permissionIds));
         validatePermissions(normalizedPermissionIds);
+        // 租户管理员角色授权由租户管理入口完成，但授权范围仍必须受当前操作人自身权限约束。
         validateGrantWithinOperatorPermissions(normalizedPermissionIds, operatorUsername);
         syncTenantAdminRolePermissions(tenantId, adminRole.getId(), normalizedPermissionIds, resolveOperator(operatorUsername));
 
         log.info("Tenant admin permissions assigned, tenantId: {}, permissionCount: {}", tenantId, normalizedPermissionIds.size());
     }
 
+    /**
+     * 判断权限编码是否允许下放给租户默认管理员角色。
+     */
     private boolean isGrantableToTenantAdmin(String perms) {
         return !"tenant:view".equals(perms)
                 && !"tenant:edit".equals(perms)
@@ -229,6 +233,9 @@ public class TenantServiceImpl extends BaseServiceImpl<TenantMapper, Tenant, Ten
                 && !"log:edit".equals(perms);
     }
 
+    /**
+     * 校验租户管理员授权不能超过当前操作人可下放的权限范围。
+     */
     private void validateGrantWithinOperatorPermissions(List<String> permissionIds, String operatorUsername) {
         if (permissionIds.isEmpty() || !StringUtils.hasText(operatorUsername)) {
             return;
@@ -253,6 +260,9 @@ public class TenantServiceImpl extends BaseServiceImpl<TenantMapper, Tenant, Ten
         }
     }
 
+    /**
+     * 在目标租户上下文中覆盖同步默认管理员角色权限。
+     */
     private void syncTenantAdminRolePermissions(String tenantId, String roleId, List<String> permissionIds, String deleteBy) {
         runWithTenant(tenantId, () -> {
             LambdaQueryWrapper<RolePermission> deleteWrapper = new LambdaQueryWrapper<>();
@@ -270,6 +280,9 @@ public class TenantServiceImpl extends BaseServiceImpl<TenantMapper, Tenant, Ten
         });
     }
 
+    /**
+     * 补齐被授权权限的父级权限，保证菜单树可正常展示。
+     */
     private List<String> expandPermissionIdsWithAncestors(List<String> permissionIds) {
         Set<String> expandedIds = new LinkedHashSet<>(permissionIds);
         for (String permissionId : permissionIds) {
@@ -295,6 +308,9 @@ public class TenantServiceImpl extends BaseServiceImpl<TenantMapper, Tenant, Ten
         return new ArrayList<>(expandedIds);
     }
 
+    /**
+     * 校验权限 ID 列表对应的权限存在且未删除。
+     */
     private void validatePermissions(List<String> permissionIds) {
         if (permissionIds.isEmpty()) {
             return;
@@ -310,12 +326,18 @@ public class TenantServiceImpl extends BaseServiceImpl<TenantMapper, Tenant, Ten
         }
     }
 
+    /**
+     * 按条件逻辑删除角色-权限关系。
+     */
     private void softDeleteRolePermissions(LambdaQueryWrapper<RolePermission> wrapper, String deleteBy) {
         RolePermission rolePermission = new RolePermission();
         EntityFillUtils.fillDeleteFields(rolePermission, deleteBy);
         rolePermissionMapper.update(rolePermission, wrapper);
     }
 
+    /**
+     * 逻辑删除租户主记录。
+     */
     private void softDeleteTenant(String tenantId, String deleteBy) {
         Tenant tenant = new Tenant();
         tenant.setId(tenantId);
@@ -323,10 +345,16 @@ public class TenantServiceImpl extends BaseServiceImpl<TenantMapper, Tenant, Ten
         baseMapper.updateById(tenant);
     }
 
+    /**
+     * 校验租户 ID 不为空。
+     */
     private void validateTenantId(String tenantId) {
         getExistingTenant(tenantId);
     }
 
+    /**
+     * 查询未删除租户，不存在时抛出业务异常。
+     */
     private Tenant getExistingTenant(String tenantId) {
         if (!StringUtils.hasText(tenantId)) {
             throw new IllegalArgumentException("租户ID不能为空");
@@ -339,6 +367,9 @@ public class TenantServiceImpl extends BaseServiceImpl<TenantMapper, Tenant, Ten
         return tenant;
     }
 
+    /**
+     * 校验用户 ID 列表对应的用户存在且未删除。
+     */
     private void validateUsers(List<String> userIds) {
         if (userIds.isEmpty()) {
             return;
@@ -354,6 +385,9 @@ public class TenantServiceImpl extends BaseServiceImpl<TenantMapper, Tenant, Ten
         }
     }
 
+    /**
+     * 将字符串 trim 后的空值统一转为 null。
+     */
     private String trimToNull(String value) {
         if (!StringUtils.hasText(value)) {
             return null;
@@ -361,6 +395,9 @@ public class TenantServiceImpl extends BaseServiceImpl<TenantMapper, Tenant, Ten
         return value.trim();
     }
 
+    /**
+     * 清洗 ID 列表，去空、去重并保持传入顺序。
+     */
     private List<String> normalizeIds(List<String> ids) {
         if (ids == null || ids.isEmpty()) {
             return new ArrayList<>();
@@ -372,6 +409,9 @@ public class TenantServiceImpl extends BaseServiceImpl<TenantMapper, Tenant, Ten
                 .collect(Collectors.toList());
     }
 
+    /**
+     * 从删除请求中解析单个或批量删除租户 ID。
+     */
     private List<String> getDeleteTenantIds(BaseDTO<Tenant> deleteDTO) {
         List<String> ids = new ArrayList<>();
         if (deleteDTO == null) {
@@ -386,6 +426,9 @@ public class TenantServiceImpl extends BaseServiceImpl<TenantMapper, Tenant, Ten
         return normalizeIds(ids);
     }
 
+    /**
+     * 从请求上下文解析删除人账号。
+     */
     private String resolveDeleteBy(BaseDTO<Tenant> deleteDTO) {
         if (deleteDTO != null && deleteDTO.getContext() != null
                 && StringUtils.hasText(deleteDTO.getContext().getUsername())) {
@@ -394,6 +437,9 @@ public class TenantServiceImpl extends BaseServiceImpl<TenantMapper, Tenant, Ten
         return "system";
     }
 
+    /**
+     * 从保存请求上下文解析操作人账号。
+     */
     private String resolveOperator(BaseDTO<Tenant> saveDTO) {
         if (saveDTO != null && saveDTO.getContext() != null && StringUtils.hasText(saveDTO.getContext().getUsername())) {
             return saveDTO.getContext().getUsername();
@@ -401,6 +447,9 @@ public class TenantServiceImpl extends BaseServiceImpl<TenantMapper, Tenant, Ten
         return "system";
     }
 
+    /**
+     * 解析操作人账号，缺省时使用 system 作为兜底。
+     */
     private String resolveOperator(String operatorUsername) {
         if (StringUtils.hasText(operatorUsername)) {
             return operatorUsername;
@@ -408,6 +457,9 @@ public class TenantServiceImpl extends BaseServiceImpl<TenantMapper, Tenant, Ten
         return "system";
     }
 
+    /**
+     * 从租户保存请求中解析初始管理员用户 ID。
+     */
     private List<String> resolveAdminUserIds(BaseDTO<Tenant> saveDTO) {
         if (saveDTO == null || saveDTO.getEntity() == null) {
             return new ArrayList<>();
@@ -415,6 +467,9 @@ public class TenantServiceImpl extends BaseServiceImpl<TenantMapper, Tenant, Ten
         return normalizeIds(saveDTO.getEntity().getAdminUserIds());
     }
 
+    /**
+     * 解析租户初始化操作时间，优先使用租户创建时间。
+     */
     private LocalDateTime resolveOperateTime(Tenant entity) {
         if (entity.getUpdateTime() != null) {
             return entity.getUpdateTime();
@@ -425,6 +480,9 @@ public class TenantServiceImpl extends BaseServiceImpl<TenantMapper, Tenant, Ten
         return LocalDateTime.now();
     }
 
+    /**
+     * 在已捕获异常并返回失败响应前，显式标记当前事务回滚。
+     */
     private void markRollbackOnly() {
         try {
             TransactionAspectSupport.currentTransactionStatus().setRollbackOnly();
@@ -433,6 +491,9 @@ public class TenantServiceImpl extends BaseServiceImpl<TenantMapper, Tenant, Ten
         }
     }
 
+    /**
+     * 临时切换租户上下文执行查询或写入，并在结束后恢复原上下文。
+     */
     private <T> T runWithTenant(String tenantId, Supplier<T> supplier) {
         String previousTenantId = TenantContextHolder.getCurrentTenantId();
         try {
