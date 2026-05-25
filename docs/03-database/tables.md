@@ -24,7 +24,7 @@
 
 重点字段：
 
-- `role_code`：角色编码，唯一。
+- `role_code`：角色编码，同一租户内唯一。
 - `role_name`：角色名称。
 - `description`：角色描述。
 
@@ -81,7 +81,7 @@
 
 重点字段：
 
-- `dict_code`：字典编码，唯一。
+- `dict_code`：字典编码，同一租户内唯一。
 - `item_text`：字典项文本。
 - `item_value`：字典项值。
 - `sort_order`：排序。

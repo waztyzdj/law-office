@@ -73,11 +73,32 @@ public interface IUserService extends IBaseService<User, UserVO> {
     void assignTenants(String userId, List<String> tenantIds);
 
     /**
+     * 为租户分配用户
+     * @param tenantId 租户ID
+     * @param userIds 用户ID列表
+     */
+    void assignTenantUsers(String tenantId, List<String> userIds);
+
+    /**
      * 获取用户的租户列表
      * @param userId 用户ID
      * @return 租户列表
      */
     List<Tenant> getUserTenants(String userId);
+
+    /**
+     * 获取租户下的用户 ID 列表
+     * @param tenantId 租户ID
+     * @return 用户ID列表
+     */
+    List<String> getTenantUserIds(String tenantId);
+
+    /**
+     * 获取当前用户可切换的租户列表
+     * @param username 用户名
+     * @return 租户列表
+     */
+    List<Tenant> getCurrentUserTenants(String username);
 
     /**
      * 移除用户的指定租户
@@ -93,12 +114,16 @@ public interface IUserService extends IBaseService<User, UserVO> {
      */
     List<com.lawoffice.system.entity.Permission> getUserPermissions(String userId);
 
+    List<com.lawoffice.system.entity.Permission> getUserPermissionsInCurrentTenant(String userId);
+
     /**
      * 获取用户的权限编码列表（用于JWT Token和权限验证）
      * @param userId 用户ID
      * @return 权限编码列表（perms字段）
      */
     List<String> getUserPermissionCodes(String userId);
+
+    List<String> getUserPermissionCodesByUsername(String username);
 
     /**
      * 用户登录业务逻辑
@@ -107,6 +132,15 @@ public interface IUserService extends IBaseService<User, UserVO> {
      * @return 登录结果，包含token、用户信息等
      */
     java.util.Map<String, Object> login(String username, String password);
+
+    /**
+     * 切换当前用户租户并签发新 Token
+     * @param username 用户名
+     * @param tenantId 目标租户ID
+     * @param currentToken 当前Token，可为空
+     * @return 新登录态信息
+     */
+    java.util.Map<String, Object> switchTenant(String username, String tenantId, String currentToken);
 
     /**
      * 获取当前用户信息

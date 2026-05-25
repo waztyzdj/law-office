@@ -47,6 +47,7 @@ interface Props {
    * 菜单数组
    */
   menus?: Array<{
+    disabled?: boolean;
     handler: AnyFunction;
     icon?: Component | Function | string;
     text: string;
@@ -234,8 +235,11 @@ if (enableShortcutKey.value) {
         <DropdownMenuItem
           v-for="menu in menus"
           :key="menu.text"
-          class="mx-1 flex cursor-pointer items-center rounded-sm py-1 leading-8"
-          @click="menu.handler"
+          :class="[
+            'mx-1 flex items-center rounded-sm py-1 leading-8',
+            menu.disabled ? 'cursor-default opacity-60' : 'cursor-pointer',
+          ]"
+          @click="menu.disabled ? undefined : menu.handler()"
         >
           <VbenIcon :icon="menu.icon" class="mr-2 size-4" />
           {{ menu.text }}

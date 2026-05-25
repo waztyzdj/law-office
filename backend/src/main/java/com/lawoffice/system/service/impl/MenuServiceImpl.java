@@ -66,7 +66,7 @@ public class MenuServiceImpl implements IMenuService {
         }
         
         // 根据用户ID获取用户权限列表
-        List<Permission> permissions = userService.getUserPermissions(user.getId());
+        List<Permission> permissions = userService.getUserPermissionsInCurrentTenant(user.getId());
         
         // 转换为树形菜单结构
         return buildMenuTree(permissions);

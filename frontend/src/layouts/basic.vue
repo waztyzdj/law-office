@@ -1,7 +1,7 @@
 <script lang="ts" setup>
 import type { NotificationItem } from '@vben/layouts';
 
-import { computed, ref, watch } from 'vue';
+import { computed, onMounted, ref, watch } from 'vue';
 import { useRouter } from 'vue-router';
 
 import { AuthenticationLoginExpiredModal } from '@vben/common-ui';
@@ -18,6 +18,9 @@ import { preferences, usePreferences } from '@vben/preferences';
 import { useAccessStore, useUserStore } from '@vben/stores';
 import { openWindow } from '@vben/utils';
 
+import { Button, Dropdown, Menu, notification } from 'ant-design-vue';
+
+import { listCurrentUserTenants } from '#/api/system/user';
 import { $t } from '#/locales';
 import { useAuthStore } from '#/store';
 import LoginForm from '#/views/_core/authentication/login.vue';
@@ -81,6 +84,9 @@ const authStore = useAuthStore();
 const accessStore = useAccessStore();
 const { destroyWatermark, updateWatermark } = useWatermark();
 const { isDark } = usePreferences();
+const tenantOptions = ref<any[]>([]);
+const currentTenantId = ref('');
+const tenantLoading = ref(false);
 const showDot = computed(() =>
   notifications.value.some((item) => !item.isRead),
 );
@@ -125,6 +131,61 @@ const menus = computed(() => [
 const avatar = computed(() => {
   return userStore.userInfo?.avatar ?? preferences.app.defaultAvatar;
 });
+
+const currentTenant = computed(() =>
+  tenantOptions.value.find((tenant) => tenant.id === currentTenantId.value),
+);
+
+const showTenantSwitcher = computed(() => tenantOptions.value.length > 1);
+
+const currentTenantName = computed(
+  () =>
+    currentTenant.value?.name ||
+    (userStore.userInfo as any)?.tenantName ||
+    currentTenantId.value ||
+    '当前租户',
+);
+
+async function loadTenantOptions() {
+  if (!accessStore.accessToken) {
+    tenantOptions.value = [];
+    currentTenantId.value = '';
+    return;
+  }
+
+  try {
+    const tenants = await listCurrentUserTenants();
+    tenantOptions.value = tenants || [];
+    const userTenantId = (userStore.userInfo as any)?.tenantId;
+    currentTenantId.value =
+      tenantOptions.value.find((tenant) => tenant.id === userTenantId)?.id ||
+      userTenantId ||
+      tenantOptions.value[0]?.id ||
+      '';
+  } catch {
+    tenantOptions.value = [];
+  }
+}
+
+async function handleSwitchTenant(tenantId?: string) {
+  if (!tenantId || tenantId === currentTenantId.value || tenantLoading.value) {
+    return;
+  }
+
+  tenantLoading.value = true;
+  try {
+    const result = await authStore.changeTenant(tenantId);
+    currentTenantId.value = result.tenantId;
+    notification.success({
+      description: result.tenantName || currentTenant.value?.name || tenantId,
+      duration: 3,
+      message: '租户切换成功',
+    });
+    await loadTenantOptions();
+  } finally {
+    tenantLoading.value = false;
+  }
+}
 
 async function handleLogout() {
   await authStore.logout(false);
@@ -175,6 +236,24 @@ function navigateTo(
     });
   }
 }
+
+onMounted(loadTenantOptions);
+
+watch(
+  () => accessStore.accessToken,
+  () => {
+    void loadTenantOptions();
+  },
+);
+
+watch(
+  () => (userStore.userInfo as any)?.tenantId,
+  (tenantId) => {
+    if (tenantId) {
+      currentTenantId.value = tenantId;
+    }
+  },
+);
 
 watch(
   () => ({
@@ -239,6 +318,30 @@ watch(
         @on-click="handleClick"
         @view-all="viewAll"
       />
+    </template>
+    <template #header-right-120>
+      <Dropdown v-if="showTenantSwitcher" placement="bottomRight" trigger="click">
+        <Button
+          class="mr-1 max-w-[180px]"
+          :loading="tenantLoading"
+          size="small"
+        >
+          <span class="block truncate">{{ currentTenantName }}</span>
+        </Button>
+        <template #overlay>
+          <Menu>
+            <Menu.Item
+              v-for="tenant in tenantOptions"
+              :key="tenant.id"
+              :disabled="tenant.id === currentTenantId || tenantLoading"
+              @click="handleSwitchTenant(tenant.id)"
+            >
+              {{ tenant.id === currentTenantId ? '当前租户：' : '切换租户：' }}
+              {{ tenant.name || tenant.id }}
+            </Menu.Item>
+          </Menu>
+        </template>
+      </Dropdown>
     </template>
     <template #extra>
       <AuthenticationLoginExpiredModal

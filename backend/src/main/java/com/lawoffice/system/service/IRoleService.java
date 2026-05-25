@@ -16,6 +16,8 @@ public interface IRoleService extends IBaseService<Role, RoleVO> {
      */
     void assignPermissions(String roleId, List<String> permissionIds);
 
+    void assignPermissions(String roleId, List<String> permissionIds, String operatorUsername);
+
     /**
      * 获取角色的权限列表
      * @param roleId 角色ID

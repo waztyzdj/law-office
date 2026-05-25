@@ -11,6 +11,7 @@ import com.lawoffice.system.vo.RoleVO;
 import com.lawoffice.system.annotation.RequiresPermission;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -41,8 +42,9 @@ public class RoleController extends BaseController<IRoleService, Role, RoleVO, R
     @PostMapping("/assignPermissions")
     @Operation(summary = "分配角色权限", description = "覆盖保存指定角色的菜单和按钮权限")
     @RequiresPermission("role:edit")
-    public BaseResult<Void> assignPermissions(@Valid @RequestBody AssignIdsReq req) {
-        baseService.assignPermissions(req.getId(), req.getIds());
+    public BaseResult<Void> assignPermissions(@Valid @RequestBody AssignIdsReq req, HttpServletRequest request) {
+        Object username = request.getAttribute("username");
+        baseService.assignPermissions(req.getId(), req.getIds(), username != null ? username.toString() : null);
         return BaseResult.success();
     }
 }

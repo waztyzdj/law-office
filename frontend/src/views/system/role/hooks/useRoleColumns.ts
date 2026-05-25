@@ -13,6 +13,7 @@ export function getRoleColumns(
 ): TableColumnsResult {
   const { hasAccessByCodes } = useAccess();
   const canEditRole = hasAccessByCodes([permissionCodes.role.edit]);
+  const canDeleteRole = (record: RoleInfo) => !record.roleCode?.startsWith('ADMIN');
 
   const columns: any[] = [
     {
@@ -39,15 +40,22 @@ export function getRoleColumns(
             fixed: 'right' as const,
             hasFilter: false,
             customRender: ({ record }: { record: RoleInfo }) =>
-              h(Space, { size: 'middle' }, () => [
-                h('a', { onClick: () => emit('assign', record) }, '授权'),
-                h('a', { onClick: () => emit('edit', record) }, '编辑'),
-                h(
-                  'a',
-                  { style: { color: 'red' }, onClick: () => emit('delete', record) },
-                  '删除',
-                ),
-              ]),
+              h(Space, { size: 'middle' }, () => {
+                const actions = [
+                  h('a', { onClick: () => emit('assign', record) }, '授权'),
+                  h('a', { onClick: () => emit('edit', record) }, '编辑'),
+                ];
+                if (canDeleteRole(record)) {
+                  actions.push(
+                    h(
+                      'a',
+                      { style: { color: 'red' }, onClick: () => emit('delete', record) },
+                      '删除',
+                    ),
+                  );
+                }
+                return actions;
+              }),
           },
         }
       : null,

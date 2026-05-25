@@ -10,6 +10,7 @@ import { message } from 'ant-design-vue';
 
 import { cleanFormPayload, useVbenForm, z } from '#/adapter/form';
 import { getTenantById, saveTenant } from '#/api/system/tenant';
+import { pageUsers } from '#/api/system/user';
 
 type DrawerMode = 'create' | 'edit';
 
@@ -50,7 +51,10 @@ const emptyTenantValues = {
   position: '',
   department: '',
   applyStatus: 1,
+  adminUserIds: [],
 };
+
+const userOptions = ref<{ label: string; value: string }[]>([]);
 
 const buildFormSchema = (create: boolean): VbenFormSchema[] => [
   {
@@ -237,6 +241,23 @@ const buildFormSchema = (create: boolean): VbenFormSchema[] => [
       ],
     },
   },
+  {
+    fieldName: 'adminUserIds',
+    component: 'Select',
+    label: '租户管理员',
+    defaultValue: getDefaultValue('adminUserIds', []),
+    dependencies: {
+      show: () => create,
+      triggerFields: ['id'],
+    },
+    componentProps: {
+      mode: 'multiple',
+      options: userOptions.value,
+      placeholder: '请选择租户管理员',
+      showSearch: true,
+      optionFilterProp: 'label',
+    },
+  },
 ];
 
 const [Form, formApi] = useVbenForm({
@@ -270,6 +291,7 @@ function buildInitialValues(payload: DrawerPayload) {
   return {
     ...emptyTenantValues,
     ...payload.record,
+    originalId: payload.record?.id,
   };
 }
 
@@ -307,9 +329,13 @@ async function refreshDetailSilently() {
 }
 
 function cleanPayload(values: Record<string, any>): TenantInfo {
-  return cleanFormPayload<TenantInfo>(values, {
+  const payload = cleanFormPayload<TenantInfo>(values, {
     id: currentId.value,
   });
+  if (currentId.value) {
+    payload.originalId = currentId.value;
+  }
+  return payload;
 }
 
 async function handleSubmit() {
@@ -330,6 +356,21 @@ async function handleSubmit() {
   }
 }
 
+async function loadUserOptions() {
+  try {
+    const usersPage = await pageUsers({ pageNum: 1, pageSize: 1000 });
+    userOptions.value = ((usersPage as any).records || [])
+      .filter((user: any) => user.id)
+      .map((user: any) => ({
+        label: user.realname || user.username || user.id,
+        value: user.id,
+      }));
+    formApi.setState({ schema: buildFormSchema(isCreate.value) });
+  } catch {
+    userOptions.value = [];
+  }
+}
+
 async function open(payload: DrawerPayload) {
   prepareFormState(payload);
 
@@ -344,6 +385,9 @@ async function open(payload: DrawerPayload) {
     void syncMountedFormValues();
   }
   void refreshDetailSilently();
+  if (isCreate.value) {
+    void loadUserOptions();
+  }
 }
 
 defineExpose({

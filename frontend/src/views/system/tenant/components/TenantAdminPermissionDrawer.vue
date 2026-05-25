@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import type { RoleInfo } from '#/api/system/role';
 import type { PermissionInfo } from '#/api/system/permission';
+import type { TenantInfo } from '#/api/system/tenant';
 import type { DataNode, Key } from 'ant-design-vue/es/vc-tree/interface';
 
 import { computed, nextTick, ref } from 'vue';
@@ -9,8 +9,11 @@ import { useVbenDrawer } from '@vben/common-ui';
 
 import { Alert, Button, Empty, Space, Spin, Tree, message } from 'ant-design-vue';
 
-import { getGrantablePermissionTree, getPermissionTree } from '#/api/system/permission';
-import { assignRolePermissions, getRolePermissionIds } from '#/api/system/role';
+import { getGrantablePermissionTree } from '#/api/system/permission';
+import {
+  assignTenantAdminPermissions,
+  getTenantAdminPermissionIds,
+} from '#/api/system/tenant';
 import {
   buildAntTreeData,
   collectDescendantKeys,
@@ -28,16 +31,16 @@ const emit = defineEmits<{
   success: [];
 }>();
 
-const currentRole = ref<RoleInfo>();
+const currentTenant = ref<TenantInfo>();
 const loading = ref(false);
 const checkedKeys = ref<CheckedKeysValue>({ checked: [], halfChecked: [] });
 const expandedKeys = ref<Key[]>([]);
 const permissionTree = ref<PermissionInfo[]>([]);
 
 const drawerTitle = computed(() =>
-  currentRole.value?.roleName
-    ? `角色授权 - ${currentRole.value.roleName}`
-    : '角色授权',
+  currentTenant.value?.name
+    ? `租户管理员授权 - ${currentTenant.value.name}`
+    : '租户管理员授权',
 );
 
 const treeData = computed<DataNode[]>(() =>
@@ -45,7 +48,6 @@ const treeData = computed<DataNode[]>(() =>
 );
 const allPermissionKeys = computed(() => collectTreeKeys(permissionTree.value));
 const allExpandableKeys = computed(() => collectExpandableKeys(permissionTree.value));
-const isSuperAdminRole = computed(() => currentRole.value?.roleCode === 'ADMIN');
 
 const [Drawer, drawerApi] = useVbenDrawer({
   class: 'w-full sm:w-1/2! sm:max-w-none!',
@@ -73,8 +75,8 @@ function handleCheck(keys: CheckedKeysValue | Key[], event: any) {
     checkedKeys.value = { checked: [...nextKeys], halfChecked: [] };
     return;
   }
-  const descendantKeys = collectDescendantKeys(permissionTree.value, nodeKey);
 
+  const descendantKeys = collectDescendantKeys(permissionTree.value, nodeKey);
   if (descendantKeys.length > 0) {
     if (event?.checked) {
       nextKeys.add(nodeKey);
@@ -104,22 +106,23 @@ function handleUncheckAll() {
   checkedKeys.value = { checked: [], halfChecked: [] };
 }
 
-async function loadData(role: RoleInfo) {
-  if (!role.id) {
+async function loadData(tenant: TenantInfo) {
+  if (!tenant.id) {
     return;
   }
 
   loading.value = true;
   try {
-    const loadPermissionTree = isSuperAdminRole.value
-      ? getPermissionTree
-      : getGrantablePermissionTree;
     const [tree, ids] = await Promise.all([
-      loadPermissionTree(),
-      getRolePermissionIds(role.id),
+      getGrantablePermissionTree(),
+      getTenantAdminPermissionIds(tenant.id),
     ]);
     permissionTree.value = tree;
-    checkedKeys.value = { checked: ids, halfChecked: [] };
+    const visiblePermissionKeys = new Set(collectTreeKeys(tree).map(String));
+    checkedKeys.value = {
+      checked: ids.filter((id) => visiblePermissionKeys.has(String(id))),
+      halfChecked: [],
+    };
     expandedKeys.value = collectExpandedKeysByDepth(tree, 1);
   } finally {
     loading.value = false;
@@ -127,17 +130,17 @@ async function loadData(role: RoleInfo) {
 }
 
 async function handleSubmit() {
-  if (!currentRole.value?.id) {
+  if (!currentTenant.value?.id) {
     return;
   }
 
   try {
     drawerApi.lock();
-    await assignRolePermissions(
-      currentRole.value.id,
+    await assignTenantAdminPermissions(
+      currentTenant.value.id,
       checkedKeys.value.checked.map(String),
     );
-    message.success('角色授权已保存');
+    message.success('租户管理员授权已保存');
     emit('success');
     drawerApi.close();
   } finally {
@@ -145,15 +148,15 @@ async function handleSubmit() {
   }
 }
 
-async function open(role: RoleInfo) {
-  currentRole.value = role;
+async function open(tenant: TenantInfo) {
+  currentTenant.value = tenant;
   permissionTree.value = [];
   checkedKeys.value = { checked: [], halfChecked: [] };
   expandedKeys.value = [];
   drawerApi.setState({ loading: false, title: drawerTitle.value }).open();
   await nextTick();
   drawerApi.setState({ title: drawerTitle.value });
-  void loadData(role);
+  void loadData(tenant);
 }
 
 defineExpose({
@@ -165,7 +168,7 @@ defineExpose({
   <Drawer>
     <Alert
       class="mb-4"
-      message="保存后会覆盖该角色原有权限。菜单权限用于生成导航，按钮权限用于控制页面操作。"
+      message="保存后会覆盖该租户默认管理员角色的原有权限。可授权范围不会超过当前账号可授予的权限。"
       show-icon
       type="info"
     />
@@ -180,11 +183,11 @@ defineExpose({
         default-expand-all
         @check="handleCheck"
       />
-      <Empty v-else description="暂无菜单权限数据" />
+      <Empty v-else description="暂无可授权权限数据" />
     </Spin>
 
     <template #footer>
-      <div class="role-permission-footer">
+      <div class="tenant-admin-permission-footer">
         <Space>
           <Button type="primary" @click="handleExpandAll">全部展开</Button>
           <Button type="primary" @click="handleCollapseAll">全部折叠</Button>
@@ -201,7 +204,7 @@ defineExpose({
 </template>
 
 <style scoped>
-.role-permission-footer {
+.tenant-admin-permission-footer {
   display: flex;
   width: 100%;
   align-items: center;

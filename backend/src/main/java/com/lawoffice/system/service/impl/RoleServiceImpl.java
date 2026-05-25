@@ -15,6 +15,7 @@ import com.lawoffice.system.mapper.UserMapper;
 import com.lawoffice.system.mapper.UserRoleMapper;
 import com.lawoffice.system.service.ITokenService;
 import com.lawoffice.system.service.IRoleService;
+import com.lawoffice.system.service.IUserService;
 import com.lawoffice.system.vo.RoleVO;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -32,6 +33,9 @@ import java.util.stream.Collectors;
 @Service
 public class RoleServiceImpl extends BaseServiceImpl<RoleMapper, Role, RoleVO> implements IRoleService {
 
+    private static final String SUPER_ADMIN_ROLE_CODE = "ADMIN";
+    private static final String TENANT_ADMIN_ROLE_CODE_PREFIX = "ADMIN_";
+
     @Autowired
     private RolePermissionMapper rolePermissionMapper;
 
@@ -46,6 +50,9 @@ public class RoleServiceImpl extends BaseServiceImpl<RoleMapper, Role, RoleVO> i
 
     @Autowired
     private ITokenService tokenService;
+
+    @Autowired
+    private IUserService userService;
 
     @Override
     protected void doBeforeSave(BaseDTO<Role> saveDTO) {
@@ -72,6 +79,9 @@ public class RoleServiceImpl extends BaseServiceImpl<RoleMapper, Role, RoleVO> i
         if (!StringUtils.hasText(role.getRoleName())) {
             throw new IllegalArgumentException("角色名称不能为空");
         }
+        if (!StringUtils.hasText(role.getId()) && role.getRoleCode().startsWith(TENANT_ADMIN_ROLE_CODE_PREFIX)) {
+            throw new IllegalArgumentException("自定义角色编码不能以 ADMIN_ 开头");
+        }
 
         validateUniqueRoleCode(role);
     }
@@ -79,6 +89,12 @@ public class RoleServiceImpl extends BaseServiceImpl<RoleMapper, Role, RoleVO> i
     @Override
     @Transactional(rollbackFor = Exception.class)
     public void assignPermissions(String roleId, List<String> permissionIds) {
+        assignPermissions(roleId, permissionIds, null);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void assignPermissions(String roleId, List<String> permissionIds, String operatorUsername) {
         if (!StringUtils.hasText(roleId)) {
             throw new IllegalArgumentException("角色ID不能为空");
         }
@@ -90,10 +106,14 @@ public class RoleServiceImpl extends BaseServiceImpl<RoleMapper, Role, RoleVO> i
 
         List<String> normalizedPermissionIds = expandPermissionIdsWithAncestors(normalizeIds(permissionIds));
         validatePermissions(normalizedPermissionIds);
+        if (!isSuperAdminRole(role)) {
+            validateGrantWithinOperatorPermissions(normalizedPermissionIds, operatorUsername);
+        }
 
         // 先删除角色现有的所有权限
         LambdaQueryWrapper<RolePermission> deleteWrapper = new LambdaQueryWrapper<>();
-        deleteWrapper.eq(RolePermission::getRoleId, roleId);
+        deleteWrapper.eq(RolePermission::getRoleId, roleId)
+                .eq(RolePermission::getDeleteFlag, 0);
         rolePermissionMapper.delete(deleteWrapper);
 
         // 批量插入新的权限关联
@@ -120,7 +140,8 @@ public class RoleServiceImpl extends BaseServiceImpl<RoleMapper, Role, RoleVO> i
     public List<Permission> getRolePermissions(String roleId) {
         // 查询角色的权限ID列表
         LambdaQueryWrapper<RolePermission> wrapper = new LambdaQueryWrapper<>();
-        wrapper.eq(RolePermission::getRoleId, roleId);
+        wrapper.eq(RolePermission::getRoleId, roleId)
+                .eq(RolePermission::getDeleteFlag, 0);
         List<RolePermission> rolePermissions = rolePermissionMapper.selectList(wrapper);
 
         if (rolePermissions.isEmpty()) {
@@ -148,11 +169,33 @@ public class RoleServiceImpl extends BaseServiceImpl<RoleMapper, Role, RoleVO> i
 
         LambdaQueryWrapper<RolePermission> wrapper = new LambdaQueryWrapper<>();
         wrapper.eq(RolePermission::getRoleId, roleId)
-               .in(RolePermission::getPermissionId, permissionIds);
+               .in(RolePermission::getPermissionId, permissionIds)
+               .eq(RolePermission::getDeleteFlag, 0);
         rolePermissionMapper.delete(wrapper);
 
         log.info("移除角色权限成功，角色ID: {}, 移除权限数量: {}", roleId, permissionIds.size());
         forceLogoutUsersByRoleIds(List.of(roleId));
+    }
+
+    @Override
+    protected void doBeforeDelete(BaseDTO<Role> deleteDTO) {
+        List<String> roleIds = getDeleteIds(deleteDTO);
+        if (roleIds.isEmpty()) {
+            return;
+        }
+
+        LambdaQueryWrapper<Role> wrapper = new LambdaQueryWrapper<>();
+        wrapper.in(Role::getId, roleIds)
+                .eq(Role::getDeleteFlag, 0);
+        List<String> protectedRoleCodes = baseMapper.selectList(wrapper).stream()
+                .map(Role::getRoleCode)
+                .filter(StringUtils::hasText)
+                .filter(roleCode -> roleCode.startsWith("ADMIN"))
+                .distinct()
+                .collect(Collectors.toList());
+        if (!protectedRoleCodes.isEmpty()) {
+            throw new IllegalArgumentException("ADMIN 前缀角色不允许删除: " + String.join(",", protectedRoleCodes));
+        }
     }
 
     @Override
@@ -166,11 +209,13 @@ public class RoleServiceImpl extends BaseServiceImpl<RoleMapper, Role, RoleVO> i
         forceLogoutUsersByRoleIds(roleIds);
 
         LambdaQueryWrapper<RolePermission> rolePermissionWrapper = new LambdaQueryWrapper<>();
-        rolePermissionWrapper.in(RolePermission::getRoleId, roleIds);
+        rolePermissionWrapper.in(RolePermission::getRoleId, roleIds)
+                .eq(RolePermission::getDeleteFlag, 0);
         rolePermissionMapper.delete(rolePermissionWrapper);
 
         LambdaQueryWrapper<UserRole> userRoleWrapper = new LambdaQueryWrapper<>();
-        userRoleWrapper.in(UserRole::getRoleId, roleIds);
+        userRoleWrapper.in(UserRole::getRoleId, roleIds)
+                .eq(UserRole::getDeleteFlag, 0);
         userRoleMapper.delete(userRoleWrapper);
     }
 
@@ -181,7 +226,8 @@ public class RoleServiceImpl extends BaseServiceImpl<RoleMapper, Role, RoleVO> i
         }
 
         LambdaQueryWrapper<RolePermission> wrapper = new LambdaQueryWrapper<>();
-        wrapper.eq(RolePermission::getRoleId, roleId);
+        wrapper.eq(RolePermission::getRoleId, roleId)
+                .eq(RolePermission::getDeleteFlag, 0);
         return rolePermissionMapper.selectList(wrapper).stream()
                 .map(RolePermission::getPermissionId)
                 .filter(StringUtils::hasText)
@@ -211,6 +257,29 @@ public class RoleServiceImpl extends BaseServiceImpl<RoleMapper, Role, RoleVO> i
         long count = permissionMapper.selectCount(wrapper);
         if (count != permissionIds.size()) {
             throw new IllegalArgumentException("包含不存在或已删除的权限");
+        }
+    }
+
+    private void validateGrantWithinOperatorPermissions(List<String> permissionIds, String operatorUsername) {
+        if (permissionIds.isEmpty() || !StringUtils.hasText(operatorUsername)) {
+            return;
+        }
+
+        Set<String> operatorPerms = userService.getUserPermissionCodesByUsername(operatorUsername).stream()
+                .filter(StringUtils::hasText)
+                .collect(Collectors.toSet());
+
+        LambdaQueryWrapper<Permission> wrapper = new LambdaQueryWrapper<>();
+        wrapper.in(Permission::getId, permissionIds)
+                .eq(Permission::getDeleteFlag, 0);
+        List<String> overLimitPerms = permissionMapper.selectList(wrapper).stream()
+                .map(Permission::getPerms)
+                .filter(StringUtils::hasText)
+                .filter(perms -> !operatorPerms.contains(perms))
+                .distinct()
+                .collect(Collectors.toList());
+        if (!overLimitPerms.isEmpty()) {
+            throw new IllegalArgumentException("不能授予超出自身范围的权限: " + String.join(",", overLimitPerms));
         }
     }
 
@@ -247,6 +316,7 @@ public class RoleServiceImpl extends BaseServiceImpl<RoleMapper, Role, RoleVO> i
     private void validateUniqueRoleCode(Role role) {
         LambdaQueryWrapper<Role> wrapper = new LambdaQueryWrapper<>();
         wrapper.eq(Role::getRoleCode, role.getRoleCode())
+               .eq(Role::getTenantId, role.getTenantId())
                .eq(Role::getDeleteFlag, 0);
         if (StringUtils.hasText(role.getId())) {
             wrapper.ne(Role::getId, role.getId());
@@ -254,6 +324,10 @@ public class RoleServiceImpl extends BaseServiceImpl<RoleMapper, Role, RoleVO> i
         if (baseMapper.selectCount(wrapper) > 0) {
             throw new IllegalArgumentException("角色编码已存在");
         }
+    }
+
+    private boolean isSuperAdminRole(Role role) {
+        return role != null && SUPER_ADMIN_ROLE_CODE.equals(role.getRoleCode());
     }
 
     private List<String> getDeleteIds(BaseDTO<Role> deleteDTO) {
@@ -275,7 +349,8 @@ public class RoleServiceImpl extends BaseServiceImpl<RoleMapper, Role, RoleVO> i
         }
 
         LambdaQueryWrapper<UserRole> wrapper = new LambdaQueryWrapper<>();
-        wrapper.in(UserRole::getRoleId, roleIds);
+        wrapper.in(UserRole::getRoleId, roleIds)
+                .eq(UserRole::getDeleteFlag, 0);
         List<String> userIds = userRoleMapper.selectList(wrapper).stream()
                 .map(UserRole::getUserId)
                 .filter(StringUtils::hasText)

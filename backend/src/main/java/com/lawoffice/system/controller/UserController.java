@@ -5,6 +5,8 @@ import com.lawoffice.framework.controller.BaseController;
 import com.lawoffice.framework.annotation.ModuleInfo;
 import com.lawoffice.system.annotation.RequiresPermission;
 import com.lawoffice.system.req.AssignIdsReq;
+import com.lawoffice.system.req.SwitchTenantReq;
+import com.lawoffice.system.entity.Tenant;
 import com.lawoffice.system.vo.UserInfoVO;
 import com.lawoffice.system.entity.User;
 import com.lawoffice.system.req.UserReq;
@@ -23,6 +25,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
+import java.util.Map;
 
 @Slf4j
 @RestController
@@ -72,6 +75,23 @@ public class UserController extends BaseController<IUserService, User, UserVO, U
     public BaseResult<Void> assignRoles(@Valid @RequestBody AssignIdsReq req) {
         baseService.assignRoles(req.getId(), req.getIds());
         return BaseResult.success();
+    }
+
+    @PostMapping("/tenants")
+    @Operation(summary = "获取当前用户租户列表", description = "获取当前登录用户可切换的租户列表")
+    public BaseResult<List<Tenant>> getCurrentUserTenants(HttpServletRequest request) {
+        String username = (String) request.getAttribute("username");
+        return BaseResult.success(baseService.getCurrentUserTenants(username));
+    }
+
+    @PostMapping("/switchTenant")
+    @Operation(summary = "切换当前租户", description = "切换当前登录用户租户并返回新的 JWT Token")
+    public BaseResult<Map<String, Object>> switchTenant(
+            @Valid @RequestBody SwitchTenantReq req,
+            HttpServletRequest request) {
+        String username = (String) request.getAttribute("username");
+        String token = (String) request.getAttribute("token");
+        return BaseResult.success(baseService.switchTenant(username, req.getTenantId(), token));
     }
     
     // 示例：添加权限控制的方法（需要在实际方法上添加注解）

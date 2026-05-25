@@ -62,7 +62,12 @@ export class BaseApi {
    * @param params - 分页查询参数（BasePageReq 格式）
    */
   page<T = any>(params: BasePageReq) {
-    return requestClient.post<any>(`${this.baseUrl}/page`, params);
+    return requestClient.post<{
+      pageNum: number;
+      pageSize: number;
+      records: T[];
+      total: number;
+    }>(`${this.baseUrl}/page`, params);
   }
 
   /**

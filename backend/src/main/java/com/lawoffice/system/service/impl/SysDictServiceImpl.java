@@ -2,6 +2,7 @@ package com.lawoffice.system.service.impl;
 
 import cn.hutool.core.collection.CollUtil;
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
+import com.lawoffice.framework.dto.BaseDTO;
 import com.lawoffice.framework.service.impl.BaseServiceImpl;
 import com.lawoffice.system.entity.SysDict;
 import com.lawoffice.system.entity.SysDictItem;
@@ -22,6 +23,19 @@ public class SysDictServiceImpl extends BaseServiceImpl<SysDictMapper, SysDict, 
 
     @Resource
     private SysDictItemMapper sysDictItemMapper;
+
+    @Resource
+    private TenantDefaultDataSyncService tenantDefaultDataSyncService;
+
+    @Override
+    protected void doAfterSave(BaseDTO<SysDict> saveDTO, SysDictVO vo) {
+        if (vo == null || !StringUtils.hasText(vo.getId()) || !tenantDefaultDataSyncService.isSystemTenantContext()) {
+            return;
+        }
+
+        String operator = saveDTO != null && saveDTO.getContext() != null ? saveDTO.getContext().getUsername() : null;
+        tenantDefaultDataSyncService.syncDefaultDictToAllTenants(vo.getId(), operator);
+    }
 
     @Override
     public BaseResult<List<DictOptionVO>> listOptionsByCode(String dictCode) {

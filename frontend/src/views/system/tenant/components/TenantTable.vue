@@ -22,6 +22,9 @@ const emit = defineEmits<{
   change: [pag: any, filters: any, sorter: any];
   delete: [record: TenantInfo];
   edit: [record: TenantInfo];
+  adminPermissions: [record: TenantInfo];
+  admins: [record: TenantInfo];
+  users: [record: TenantInfo];
 }>();
 
 const filterStateRef = toRef(props, 'activeFilters');

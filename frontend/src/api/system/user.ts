@@ -1,5 +1,6 @@
 import { requestClient } from '#/framework/api/request';
 import { BaseApi, type BasePageReq, type BaseQueryReq } from '#/framework/api/base.api';
+import type { TenantInfo } from './tenant';
 
 /**
  * 用户信息接口
@@ -28,6 +29,12 @@ export interface UserInfo {
   updateTime?: string;
 }
 
+export interface SwitchTenantResult {
+  token: string;
+  tenantId: string;
+  tenantName?: string;
+}
+
 // 创建并导出用户管理的 CRUD API 实例
 export const userApi = new BaseApi('/user');
 
@@ -43,6 +50,12 @@ export const getUserRoleIds = (id: string) =>
 
 export const assignUserRoles = (id: string, ids: string[]) =>
   requestClient.post<void>('/user/assignRoles', { id, ids });
+
+export const listCurrentUserTenants = () =>
+  requestClient.post<TenantInfo[]>('/user/tenants');
+
+export const switchTenant = (tenantId: string) =>
+  requestClient.post<SwitchTenantResult>('/user/switchTenant', { tenantId });
 
 /**
  * 用户 CRUD API 便捷方法工厂

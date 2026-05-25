@@ -29,6 +29,8 @@ export const listPermissions = (params?: BaseQueryReq) =>
   permissionApi.list<PermissionInfo>(params);
 export const getPermissionTree = () =>
   requestClient.get<PermissionInfo[]>('/permission/tree');
+export const getGrantablePermissionTree = () =>
+  requestClient.get<PermissionInfo[]>('/permission/grantableTree');
 export const getPermissionById = (id: string) =>
   permissionApi.getById<PermissionInfo>({ id });
 export const savePermission = (data: PermissionInfo) =>

@@ -1,4 +1,5 @@
 import { BaseApi, type BasePageReq, type BaseQueryReq } from '#/framework/api/base.api';
+import { requestClient } from '#/framework/api/request';
 
 export interface TenantInfo {
   id?: string;
@@ -21,6 +22,8 @@ export interface TenantInfo {
   createBy?: string;
   updateTime?: string;
   updateBy?: string;
+  adminUserIds?: string[];
+  originalId?: string;
 }
 
 const tenantApi = new BaseApi('/tenant');
@@ -33,3 +36,15 @@ export const deleteTenant = (id: string | number) =>
   tenantApi.delete({ id: String(id) });
 export const batchDeleteTenants = (ids: (string | number)[]) =>
   tenantApi.batchDelete(ids.map((id) => String(id)));
+export const getTenantUserIds = (id: string) =>
+  requestClient.post<string[]>('/tenant/userIds', { id });
+export const assignTenantUsers = (id: string, ids: string[]) =>
+  requestClient.post<void>('/tenant/assignUsers', { id, ids });
+export const getTenantAdminUserIds = (id: string) =>
+  requestClient.post<string[]>('/tenant/adminUserIds', { id });
+export const assignTenantAdmins = (id: string, ids: string[]) =>
+  requestClient.post<void>('/tenant/assignAdmins', { id, ids });
+export const getTenantAdminPermissionIds = (id: string) =>
+  requestClient.post<string[]>('/tenant/adminPermissionIds', { id });
+export const assignTenantAdminPermissions = (id: string, ids: string[]) =>
+  requestClient.post<void>('/tenant/assignAdminPermissions', { id, ids });

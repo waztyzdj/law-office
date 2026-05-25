@@ -52,7 +52,7 @@ function handleDelete(record: CategoryInfo) {
     okText: '确认',
     cancelText: '取消',
     onOk: async () => {
-      await deleteCategory(record.id);
+      await deleteCategory(record.id!);
       message.success('删除成功');
       await loadData();
     },

@@ -94,9 +94,9 @@ export function useDictTable() {
       okText: '确认',
       cancelText: '取消',
       onOk: async () => {
-        await deleteDict(record.id);
+        await deleteDict(record.id!);
         message.success('删除成功');
-        await refreshDictList(record.id);
+        await refreshDictList(record.id!);
       },
     });
   }
@@ -112,7 +112,7 @@ export function useDictTable() {
       okText: '确认',
       cancelText: '取消',
       onOk: async () => {
-        await deleteDictItem(record.id);
+        await deleteDictItem(record.id!);
         message.success('删除成功');
         await loadDictItems();
       },

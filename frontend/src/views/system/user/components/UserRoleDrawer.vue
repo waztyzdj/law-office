@@ -55,6 +55,10 @@ function toTransferItems(roles: RoleInfo[]): TransferItem[] {
     }));
 }
 
+function renderTransferItem(item: { description?: string; title?: string }) {
+  return item.description ? `${item.title}（${item.description}）` : item.title || '';
+}
+
 async function loadData(user: UserInfo) {
   if (!user.id) {
     return;
@@ -119,7 +123,7 @@ defineExpose({
         v-model:target-keys="selectedRoleIds"
         :data-source="roleOptions"
         :list-style="roleTransferListStyle"
-        :render="(item: TransferItem) => item.description ? `${item.title}（${item.description}）` : item.title"
+        :render="renderTransferItem"
         :titles="['可选角色', '已选角色']"
         show-search
       />

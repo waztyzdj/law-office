@@ -23,6 +23,12 @@ public class UserInfoVO {
     
     @Schema(description = "权限列表（用于权限控制）")
     private List<String> permissions;
+
+    @Schema(description = "当前租户ID")
+    private String tenantId;
+
+    @Schema(description = "当前租户名称")
+    private String tenantName;
     
     @Schema(description = "默认首页路径（可选）")
     private String homePath;

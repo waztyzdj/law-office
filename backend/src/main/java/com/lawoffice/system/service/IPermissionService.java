@@ -13,4 +13,6 @@ public interface IPermissionService extends ITreeService<Permission, PermissionV
      * @return 菜单权限树
      */
     List<PermissionVO> tree();
+
+    List<PermissionVO> grantableTree(String username);
 }

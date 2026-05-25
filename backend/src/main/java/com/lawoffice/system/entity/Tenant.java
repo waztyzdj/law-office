@@ -2,6 +2,7 @@ package com.lawoffice.system.entity;
 
 import com.alibaba.excel.annotation.ExcelProperty;
 import com.alibaba.excel.annotation.ExcelIgnore;
+import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableName;
 import com.lawoffice.framework.entity.BaseEntity;
 import io.swagger.v3.oas.annotations.media.Schema;
@@ -9,6 +10,8 @@ import lombok.Data;
 import lombok.EqualsAndHashCode;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.List;
 
 @Data
 @EqualsAndHashCode(callSuper = true)
@@ -83,4 +86,14 @@ public class Tenant extends BaseEntity {
     @ExcelProperty("状态")
     @Schema(description = "允许申请管理员 1允许 0不允许")
     private Integer applyStatus;
+
+    @ExcelIgnore
+    @TableField(exist = false)
+    @Schema(description = "租户管理员用户ID列表")
+    private List<String> adminUserIds = new ArrayList<>();
+
+    @ExcelIgnore
+    @TableField(exist = false)
+    @Schema(description = "原始租户编码")
+    private String originalId;
 }

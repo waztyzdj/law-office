@@ -15,6 +15,8 @@ export namespace AuthApi {
     realName: string;
     roles: string[];
     permissions: string[];
+    tenantId?: string;
+    tenantName?: string;
     expireTime?: number;
   }
 

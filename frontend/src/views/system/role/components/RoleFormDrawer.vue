@@ -55,7 +55,10 @@ const buildFormSchema = (): VbenFormSchema[] => [
       .string({ required_error: '请输入角色编码' })
       .min(1, '请输入角色编码')
       .max(64, '角色编码不能超过64个字符')
-      .regex(/^[A-Za-z][A-Za-z0-9_:.-]*$/, '角色编码需以字母开头'),
+      .regex(/^[A-Za-z][A-Za-z0-9_:.-]*$/, '角色编码需以字母开头')
+      .refine((value) => !value.startsWith('ADMIN_'), {
+        message: '自定义角色编码不能以 ADMIN_ 开头',
+      }),
     componentProps: noAutofillInputProps('roleCode', {
       disabled: !isCreate.value,
       maxlength: 64,

@@ -20,6 +20,16 @@ interface UserInfo extends BasicUserInfo {
    * 权限码
    */
   permissions?: string[];
+
+  /**
+   * 当前租户ID
+   */
+  tenantId?: string;
+
+  /**
+   * 当前租户名称
+   */
+  tenantName?: string;
 }
 
 export type { UserInfo };

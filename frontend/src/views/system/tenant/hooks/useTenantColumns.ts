@@ -88,21 +88,43 @@ export function getTenantColumns(
     },
     canEditTenant
       ? {
-          dataIndex: 'action',
+          dataIndex: 'tenantAction',
           title: '操作',
           options: {
-            width: 180,
+            width: 340,
+            align: 'center' as const,
             fixed: 'right' as const,
             hasFilter: false,
+            customCell: () => ({
+              style: {
+                whiteSpace: 'nowrap',
+              },
+            }),
             customRender: ({ record }: { record: TenantInfo }) =>
-              h(Space, { size: 'middle' }, () => [
+              h(
+                Space,
+                {
+                  size: 'small',
+                  style: {
+                    display: 'inline-flex',
+                    flexWrap: 'nowrap',
+                    justifyContent: 'center',
+                    whiteSpace: 'nowrap',
+                    width: '100%',
+                  },
+                },
+                () => [
                 h('a', { onClick: () => emit('edit', record) }, '编辑'),
+                h('a', { onClick: () => emit('users', record) }, '设置用户'),
+                h('a', { onClick: () => emit('admins', record) }, '设置管理员'),
+                h('a', { onClick: () => emit('adminPermissions', record) }, '管理员授权'),
                 h(
                   'a',
                   { style: { color: 'red' }, onClick: () => emit('delete', record) },
                   '删除',
                 ),
-              ]),
+              ],
+              ),
           },
         }
       : null,
@@ -113,6 +135,6 @@ export function getTenantColumns(
     filterState,
     emit,
     pagination,
-    { minTableWidth: 1480 },
+    { minTableWidth: 1660 },
   );
 }

@@ -7,11 +7,9 @@ import { LOGIN_PATH } from '@vben/constants';
 import { preferences } from '@vben/preferences';
 import { resetAllStores, useAccessStore, useUserStore } from '@vben/stores';
 
-import { notification } from 'ant-design-vue';
 import { defineStore } from 'pinia';
 
-import { getAccessCodesApi, getUserInfoApi, loginApi, logoutApi } from '#/api/system';
-import { $t } from '#/locales';
+import { getUserInfoApi, loginApi, logoutApi, switchTenant } from '#/api/system';
 
 export const useAuthStore = defineStore('auth', () => {
   const accessStore = useAccessStore();
@@ -104,10 +102,25 @@ export const useAuthStore = defineStore('auth', () => {
       desc: userInfo.desc || (userInfo as any).desc || '',
       token: accessStore.accessToken || '',
       avatar: userInfo.avatar || (userInfo as any).avatar || '',
+      tenantId: userInfo.tenantId || (userInfo as any).tenantId || '',
+      tenantName: userInfo.tenantName || (userInfo as any).tenantName || '',
     };
     
     userStore.setUserInfo(adaptedUserInfo);
     return adaptedUserInfo;
+  }
+
+  async function changeTenant(tenantId: string) {
+    const result = await switchTenant(tenantId);
+    accessStore.setAccessToken(result.token);
+    accessStore.setAccessCodes([]);
+    accessStore.setAccessMenus([]);
+    accessStore.setAccessRoutes([]);
+    accessStore.setIsAccessChecked(false);
+    userStore.setUserInfo(null);
+    await fetchUserInfo();
+    globalThis.location?.reload();
+    return result;
   }
 
   function $reset() {
@@ -117,6 +130,7 @@ export const useAuthStore = defineStore('auth', () => {
   return {
     $reset,
     authLogin,
+    changeTenant,
     fetchUserInfo,
     loginLoading,
     logout,

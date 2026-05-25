@@ -5,6 +5,8 @@ import lombok.Data;
 import lombok.EqualsAndHashCode;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * 租户请求对象
@@ -88,4 +90,14 @@ public class TenantReq extends BaseReq {
      * 是否允许申请管理者(1-允许,0-不允许)
      */
     private Integer applyStatus;
+
+    /**
+     * 租户管理员用户 ID 列表。
+     */
+    private List<String> adminUserIds = new ArrayList<>();
+
+    /**
+     * 编辑时的原始租户编码，用于防止修改租户编码。
+     */
+    private String originalId;
 }

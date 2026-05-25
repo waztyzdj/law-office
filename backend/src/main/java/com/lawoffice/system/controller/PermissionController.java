@@ -14,6 +14,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import jakarta.servlet.http.HttpServletRequest;
 
 import java.util.List;
 
@@ -33,5 +34,13 @@ public class PermissionController extends BaseController<IPermissionService, Per
     @RequiresPermission("permission:view")
     public BaseResult<List<PermissionVO>> tree() {
         return BaseResult.success(baseService.tree());
+    }
+
+    @GetMapping("/grantableTree")
+    @Operation(summary = "获取可授权权限树", description = "获取当前用户可以授予角色的菜单和按钮权限树")
+    @RequiresPermission("role:edit")
+    public BaseResult<List<PermissionVO>> grantableTree(HttpServletRequest request) {
+        Object username = request.getAttribute("username");
+        return BaseResult.success(baseService.grantableTree(username != null ? username.toString() : null));
     }
 }

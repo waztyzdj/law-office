@@ -15,15 +15,19 @@ import com.lawoffice.system.entity.RolePermission;
 import com.lawoffice.system.mapper.DepartPermissionMapper;
 import com.lawoffice.system.mapper.PermissionMapper;
 import com.lawoffice.system.mapper.RolePermissionMapper;
+import com.lawoffice.system.service.IUserService;
 import com.lawoffice.system.service.IPermissionService;
 import com.lawoffice.system.vo.PermissionVO;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
+import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Objects;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 @Service
 public class PermissionServiceImpl extends TreeServiceImpl<PermissionMapper, Permission, PermissionVO> implements IPermissionService {
@@ -32,17 +36,38 @@ public class PermissionServiceImpl extends TreeServiceImpl<PermissionMapper, Per
 
     private final DepartPermissionMapper departPermissionMapper;
 
+    private final IUserService userService;
+
     public PermissionServiceImpl(
             RolePermissionMapper rolePermissionMapper,
-            DepartPermissionMapper departPermissionMapper) {
+            DepartPermissionMapper departPermissionMapper,
+            IUserService userService) {
         this.rolePermissionMapper = rolePermissionMapper;
         this.departPermissionMapper = departPermissionMapper;
+        this.userService = userService;
     }
 
     @Override
     public List<PermissionVO> tree() {
         TreeDTO<Permission> treeDTO = new TreeDTO<>();
         return tree(treeDTO).getData();
+    }
+
+    @Override
+    public List<PermissionVO> grantableTree(String username) {
+        if (!StringUtils.hasText(username)) {
+            return new ArrayList<>();
+        }
+
+        Set<String> grantablePerms = userService.getUserPermissionCodesByUsername(username).stream()
+                .filter(StringUtils::hasText)
+                .filter(this::isGrantablePermissionCode)
+                .collect(Collectors.toSet());
+        if (grantablePerms.isEmpty()) {
+            return new ArrayList<>();
+        }
+
+        return filterGrantableTree(tree(), grantablePerms);
     }
 
     @Override
@@ -223,5 +248,31 @@ public class PermissionServiceImpl extends TreeServiceImpl<PermissionMapper, Per
         if (StringUtils.hasText(permission.getId())) {
             validateParentNotSelfOrDescendant(permission.getId(), permission.getParentId());
         }
+    }
+
+    private boolean isGrantablePermissionCode(String perms) {
+        return !"tenant:view".equals(perms)
+                && !"tenant:edit".equals(perms)
+                && !"permission:view".equals(perms)
+                && !"permission:edit".equals(perms)
+                && !"log:view".equals(perms)
+                && !"log:edit".equals(perms);
+    }
+
+    private List<PermissionVO> filterGrantableTree(List<PermissionVO> nodes, Set<String> grantablePerms) {
+        if (nodes == null || nodes.isEmpty()) {
+            return new ArrayList<>();
+        }
+
+        List<PermissionVO> result = new ArrayList<>();
+        for (PermissionVO node : nodes) {
+            List<PermissionVO> children = filterGrantableTree(node.getChildren(), grantablePerms);
+            boolean selfGrantable = !StringUtils.hasText(node.getPerms()) || grantablePerms.contains(node.getPerms());
+            if (selfGrantable && (StringUtils.hasText(node.getPerms()) || !children.isEmpty())) {
+                node.setChildren(children);
+                result.add(node);
+            }
+        }
+        return result;
     }
 }
