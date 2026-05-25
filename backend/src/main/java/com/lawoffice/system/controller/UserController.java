@@ -72,8 +72,9 @@ public class UserController extends BaseController<IUserService, User, UserVO, U
     @PostMapping("/assignRoles")
     @Operation(summary = "分配用户角色", description = "覆盖保存指定用户的角色")
     @RequiresPermission("user:edit")
-    public BaseResult<Void> assignRoles(@Valid @RequestBody AssignIdsReq req) {
-        baseService.assignRoles(req.getId(), req.getIds());
+    public BaseResult<Void> assignRoles(@Valid @RequestBody AssignIdsReq req, HttpServletRequest request) {
+        String username = (String) request.getAttribute("username");
+        baseService.assignRoles(req.getId(), req.getIds(), username);
         return BaseResult.success();
     }
 

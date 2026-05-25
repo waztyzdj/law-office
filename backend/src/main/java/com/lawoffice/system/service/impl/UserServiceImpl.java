@@ -1,8 +1,13 @@
 package com.lawoffice.system.service.impl;
 
+import cn.hutool.core.bean.BeanUtil;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.lawoffice.framework.config.TenantContextHolder;
 import com.lawoffice.framework.dto.BaseDTO;
+import com.lawoffice.framework.dto.BasePageDTO;
+import com.lawoffice.framework.dto.RequestContext;
+import com.lawoffice.framework.result.BaseResult;
 import com.lawoffice.framework.service.impl.BaseServiceImpl;
 import com.lawoffice.system.vo.UserInfoVO;
 import com.lawoffice.system.entity.*;
@@ -15,6 +20,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.interceptor.TransactionAspectSupport;
 import org.springframework.util.StringUtils;
 
 import java.util.ArrayList;
@@ -23,6 +29,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.UUID;
 import java.util.stream.Collectors;
 
 @Slf4j
@@ -78,6 +85,115 @@ public class UserServiceImpl extends BaseServiceImpl<UserMapper, User, UserVO> i
     private com.lawoffice.system.service.ITokenService tokenService;
     
     private final BCryptPasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
+
+    @Override
+    protected void doBeforeList(BaseDTO<User> baseDTO) {
+        applyTenantMemberScope(baseDTO);
+    }
+
+    @Override
+    protected void doBeforePage(BasePageDTO<User> basePageDTO) {
+        applyTenantMemberScope(basePageDTO);
+    }
+
+    @Override
+    protected void doBeforeGetById(BaseDTO<User> idDTO) {
+        if (isPlatformOperator(idDTO)) {
+            return;
+        }
+        String tenantId = getRequiredTenantId(idDTO);
+        if (!userBelongsToTenant(idDTO.getId(), tenantId)) {
+            throw new IllegalArgumentException("只能查看当前租户成员");
+        }
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public BaseResult<UserVO> save(BaseDTO<User> saveDTO) {
+        if (isPlatformOperator(saveDTO)) {
+            return super.save(saveDTO);
+        }
+
+        try {
+            User requestUser = saveDTO.getEntity();
+            if (requestUser == null) {
+                return BaseResult.error(400, "保存数据不能为空");
+            }
+
+            normalizeUser(requestUser);
+            String tenantId = getRequiredTenantId(saveDTO);
+            boolean isCreate = !StringUtils.hasText(requestUser.getId());
+
+            User entity;
+            if (isCreate) {
+                entity = saveOrJoinTenantUser(saveDTO, requestUser, tenantId);
+            } else {
+                if (!userBelongsToTenant(requestUser.getId(), tenantId)) {
+                    throw new IllegalArgumentException("只能编辑当前租户成员");
+                }
+                validateUser(requestUser, false);
+                keepProtectedFields(requestUser);
+                validateUnique(requestUser, requestUser.getId());
+                entity = BeanUtil.copyProperties(requestUser, User.class);
+                EntityFillUtils.fillAuditFields(entity, saveDTO.getContext(), false);
+                this.saveOrUpdate(entity);
+            }
+
+            UserVO vo = BeanUtil.toBean(entity, UserVO.class);
+            doAfterSave(saveDTO, vo);
+            return BaseResult.success(vo);
+        } catch (IllegalArgumentException e) {
+            markRollbackOnly();
+            log.warn("保存参数校验失败: {}", e.getMessage());
+            return BaseResult.error(400, e.getMessage());
+        } catch (Exception e) {
+            markRollbackOnly();
+            log.error("保存失败", e);
+            return BaseResult.error("保存失败: " + e.getMessage());
+        }
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public BaseResult<Void> delete(BaseDTO<User> deleteDTO) {
+        if (isPlatformOperator(deleteDTO)) {
+            return super.delete(deleteDTO);
+        }
+
+        try {
+            String userId = deleteDTO.getId();
+            if (!StringUtils.hasText(userId)) {
+                return BaseResult.error("ID不能为空");
+            }
+            removeUsersFromCurrentTenant(List.of(userId), deleteDTO);
+            return BaseResult.success();
+        } catch (Exception e) {
+            markRollbackOnly();
+            log.error("移出租户成员失败", e);
+            return BaseResult.error("删除失败: " + e.getMessage());
+        }
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public BaseResult<Void> batchDelete(BaseDTO<User> deleteDTO) {
+        if (isPlatformOperator(deleteDTO)) {
+            return super.batchDelete(deleteDTO);
+        }
+
+        try {
+            List<String> userIds = normalizeIds(deleteDTO.getDeleteIds());
+            if (userIds.isEmpty()) {
+                return BaseResult.error("删除ID列表不能为空");
+            }
+            removeUsersFromCurrentTenant(userIds, deleteDTO);
+            return BaseResult.success();
+        } catch (Exception e) {
+            markRollbackOnly();
+            log.error("批量移出租户成员失败", e);
+            return BaseResult.error("批量删除失败: " + e.getMessage());
+        }
+    }
 
     @Override
     protected void doBeforeSave(BaseDTO<User> saveDTO) {
@@ -199,6 +315,118 @@ public class UserServiceImpl extends BaseServiceImpl<UserMapper, User, UserVO> i
         }
     }
 
+    private void applyTenantMemberScope(BaseDTO<User> baseDTO) {
+        if (isPlatformOperator(baseDTO)) {
+            return;
+        }
+
+        String tenantId = getRequiredTenantId(baseDTO);
+        List<String> memberUserIds = getTenantMemberUserIds(tenantId);
+        QueryWrapper<User> wrapper = (QueryWrapper<User>) baseDTO.getQueryWrapper();
+        if (wrapper == null) {
+            wrapper = new QueryWrapper<>();
+            baseDTO.setQueryWrapper(wrapper);
+        }
+
+        if (memberUserIds.isEmpty()) {
+            wrapper.eq("id", "__none__");
+            return;
+        }
+        wrapper.in("id", memberUserIds);
+    }
+
+    private User saveOrJoinTenantUser(BaseDTO<User> saveDTO, User requestUser, String tenantId) {
+        User existingUser = findExistingUserForTenantJoin(requestUser);
+        if (existingUser != null) {
+            ensureJoinableUser(existingUser);
+            upsertUserTenantRelation(existingUser.getId(), tenantId);
+            log.info("已有用户加入当前租户成功，用户ID: {}, 租户ID: {}", existingUser.getId(), tenantId);
+            return existingUser;
+        }
+
+        validateUser(requestUser, true);
+        validateUnique(requestUser, null);
+        requestUser.setPassword(passwordEncoder.encode(requestUser.getPassword()));
+        if (requestUser.getStatus() == null) {
+            requestUser.setStatus(1);
+        }
+
+        User entity = BeanUtil.copyProperties(requestUser, User.class);
+        if (!StringUtils.hasText(entity.getId())) {
+            entity.setId(newId());
+        }
+        RequestContext context = saveDTO.getContext();
+        EntityFillUtils.fillAuditFields(entity, context, true);
+        this.saveOrUpdate(entity);
+        upsertUserTenantRelation(entity.getId(), tenantId);
+        return entity;
+    }
+
+    private User findExistingUserForTenantJoin(User user) {
+        List<User> matchedUsers = new ArrayList<>();
+        addMatchedUsers(matchedUsers, User::getUsername, user.getUsername());
+        addMatchedUsers(matchedUsers, User::getPhone, user.getPhone());
+        addMatchedUsers(matchedUsers, User::getEmail, user.getEmail());
+
+        Map<String, User> userMap = matchedUsers.stream()
+                .filter(matchedUser -> StringUtils.hasText(matchedUser.getId()))
+                .collect(Collectors.toMap(User::getId, matchedUser -> matchedUser, (left, right) -> left));
+        if (userMap.isEmpty()) {
+            return null;
+        }
+        if (userMap.size() > 1) {
+            throw new IllegalArgumentException("用户名、手机号或邮箱匹配到多个账号，请使用唯一账号信息加入租户");
+        }
+        return userMap.values().iterator().next();
+    }
+
+    private void addMatchedUsers(
+            List<User> matchedUsers,
+            com.baomidou.mybatisplus.core.toolkit.support.SFunction<User, ?> column,
+            String value) {
+        if (!StringUtils.hasText(value)) {
+            return;
+        }
+        LambdaQueryWrapper<User> wrapper = new LambdaQueryWrapper<>();
+        wrapper.eq(column, value);
+        matchedUsers.addAll(userMapper.selectList(wrapper));
+    }
+
+    private void ensureJoinableUser(User user) {
+        if (user.getDeleteFlag() != null && user.getDeleteFlag() == 1) {
+            throw new IllegalArgumentException("账号已被删除，不能加入当前租户");
+        }
+        if (user.getStatus() == null || user.getStatus() != 1) {
+            throw new IllegalArgumentException("账号已被冻结，不能加入当前租户");
+        }
+    }
+
+    private void removeUsersFromCurrentTenant(List<String> userIds, BaseDTO<User> deleteDTO) {
+        String tenantId = getRequiredTenantId(deleteDTO);
+        String deleteBy = resolveOperator(deleteDTO);
+
+        for (String userId : userIds) {
+            if (!userBelongsToTenant(userId, tenantId)) {
+                throw new IllegalArgumentException("只能移出当前租户成员");
+            }
+        }
+
+        LambdaQueryWrapper<UserTenant> userTenantWrapper = new LambdaQueryWrapper<>();
+        userTenantWrapper.in(UserTenant::getUserId, userIds)
+                .eq(UserTenant::getTenantId, tenantId)
+                .eq(UserTenant::getDeleteFlag, 0);
+        softDeleteUserTenants(userTenantWrapper, deleteBy);
+
+        LambdaQueryWrapper<UserRole> userRoleWrapper = new LambdaQueryWrapper<>();
+        userRoleWrapper.in(UserRole::getUserId, userIds)
+                .eq(UserRole::getTenantId, tenantId)
+                .eq(UserRole::getDeleteFlag, 0);
+        softDeleteUserRoles(userRoleWrapper, deleteBy);
+
+        userIds.forEach(this::forceLogoutUserById);
+        log.info("移出当前租户成员成功，租户ID: {}, 用户数量: {}", tenantId, userIds.size());
+    }
+
     @Override
     protected void doAfterSave(BaseDTO<User> saveDTO, UserVO vo) {
         log.info("保存用户成功，用户ID: {}", vo.getId());
@@ -253,6 +481,12 @@ public class UserServiceImpl extends BaseServiceImpl<UserMapper, User, UserVO> i
     @Override
     @Transactional(rollbackFor = Exception.class)
     public void assignRoles(String userId, List<String> roleIds) {
+        assignRoles(userId, roleIds, null);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void assignRoles(String userId, List<String> roleIds, String operatorUsername) {
         if (!StringUtils.hasText(userId)) {
             throw new IllegalArgumentException("用户ID不能为空");
         }
@@ -264,20 +498,29 @@ public class UserServiceImpl extends BaseServiceImpl<UserMapper, User, UserVO> i
 
         List<String> normalizedRoleIds = normalizeIds(roleIds);
         validateRoles(normalizedRoleIds);
+        boolean platformOperator = isPlatformOperatorUsername(operatorUsername);
+        validateTenantRoleAssignment(userId, normalizedRoleIds, operatorUsername, platformOperator);
 
         // 先删除用户现有的所有角色
         LambdaQueryWrapper<UserRole> deleteWrapper = new LambdaQueryWrapper<>();
         deleteWrapper.eq(UserRole::getUserId, userId)
                 .eq(UserRole::getDeleteFlag, 0);
+        if (!platformOperator) {
+            deleteWrapper.eq(UserRole::getTenantId, getRequiredTenantId());
+        }
         userRoleMapper.delete(deleteWrapper);
 
         // 批量插入新的角色关联
         if (!normalizedRoleIds.isEmpty()) {
+            String currentTenantId = !platformOperator ? getRequiredTenantId() : null;
             List<UserRole> userRoles = normalizedRoleIds.stream()
                 .map(roleId -> {
                     UserRole userRole = new UserRole();
                     userRole.setUserId(userId);
                     userRole.setRoleId(roleId);
+                    if (StringUtils.hasText(currentTenantId)) {
+                        userRole.setTenantId(currentTenantId);
+                    }
                     return userRole;
                 })
                 .collect(Collectors.toList());
@@ -323,6 +566,10 @@ public class UserServiceImpl extends BaseServiceImpl<UserMapper, User, UserVO> i
         LambdaQueryWrapper<UserRole> wrapper = new LambdaQueryWrapper<>();
         wrapper.eq(UserRole::getUserId, userId)
                .eq(UserRole::getDeleteFlag, 0);
+        String tenantId = TenantContextHolder.getCurrentTenantId();
+        if (StringUtils.hasText(tenantId)) {
+            wrapper.eq(UserRole::getTenantId, tenantId);
+        }
         return userRoleMapper.selectList(wrapper).stream()
                 .map(UserRole::getRoleId)
                 .filter(StringUtils::hasText)
@@ -500,7 +747,8 @@ public class UserServiceImpl extends BaseServiceImpl<UserMapper, User, UserVO> i
 
         LambdaQueryWrapper<UserTenant> wrapper = new LambdaQueryWrapper<>();
         wrapper.eq(UserTenant::getTenantId, tenantId)
-               .eq(UserTenant::getStatus, "1");
+               .eq(UserTenant::getStatus, "1")
+               .eq(UserTenant::getDeleteFlag, 0);
         return userTenantMapper.selectList(wrapper).stream()
                 .map(UserTenant::getUserId)
                 .filter(StringUtils::hasText)
@@ -1046,6 +1294,21 @@ public class UserServiceImpl extends BaseServiceImpl<UserMapper, User, UserVO> i
      * 获取用户的默认租户ID
      * 从UserTenant关系中获取第一个正常状态的租户
      */
+    private boolean isPlatformOperator(BaseDTO<User> dto) {
+        if (dto == null || dto.getContext() == null) {
+            return false;
+        }
+        return isPlatformOperatorUsername(dto.getContext().getUsername());
+    }
+
+    private boolean isPlatformOperatorUsername(String username) {
+        if (!StringUtils.hasText(username) || "anonymous".equals(username)) {
+            return false;
+        }
+        User operator = getCurrentUserInfo(username);
+        return isPlatformAdmin(operator.getId());
+    }
+
     private boolean isPlatformAdmin(String userId) {
         if (!StringUtils.hasText(userId)) {
             return false;
@@ -1062,6 +1325,37 @@ public class UserServiceImpl extends BaseServiceImpl<UserMapper, User, UserVO> i
         return tenantMapper.selectList(wrapper);
     }
 
+    private String getRequiredTenantId() {
+        String tenantId = TenantContextHolder.getCurrentTenantId();
+        if (!StringUtils.hasText(tenantId)) {
+            throw new IllegalArgumentException("当前租户不能为空");
+        }
+        return tenantId;
+    }
+
+    private String getRequiredTenantId(BaseDTO<User> dto) {
+        String tenantId = dto != null && dto.getContext() != null ? dto.getContext().getTenantId() : null;
+        if (!StringUtils.hasText(tenantId)) {
+            tenantId = TenantContextHolder.getCurrentTenantId();
+        }
+        if (!StringUtils.hasText(tenantId)) {
+            throw new IllegalArgumentException("当前租户不能为空");
+        }
+        return tenantId;
+    }
+
+    private List<String> getTenantMemberUserIds(String tenantId) {
+        LambdaQueryWrapper<UserTenant> wrapper = new LambdaQueryWrapper<>();
+        wrapper.eq(UserTenant::getTenantId, tenantId)
+                .eq(UserTenant::getStatus, "1")
+                .eq(UserTenant::getDeleteFlag, 0);
+        return userTenantMapper.selectList(wrapper).stream()
+                .map(UserTenant::getUserId)
+                .filter(StringUtils::hasText)
+                .distinct()
+                .collect(Collectors.toList());
+    }
+
     private String getDefaultTenantId(String userId) {
         User user = userMapper.selectById(userId);
         if (user != null && StringUtils.hasText(user.getLoginTenantId())
@@ -1073,6 +1367,7 @@ public class UserServiceImpl extends BaseServiceImpl<UserMapper, User, UserVO> i
         LambdaQueryWrapper<UserTenant> wrapper = new LambdaQueryWrapper<>();
         wrapper.eq(UserTenant::getUserId, userId)
                .eq(UserTenant::getStatus, "1")  // 状态为正常
+               .eq(UserTenant::getDeleteFlag, 0)
                .orderByAsc(UserTenant::getCreateTime)
                .last("LIMIT 1");
         
@@ -1109,6 +1404,95 @@ public class UserServiceImpl extends BaseServiceImpl<UserMapper, User, UserVO> i
         if (count != roleIds.size()) {
             throw new IllegalArgumentException("包含不存在或已删除的角色");
         }
+    }
+
+    private void validateTenantRoleAssignment(
+            String userId,
+            List<String> roleIds,
+            String operatorUsername,
+            boolean platformOperator) {
+        if (platformOperator) {
+            return;
+        }
+
+        if (!StringUtils.hasText(operatorUsername)) {
+            throw new IllegalArgumentException("无法识别当前操作人");
+        }
+
+        String tenantId = getRequiredTenantId();
+        if (!userBelongsToTenant(userId, tenantId)) {
+            throw new IllegalArgumentException("只能为当前租户成员分配角色");
+        }
+
+        List<Role> roles = getRolesByIds(roleIds);
+        List<String> invalidRoleCodes = roles.stream()
+                .filter(role -> !tenantId.equals(role.getTenantId()) || PLATFORM_ADMIN_ROLE_CODE.equals(role.getRoleCode()))
+                .map(Role::getRoleCode)
+                .filter(StringUtils::hasText)
+                .distinct()
+                .collect(Collectors.toList());
+        if (!invalidRoleCodes.isEmpty()) {
+            throw new IllegalArgumentException("只能分配当前租户角色，且不能分配平台超级管理员角色: " + String.join(",", invalidRoleCodes));
+        }
+
+        validateRoleGrantWithinOperatorPermissions(roleIds, operatorUsername);
+    }
+
+    private List<Role> getRolesByIds(List<String> roleIds) {
+        if (roleIds.isEmpty()) {
+            return new ArrayList<>();
+        }
+
+        LambdaQueryWrapper<Role> wrapper = new LambdaQueryWrapper<>();
+        wrapper.in(Role::getId, roleIds)
+                .eq(Role::getDeleteFlag, 0);
+        return roleMapper.selectList(wrapper);
+    }
+
+    private void validateRoleGrantWithinOperatorPermissions(List<String> roleIds, String operatorUsername) {
+        if (roleIds.isEmpty()) {
+            return;
+        }
+
+        Set<String> operatorPerms = getUserPermissionCodesByUsername(operatorUsername).stream()
+                .filter(StringUtils::hasText)
+                .collect(Collectors.toSet());
+
+        Set<String> rolePerms = getPermissionCodesByRoleIds(roleIds);
+        List<String> overLimitPerms = rolePerms.stream()
+                .filter(perms -> !operatorPerms.contains(perms))
+                .distinct()
+                .collect(Collectors.toList());
+        if (!overLimitPerms.isEmpty()) {
+            throw new IllegalArgumentException("不能分配超出自身权限范围的角色: " + String.join(",", overLimitPerms));
+        }
+    }
+
+    private Set<String> getPermissionCodesByRoleIds(List<String> roleIds) {
+        if (roleIds.isEmpty()) {
+            return new LinkedHashSet<>();
+        }
+
+        LambdaQueryWrapper<RolePermission> rolePermissionWrapper = new LambdaQueryWrapper<>();
+        rolePermissionWrapper.in(RolePermission::getRoleId, roleIds)
+                .eq(RolePermission::getDeleteFlag, 0);
+        List<String> permissionIds = rolePermissionMapper.selectList(rolePermissionWrapper).stream()
+                .map(RolePermission::getPermissionId)
+                .filter(StringUtils::hasText)
+                .distinct()
+                .collect(Collectors.toList());
+        if (permissionIds.isEmpty()) {
+            return new LinkedHashSet<>();
+        }
+
+        LambdaQueryWrapper<Permission> permissionWrapper = new LambdaQueryWrapper<>();
+        permissionWrapper.in(Permission::getId, permissionIds)
+                .eq(Permission::getDeleteFlag, 0)
+                .eq(Permission::getStatus, "1");
+        return permissionMapper.selectList(permissionWrapper).stream()
+                .map(Permission::getPerms)
+                .filter(StringUtils::hasText)
+                .collect(Collectors.toCollection(LinkedHashSet::new));
     }
 
     private void validateTenants(List<String> tenantIds) {
@@ -1148,6 +1532,7 @@ public class UserServiceImpl extends BaseServiceImpl<UserMapper, User, UserVO> i
 
         Set<String> targetTenantIdSet = new LinkedHashSet<>(targetTenantIds);
         Set<String> existingNormalTenantIdSet = existingRelations.stream()
+                .filter(relation -> relation.getDeleteFlag() == null || relation.getDeleteFlag() == 0)
                 .filter(relation -> "1".equals(relation.getStatus()))
                 .map(UserTenant::getTenantId)
                 .filter(StringUtils::hasText)
@@ -1176,6 +1561,7 @@ public class UserServiceImpl extends BaseServiceImpl<UserMapper, User, UserVO> i
 
         Set<String> targetUserIdSet = new LinkedHashSet<>(targetUserIds);
         Set<String> existingNormalUserIdSet = existingRelations.stream()
+                .filter(relation -> relation.getDeleteFlag() == null || relation.getDeleteFlag() == 0)
                 .filter(relation -> "1".equals(relation.getStatus()))
                 .map(UserTenant::getUserId)
                 .filter(StringUtils::hasText)
@@ -1214,6 +1600,12 @@ public class UserServiceImpl extends BaseServiceImpl<UserMapper, User, UserVO> i
         userTenantMapper.update(userTenant, wrapper);
     }
 
+    private void softDeleteUserRoles(LambdaQueryWrapper<UserRole> wrapper, String deleteBy) {
+        UserRole userRole = new UserRole();
+        EntityFillUtils.fillDeleteFields(userRole, deleteBy);
+        userRoleMapper.update(userRole, wrapper);
+    }
+
     private void upsertUserTenantRelation(String userId, String tenantId) {
         LambdaQueryWrapper<UserTenant> wrapper = new LambdaQueryWrapper<>();
         wrapper.eq(UserTenant::getUserId, userId)
@@ -1232,6 +1624,7 @@ public class UserServiceImpl extends BaseServiceImpl<UserMapper, User, UserVO> i
         }
 
         UserTenant userTenant = new UserTenant();
+        userTenant.setId(newId());
         userTenant.setUserId(userId);
         userTenant.setTenantId(tenantId);
         userTenant.setStatus("1");
@@ -1279,6 +1672,25 @@ public class UserServiceImpl extends BaseServiceImpl<UserMapper, User, UserVO> i
             return null;
         }
         return user;
+    }
+
+    private String resolveOperator(BaseDTO<User> dto) {
+        if (dto != null && dto.getContext() != null && StringUtils.hasText(dto.getContext().getUsername())) {
+            return dto.getContext().getUsername();
+        }
+        return "system";
+    }
+
+    private void markRollbackOnly() {
+        try {
+            TransactionAspectSupport.currentTransactionStatus().setRollbackOnly();
+        } catch (Exception ignored) {
+            // No active transaction when invoked outside Spring proxy.
+        }
+    }
+
+    private String newId() {
+        return UUID.randomUUID().toString().replace("-", "");
     }
 
     private List<String> getDeleteIds(BaseDTO<User> deleteDTO) {

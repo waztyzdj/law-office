@@ -23,6 +23,8 @@ public interface IUserService extends IBaseService<User, UserVO> {
      */
     void assignRoles(String userId, List<String> roleIds);
 
+    void assignRoles(String userId, List<String> roleIds, String operatorUsername);
+
     /**
      * 获取用户的角色列表
      * @param userId 用户ID
