@@ -4,21 +4,26 @@ import type { NotificationItem } from '@vben/layouts';
 import { computed, onMounted, ref, watch } from 'vue';
 import { useRouter } from 'vue-router';
 
-import { AuthenticationLoginExpiredModal } from '@vben/common-ui';
-import { VBEN_DOC_URL, VBEN_GITHUB_URL } from '@vben/constants';
+import { AuthenticationLoginExpiredModal, useVbenModal } from '@vben/common-ui';
 import { useWatermark } from '@vben/hooks';
-import { BookOpenText, CircleHelp, SvgGithubIcon } from '@vben/icons';
 import {
   BasicLayout,
   LockScreen,
+  LockScreenModal,
   Notification,
-  UserDropdown,
 } from '@vben/layouts';
+import { LockKeyhole, LogOut, UserRoundPen } from '@vben/icons';
 import { preferences, usePreferences } from '@vben/preferences';
 import { useAccessStore, useUserStore } from '@vben/stores';
-import { openWindow } from '@vben/utils';
 
-import { Button, Dropdown, Menu, notification } from 'ant-design-vue';
+import {
+  Avatar,
+  Button,
+  Dropdown,
+  Menu,
+  notification,
+  Tag,
+} from 'ant-design-vue';
 
 import { listCurrentUserTenants } from '#/api/system/user';
 import { $t } from '#/locales';
@@ -87,46 +92,14 @@ const { isDark } = usePreferences();
 const tenantOptions = ref<any[]>([]);
 const currentTenantId = ref('');
 const tenantLoading = ref(false);
+const userMenuOpen = ref(false);
 const showDot = computed(() =>
   notifications.value.some((item) => !item.isRead),
 );
 
-const menus = computed(() => [
-  {
-    handler: () => {
-      router.push({ name: 'Profile' });
-    },
-    icon: 'lucide:user',
-    text: $t('page.auth.profile'),
-  },
-  {
-    handler: () => {
-      openWindow(VBEN_DOC_URL, {
-        target: '_blank',
-      });
-    },
-    icon: BookOpenText,
-    text: $t('ui.widgets.document'),
-  },
-  {
-    handler: () => {
-      openWindow(VBEN_GITHUB_URL, {
-        target: '_blank',
-      });
-    },
-    icon: SvgGithubIcon,
-    text: 'GitHub',
-  },
-  {
-    handler: () => {
-      openWindow(`${VBEN_GITHUB_URL}/issues`, {
-        target: '_blank',
-      });
-    },
-    icon: CircleHelp,
-    text: $t('ui.widgets.qa'),
-  },
-]);
+const [LockModal, lockModalApi] = useVbenModal({
+  connectedComponent: LockScreenModal,
+});
 
 const avatar = computed(() => {
   return userStore.userInfo?.avatar ?? preferences.app.defaultAvatar;
@@ -189,6 +162,30 @@ async function handleSwitchTenant(tenantId?: string) {
 
 async function handleLogout() {
   await authStore.logout(false);
+}
+
+function closeUserMenu() {
+  userMenuOpen.value = false;
+}
+
+function handleOpenProfile() {
+  closeUserMenu();
+  router.push({ name: 'Profile' });
+}
+
+function handleOpenLock() {
+  closeUserMenu();
+  lockModalApi.open();
+}
+
+function handleSubmitLock(lockScreenPassword: string) {
+  lockModalApi.close();
+  accessStore.lockScreen(lockScreenPassword);
+}
+
+async function handleUserLogout() {
+  closeUserMenu();
+  await handleLogout();
 }
 
 function handleNoticeClear() {
@@ -298,14 +295,80 @@ watch(
 <template>
   <BasicLayout @clear-preferences-and-logout="handleLogout">
     <template #user-dropdown>
-      <UserDropdown
-        :avatar
-        :menus
+      <LockModal
+        v-if="preferences.widget.lockScreen"
+        :avatar="avatar"
         :text="userStore.userInfo?.realName"
-        description="ann.vben@gmail.com"
-        tag-text="Pro"
-        @logout="handleLogout"
+        @submit="handleSubmitLock"
       />
+      <Dropdown
+        v-model:open="userMenuOpen"
+        placement="bottomRight"
+        trigger="click"
+      >
+        <div class="mr-2 ml-1 cursor-pointer rounded-full p-1.5 hover:bg-accent">
+          <div class="relative flex items-center">
+            <Avatar :src="avatar" :size="32">
+              {{ userStore.userInfo?.realName?.slice(0, 1) || '理' }}
+            </Avatar>
+            <span
+              class="absolute right-0 bottom-0 size-3 rounded-full border-2 border-background bg-green-500"
+            ></span>
+          </div>
+        </div>
+        <template #overlay>
+          <div
+            class="mr-2 min-w-60 rounded-md border border-border bg-background p-1 pb-2 shadow-lg"
+          >
+            <div class="flex items-center p-3">
+              <div class="relative shrink-0">
+                <Avatar :src="avatar" :size="48">
+                  {{ userStore.userInfo?.realName?.slice(0, 1) || '理' }}
+                </Avatar>
+                <span
+                  class="absolute right-1 bottom-0 size-4 rounded-full border-2 border-background bg-green-500"
+                ></span>
+              </div>
+              <div class="ml-2 min-w-0 flex-1">
+                <div class="mb-1 flex items-center text-sm font-medium">
+                  <span class="truncate">
+                    {{ userStore.userInfo?.realName }}
+                  </span>
+                  <Tag color="green" class="ml-2 mr-0">Pro</Tag>
+                </div>
+                <div class="truncate text-xs text-muted-foreground">
+                  ann.vben@gmail.com
+                </div>
+              </div>
+            </div>
+            <button
+              class="flex w-full cursor-pointer items-center rounded-sm px-3 py-2 text-left leading-6 hover:bg-accent"
+              type="button"
+              @click="handleOpenProfile"
+            >
+              <UserRoundPen class="mr-2 size-4" />
+              {{ $t('page.auth.profile') }}
+            </button>
+            <button
+              v-if="preferences.widget.lockScreen"
+              class="flex w-full cursor-pointer items-center rounded-sm px-3 py-2 text-left leading-6 hover:bg-accent"
+              type="button"
+              @click="handleOpenLock"
+            >
+              <LockKeyhole class="mr-2 size-4" />
+              {{ $t('ui.widgets.lockScreen.title') }}
+            </button>
+            <button
+              class="flex w-full cursor-pointer items-center rounded-sm px-3 py-2 text-left leading-6 hover:bg-accent"
+              type="button"
+              @click="handleUserLogout"
+            >
+              <LogOut class="mr-2 size-4" />
+              {{ $t('common.logout') }}
+            </button>
+          </div>
+        </template>
+      </Dropdown>
     </template>
     <template #notification>
       <Notification

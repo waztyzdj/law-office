@@ -28,6 +28,10 @@ export const overridesPreferences = defineOverridesPreferences({
   theme: {
     fontSize: 14,
   },
+  widget: {
+    languageToggle: false,
+    timezone: false,
+  },
 });
 
 export const preferencesExtension =
