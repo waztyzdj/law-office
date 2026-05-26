@@ -51,6 +51,9 @@ export const getUserRoleIds = (id: string) =>
 export const assignUserRoles = (id: string, ids: string[]) =>
   requestClient.post<void>('/user/assignRoles', { id, ids });
 
+export const listUsers = (params?: BaseQueryReq) =>
+  userApi.list<UserInfo>(params);
+
 export const listCurrentUserTenants = () =>
   requestClient.post<TenantInfo[]>('/user/tenants');
 

@@ -26,22 +26,12 @@ export function getDepartColumns(
     {
       dataIndex: 'orgCode',
       title: '机构编码',
-      options: { width: 160 },
+      options: { width: 220 },
     },
     {
       dataIndex: 'departName',
       title: '机构名称',
-      options: { width: 220 },
-    },
-    {
-      dataIndex: 'departNameEn',
-      title: '英文名',
-      options: { width: 180 },
-    },
-    {
-      dataIndex: 'departNameAbbr',
-      title: '缩写',
-      options: { width: 160 },
+      options: { width: 320 },
     },
     {
       dataIndex: 'orgType',
@@ -51,16 +41,6 @@ export function getDepartColumns(
         columnType: 'select' as const,
         selectOptions: orgTypeSelectOptions,
       },
-    },
-    {
-      dataIndex: 'departOrder',
-      title: '排序',
-      options: { width: 100, columnType: 'number' as const },
-    },
-    {
-      dataIndex: 'mobile',
-      title: '手机号',
-      options: { width: 140 },
     },
     {
       dataIndex: 'status',
@@ -81,22 +61,28 @@ export function getDepartColumns(
     },
     canEditDepart
       ? {
-          dataIndex: 'action',
+          dataIndex: 'departAction',
           title: '操作',
           options: {
-            width: 220,
+            align: 'center',
+            className: 'depart-action-cell',
             fixed: 'right' as const,
             hasFilter: false,
+            width: 260,
             customRender: ({ record }: { record: DepartInfo }) =>
-              h(Space, { size: 'middle' }, () => [
-                h('a', { onClick: () => emit('addChild', record) }, '新增下级'),
-                h('a', { onClick: () => emit('edit', record) }, '编辑'),
-                h(
-                  'a',
-                  { style: { color: 'red' }, onClick: () => emit('delete', record) },
-                  '删除',
-                ),
-              ]),
+              h(Space, { class: 'depart-action-links', size: 8 }, () =>
+                [
+                  h('a', { onClick: () => emit('addChild', record) }, '新增下级'),
+                  h('a', { onClick: () => emit('edit', record) }, '编辑'),
+                  h(
+                    'a',
+                    { style: { color: 'red' }, onClick: () => emit('delete', record) },
+                    '删除',
+                  ),
+                  h('a', { onClick: () => emit('members', record) }, '人员'),
+                  h('a', { onClick: () => emit('roles', record) }, '部门角色'),
+                ].filter(Boolean),
+              ),
           },
         }
       : null,
@@ -107,6 +93,6 @@ export function getDepartColumns(
     filterState,
     emit,
     pagination,
-    { minTableWidth: 1720 },
+    { actionColumnKey: 'departAction', minTableWidth: 1200 },
   );
 }

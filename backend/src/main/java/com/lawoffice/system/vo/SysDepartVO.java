@@ -1,6 +1,6 @@
 package com.lawoffice.system.vo;
 
-import com.lawoffice.framework.vo.BaseVO;
+import com.lawoffice.framework.vo.TreeVO;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
 
@@ -9,13 +9,8 @@ import lombok.EqualsAndHashCode;
  */
 @Data
 @EqualsAndHashCode(callSuper = true)
-public class SysDepartVO extends BaseVO {
+public class SysDepartVO extends TreeVO<SysDepartVO> {
     private static final long serialVersionUID = 1L;
-
-    /**
-     * 父机构ID
-     */
-    private String parentId;
 
     /**
      * 机构/部门名称

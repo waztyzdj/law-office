@@ -27,6 +27,13 @@ public interface IDepartRoleService extends IBaseService<DepartRole, DepartRoleV
     List<Permission> getDepartRolePermissions(String departRoleId);
 
     /**
+     * 获取部门角色的权限 ID 列表
+     * @param departRoleId 部门角色ID
+     * @return 权限 ID 列表
+     */
+    List<String> getDepartRolePermissionIds(String departRoleId);
+
+    /**
      * 移除部门角色的指定权限
      * @param departRoleId 部门角色ID
      * @param permissionIds 权限ID列表
@@ -46,6 +53,13 @@ public interface IDepartRoleService extends IBaseService<DepartRole, DepartRoleV
      * @return 用户列表
      */
     List<User> getDepartRoleUsers(String departRoleId);
+
+    /**
+     * 获取部门角色的用户 ID 列表
+     * @param departRoleId 部门角色ID
+     * @return 用户 ID 列表
+     */
+    List<String> getDepartRoleUserIds(String departRoleId);
 
     /**
      * 移除部门角色的指定用户

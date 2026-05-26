@@ -3,9 +3,11 @@ package com.lawoffice.framework.config;
 import com.lawoffice.framework.result.BaseResult;
 import com.lawoffice.framework.exception.PermissionDeniedException;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.MessageSourceResolvable;
 import org.springframework.http.HttpStatus;
 import org.springframework.validation.BindException;
 import org.springframework.validation.FieldError;
+import org.springframework.web.method.annotation.HandlerMethodValidationException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.ResponseStatus;
@@ -73,6 +75,20 @@ public class GlobalExceptionHandler {
                 .map(ConstraintViolation::getMessage)
                 .collect(Collectors.joining(", "));
         log.warn("约束违反: {}", message);
+        return BaseResult.error(400, "参数错误: " + message);
+    }
+
+    /**
+     * 处理 Spring MVC 方法参数校验异常
+     * 返回 400 Bad Request
+     */
+    @ExceptionHandler(HandlerMethodValidationException.class)
+    @ResponseStatus(HttpStatus.BAD_REQUEST)
+    public BaseResult<Void> handleHandlerMethodValidationException(HandlerMethodValidationException e) {
+        String message = e.getAllErrors().stream()
+                .map(MessageSourceResolvable::getDefaultMessage)
+                .collect(Collectors.joining(", "));
+        log.warn("方法参数校验失败: {}", message);
         return BaseResult.error(400, "参数错误: " + message);
     }
 

@@ -1,6 +1,7 @@
 package com.lawoffice.system.entity;
 
 import com.alibaba.excel.annotation.ExcelProperty;
+import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableName;
 import com.lawoffice.framework.entity.BaseTenantEntity;
 import io.swagger.v3.oas.annotations.media.Schema;
@@ -28,4 +29,8 @@ public class DepartRole extends BaseTenantEntity {
     @ExcelProperty("描述")
     @Schema(description = "描述")
     private String description;
+
+    @TableField(exist = false)
+    @Schema(description = "是否部门默认角色")
+    private Boolean defaultRole;
 }

@@ -21,4 +21,7 @@ public class DepartRoleVO extends BaseVO {
 
     @Schema(description = "描述")
     private String description;
+
+    @Schema(description = "是否部门默认角色")
+    private Boolean defaultRole;
 }

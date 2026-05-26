@@ -24,6 +24,8 @@ const emit = defineEmits<{
   change: [pag: any, filters: any, sorter: any];
   delete: [record: DepartInfo];
   edit: [record: DepartInfo];
+  members: [record: DepartInfo];
+  roles: [record: DepartInfo];
 }>();
 
 const filterStateRef = toRef(props, 'activeFilters');
@@ -48,6 +50,7 @@ const toolbarButtons = computed(() => [
 
 <template>
   <BaseTable
+    class="depart-table"
     :columns="tableConfig.columns"
     :data-source="dataSource"
     :loading="loading"
@@ -59,3 +62,17 @@ const toolbarButtons = computed(() => [
     @change="(pag, filters, sorter) => $emit('change', pag, filters, sorter)"
   />
 </template>
+
+<style scoped>
+:deep(.depart-table .depart-action-cell) {
+  width: 260px !important;
+  min-width: 260px !important;
+  max-width: 260px !important;
+}
+
+:deep(.depart-table .depart-action-links) {
+  justify-content: center;
+  width: 100%;
+  white-space: nowrap;
+}
+</style>

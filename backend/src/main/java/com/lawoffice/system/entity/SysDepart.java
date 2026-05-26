@@ -2,17 +2,21 @@ package com.lawoffice.system.entity;
 
 import com.alibaba.excel.annotation.ExcelProperty;
 import com.alibaba.excel.annotation.ExcelIgnore;
+import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableName;
 import com.lawoffice.framework.entity.BaseTenantEntity;
+import com.lawoffice.framework.tree.TreeNode;
 import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
+
+import java.util.List;
 
 @Data
 @EqualsAndHashCode(callSuper = true)
 @TableName("sys_depart")
 @Schema(description = "组织机构")
-public class SysDepart extends BaseTenantEntity {
+public class SysDepart extends BaseTenantEntity implements TreeNode<SysDepart> {
 
     @ExcelProperty("父机构ID")
     @Schema(description = "父机构ID")
@@ -69,4 +73,9 @@ public class SysDepart extends BaseTenantEntity {
     @ExcelIgnore
     @Schema(description = "是否有叶子节点: 1是0否")
     private Boolean izLeaf;
+
+    @ExcelIgnore
+    @TableField(exist = false)
+    @Schema(description = "子部门列表")
+    private transient List<SysDepart> children;
 }

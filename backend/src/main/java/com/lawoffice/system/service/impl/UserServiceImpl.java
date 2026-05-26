@@ -9,6 +9,7 @@ import com.lawoffice.framework.dto.BasePageDTO;
 import com.lawoffice.framework.dto.RequestContext;
 import com.lawoffice.framework.result.BaseResult;
 import com.lawoffice.framework.service.impl.BaseServiceImpl;
+import com.lawoffice.system.constant.DepartRoleCodes;
 import com.lawoffice.system.vo.UserInfoVO;
 import com.lawoffice.system.entity.*;
 import com.lawoffice.system.mapper.*;
@@ -479,24 +480,27 @@ public class UserServiceImpl extends BaseServiceImpl<UserMapper, User, UserVO> i
         }
 
         userIds.forEach(this::forceLogoutUserById);
+        String deleteBy = resolveOperator(deleteDTO);
 
         LambdaQueryWrapper<UserRole> userRoleWrapper = new LambdaQueryWrapper<>();
         userRoleWrapper.in(UserRole::getUserId, userIds)
                 .eq(UserRole::getDeleteFlag, 0);
-        userRoleMapper.delete(userRoleWrapper);
+        softDeleteUserRoles(userRoleWrapper, deleteBy);
 
         LambdaQueryWrapper<UserDepart> userDepartWrapper = new LambdaQueryWrapper<>();
-        userDepartWrapper.in(UserDepart::getUserId, userIds);
-        userDepartMapper.delete(userDepartWrapper);
+        userDepartWrapper.in(UserDepart::getUserId, userIds)
+                .eq(UserDepart::getDeleteFlag, 0);
+        softDeleteUserDeparts(userDepartWrapper, deleteBy);
 
         LambdaQueryWrapper<DepartRoleUser> departRoleUserWrapper = new LambdaQueryWrapper<>();
-        departRoleUserWrapper.in(DepartRoleUser::getUserId, userIds);
-        departRoleUserMapper.delete(departRoleUserWrapper);
+        departRoleUserWrapper.in(DepartRoleUser::getUserId, userIds)
+                .eq(DepartRoleUser::getDeleteFlag, 0);
+        softDeleteDepartRoleUsers(departRoleUserWrapper, deleteBy);
 
         LambdaQueryWrapper<UserTenant> userTenantWrapper = new LambdaQueryWrapper<>();
         userTenantWrapper.in(UserTenant::getUserId, userIds)
                 .eq(UserTenant::getDeleteFlag, 0);
-        softDeleteUserTenants(userTenantWrapper, "system");
+        softDeleteUserTenants(userTenantWrapper, deleteBy);
     }
 
     @Override
@@ -637,15 +641,18 @@ public class UserServiceImpl extends BaseServiceImpl<UserMapper, User, UserVO> i
     @Transactional(rollbackFor = Exception.class)
     public void assignDeparts(String userId, List<String> departIds) {
         List<String> normalizedDepartIds = normalizeIds(departIds);
+        String deleteBy = "system";
 
         // 先删除用户现有的所有部门
         LambdaQueryWrapper<UserDepart> deleteWrapper = new LambdaQueryWrapper<>();
-        deleteWrapper.eq(UserDepart::getUserId, userId);
-        userDepartMapper.delete(deleteWrapper);
+        deleteWrapper.eq(UserDepart::getUserId, userId)
+                .eq(UserDepart::getDeleteFlag, 0);
+        softDeleteUserDeparts(deleteWrapper, deleteBy);
 
         LambdaQueryWrapper<DepartRoleUser> deleteRoleUserWrapper = new LambdaQueryWrapper<>();
-        deleteRoleUserWrapper.eq(DepartRoleUser::getUserId, userId);
-        departRoleUserMapper.delete(deleteRoleUserWrapper);
+        deleteRoleUserWrapper.eq(DepartRoleUser::getUserId, userId)
+                .eq(DepartRoleUser::getDeleteFlag, 0);
+        softDeleteDepartRoleUsers(deleteRoleUserWrapper, deleteBy);
 
         // 批量插入新的部门关联
         if (!normalizedDepartIds.isEmpty()) {
@@ -673,7 +680,8 @@ public class UserServiceImpl extends BaseServiceImpl<UserMapper, User, UserVO> i
     public List<SysDepart> getUserDeparts(String userId) {
         // 查询用户的部门ID列表
         LambdaQueryWrapper<UserDepart> wrapper = new LambdaQueryWrapper<>();
-        wrapper.eq(UserDepart::getUserId, userId);
+        wrapper.eq(UserDepart::getUserId, userId)
+                .eq(UserDepart::getDeleteFlag, 0);
         List<UserDepart> userDeparts = userDepartMapper.selectList(wrapper);
 
         if (userDeparts.isEmpty()) {
@@ -686,7 +694,8 @@ public class UserServiceImpl extends BaseServiceImpl<UserMapper, User, UserVO> i
             .collect(Collectors.toList());
 
         LambdaQueryWrapper<SysDepart> departWrapper = new LambdaQueryWrapper<>();
-        departWrapper.in(SysDepart::getId, departIds);
+        departWrapper.in(SysDepart::getId, departIds)
+                .eq(SysDepart::getDeleteFlag, 0);
         return sysDepartMapper.selectList(departWrapper);
     }
 
@@ -697,18 +706,21 @@ public class UserServiceImpl extends BaseServiceImpl<UserMapper, User, UserVO> i
         if (normalizedDepartIds.isEmpty()) {
             return;
         }
+        String deleteBy = "system";
 
         LambdaQueryWrapper<UserDepart> wrapper = new LambdaQueryWrapper<>();
         wrapper.eq(UserDepart::getUserId, userId)
-               .in(UserDepart::getDepId, normalizedDepartIds);
-        userDepartMapper.delete(wrapper);
+               .in(UserDepart::getDepId, normalizedDepartIds)
+               .eq(UserDepart::getDeleteFlag, 0);
+        softDeleteUserDeparts(wrapper, deleteBy);
 
         List<String> departRoleIds = getDepartRoleIds(normalizedDepartIds);
         if (!departRoleIds.isEmpty()) {
             LambdaQueryWrapper<DepartRoleUser> roleUserWrapper = new LambdaQueryWrapper<>();
             roleUserWrapper.eq(DepartRoleUser::getUserId, userId)
-                    .in(DepartRoleUser::getDroleId, departRoleIds);
-            departRoleUserMapper.delete(roleUserWrapper);
+                    .in(DepartRoleUser::getDroleId, departRoleIds)
+                    .eq(DepartRoleUser::getDeleteFlag, 0);
+            softDeleteDepartRoleUsers(roleUserWrapper, deleteBy);
         }
 
         log.info("移除用户部门成功，用户ID: {}, 移除部门数量: {}", userId, departIds.size());
@@ -1284,7 +1296,8 @@ public class UserServiceImpl extends BaseServiceImpl<UserMapper, User, UserVO> i
         }
 
         LambdaQueryWrapper<DepartRoleUser> roleUserWrapper = new LambdaQueryWrapper<>();
-        roleUserWrapper.eq(DepartRoleUser::getUserId, userId);
+        roleUserWrapper.eq(DepartRoleUser::getUserId, userId)
+                .eq(DepartRoleUser::getDeleteFlag, 0);
         List<String> roleIds = departRoleUserMapper.selectList(roleUserWrapper).stream()
                 .map(DepartRoleUser::getDroleId)
                 .filter(StringUtils::hasText)
@@ -1315,17 +1328,37 @@ public class UserServiceImpl extends BaseServiceImpl<UserMapper, User, UserVO> i
         }
 
         Set<String> departIdSet = new LinkedHashSet<>(normalizedDepartIds);
+        Map<String, String> defaultRoleCodeByDepartId = getDefaultRoleCodeByDepartId(normalizedDepartIds);
         LambdaQueryWrapper<DepartRole> wrapper = new LambdaQueryWrapper<>();
         wrapper.in(DepartRole::getDepartId, normalizedDepartIds)
                 .eq(DepartRole::getDeleteFlag, 0);
         return departRoleMapper.selectList(wrapper).stream()
                 .filter(role -> StringUtils.hasText(role.getDepartId()))
                 .filter(role -> departIdSet.contains(role.getDepartId()))
-                .filter(role -> role.getDepartId().equals(role.getRoleCode()))
+                .filter(role -> isDefaultDepartRole(role, defaultRoleCodeByDepartId.get(role.getDepartId())))
                 .map(DepartRole::getId)
                 .filter(StringUtils::hasText)
                 .distinct()
                 .collect(Collectors.toList());
+    }
+
+    private Map<String, String> getDefaultRoleCodeByDepartId(List<String> departIds) {
+        LambdaQueryWrapper<SysDepart> wrapper = new LambdaQueryWrapper<>();
+        wrapper.in(SysDepart::getId, departIds)
+                .eq(SysDepart::getDeleteFlag, 0);
+        return sysDepartMapper.selectList(wrapper).stream()
+                .filter(depart -> StringUtils.hasText(depart.getId()))
+                .filter(depart -> StringUtils.hasText(depart.getOrgCode()))
+                .collect(Collectors.toMap(
+                        SysDepart::getId,
+                        depart -> DepartRoleCodes.buildDefaultRoleCode(depart.getTenantId(), depart.getOrgCode()),
+                        (left, right) -> left
+                ));
+    }
+
+    private boolean isDefaultDepartRole(DepartRole role, String expectedRoleCode) {
+        return StringUtils.hasText(expectedRoleCode) && expectedRoleCode.equals(role.getRoleCode())
+                || role.getDepartId().equals(role.getRoleCode());
     }
 
     /**
@@ -1751,6 +1784,24 @@ public class UserServiceImpl extends BaseServiceImpl<UserMapper, User, UserVO> i
         UserRole userRole = new UserRole();
         EntityFillUtils.fillDeleteFields(userRole, deleteBy);
         userRoleMapper.update(userRole, wrapper);
+    }
+
+    /**
+     * 按条件逻辑删除用户-部门关系。
+     */
+    private void softDeleteUserDeparts(LambdaQueryWrapper<UserDepart> wrapper, String deleteBy) {
+        UserDepart userDepart = new UserDepart();
+        EntityFillUtils.fillDeleteFields(userDepart, deleteBy);
+        userDepartMapper.update(userDepart, wrapper);
+    }
+
+    /**
+     * 按条件逻辑删除部门角色-用户关系。
+     */
+    private void softDeleteDepartRoleUsers(LambdaQueryWrapper<DepartRoleUser> wrapper, String deleteBy) {
+        DepartRoleUser departRoleUser = new DepartRoleUser();
+        EntityFillUtils.fillDeleteFields(departRoleUser, deleteBy);
+        departRoleUserMapper.update(departRoleUser, wrapper);
     }
 
     /**
