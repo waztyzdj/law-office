@@ -13,6 +13,33 @@ import { $t } from '#/locales';
 
 import { generateAccess } from './access';
 
+async function ensureAccessReady(router: Router) {
+  const accessStore = useAccessStore();
+  const userStore = useUserStore();
+  const authStore = useAuthStore();
+
+  if (accessStore.isAccessChecked) {
+    return userStore.userInfo || (await authStore.fetchUserInfo());
+  }
+
+  const userInfo = userStore.userInfo || (await authStore.fetchUserInfo());
+  const userRoles = userInfo.roles ?? [];
+  const accessCodes = (userInfo as any).permissions || [];
+  accessStore.setAccessCodes(accessCodes);
+
+  const { accessibleMenus, accessibleRoutes } = await generateAccess({
+    roles: userRoles,
+    router,
+    routes: accessRoutes,
+  });
+
+  accessStore.setAccessMenus(accessibleMenus);
+  accessStore.setAccessRoutes(accessibleRoutes);
+  accessStore.setIsAccessChecked(true);
+
+  return userInfo;
+}
+
 /**
  * 通用守卫配置
  * @param router
@@ -51,7 +78,6 @@ function setupAccessGuard(router: Router) {
   router.beforeEach(async (to, from) => {
     const accessStore = useAccessStore();
     const userStore = useUserStore();
-    const authStore = useAuthStore();
 
     // 基本路由，这些路由不需要进入权限拦截
     if (coreRouteNames.includes(to.name as string)) {
@@ -61,6 +87,9 @@ function setupAccessGuard(router: Router) {
             userStore.userInfo?.homePath ||
             preferences.app.defaultHomePath,
         );
+      }
+      if (accessStore.accessToken) {
+        await ensureAccessReady(router);
       }
       return true;
     }
@@ -93,28 +122,7 @@ function setupAccessGuard(router: Router) {
       return true;
     }
 
-    // 生成路由表
-    // 当前登录用户拥有的角色标识列表
-    const userInfo = userStore.userInfo || (await authStore.fetchUserInfo());
-
-    const userRoles = userInfo.roles ?? [];
-
-    // 从用户信息中获取权限码（后端在 /api/user/info 中返回 permissions 字段）
-    const accessCodes = (userInfo as any).permissions || [];
-    accessStore.setAccessCodes(accessCodes);
-
-    // 生成菜单和路由
-    const { accessibleMenus, accessibleRoutes } = await generateAccess({
-      roles: userRoles,
-      router,
-      // 则会在菜单中显示，但是访问会被重定向到403
-      routes: accessRoutes,
-    });
-
-    // 保存菜单信息和路由信息
-    accessStore.setAccessMenus(accessibleMenus);
-    accessStore.setAccessRoutes(accessibleRoutes);
-    accessStore.setIsAccessChecked(true);
+    const userInfo = await ensureAccessReady(router);
     
     // 显示登录成功通知
     if (userInfo?.realName) {

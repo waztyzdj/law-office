@@ -17,6 +17,9 @@ public class UserInfoVO {
     
     @Schema(description = "真实姓名")
     private String realName;
+
+    @Schema(description = "头像地址")
+    private String avatar;
     
     @Schema(description = "角色列表（用于权限控制）")
     private List<String> roles;

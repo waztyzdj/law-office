@@ -99,10 +99,6 @@ public class AuthController {
                 return BaseResult.error(400, "旧密码和新密码不能为空");
             }
 
-            if (newPassword.length() < 6) {
-                return BaseResult.error(400, "新密码长度不能小于6位");
-            }
-
             // 验证两次输入的新密码是否一致
             if (!StringUtils.hasText(confirmPassword) || !newPassword.equals(confirmPassword)) {
                 return BaseResult.error(400, "两次输入的新密码不一致");

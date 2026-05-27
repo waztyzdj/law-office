@@ -1,12 +1,22 @@
 package com.lawoffice.system.controller;
 
 import com.lawoffice.framework.result.BaseResult;
+import com.lawoffice.framework.annotation.AutoLog;
 import com.lawoffice.framework.controller.BaseController;
 import com.lawoffice.framework.annotation.ModuleInfo;
+import com.lawoffice.framework.enums.LogType;
+import com.lawoffice.framework.enums.OperateType;
+import com.lawoffice.framework.req.BasePageReq;
+import com.lawoffice.framework.vo.PageVO;
 import com.lawoffice.system.annotation.RequiresPermission;
 import com.lawoffice.system.req.AssignIdsReq;
+import com.lawoffice.system.req.CurrentUserProfileReq;
 import com.lawoffice.system.req.SwitchTenantReq;
 import com.lawoffice.system.entity.Tenant;
+import com.lawoffice.system.vo.CurrentUserLogVO;
+import com.lawoffice.system.vo.CurrentUserOrganizationVO;
+import com.lawoffice.system.vo.CurrentUserProfileVO;
+import com.lawoffice.system.vo.CurrentUserTenantVO;
 import com.lawoffice.system.vo.UserInfoVO;
 import com.lawoffice.system.entity.User;
 import com.lawoffice.system.req.UserReq;
@@ -22,7 +32,9 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
 import java.util.Map;
@@ -93,6 +105,56 @@ public class UserController extends BaseController<IUserService, User, UserVO, U
         String username = (String) request.getAttribute("username");
         String token = (String) request.getAttribute("token");
         return BaseResult.success(baseService.switchTenant(username, req.getTenantId(), token));
+    }
+
+    @GetMapping("/profile")
+    @Operation(summary = "获取个人中心基础资料", description = "获取当前登录用户可查看和可编辑的个人资料")
+    public BaseResult<CurrentUserProfileVO> getCurrentUserProfile(HttpServletRequest request) {
+        String username = (String) request.getAttribute("username");
+        return BaseResult.success(baseService.getCurrentUserProfile(username));
+    }
+
+    @PostMapping("/profile")
+    @Operation(summary = "保存个人中心基础资料", description = "保存当前登录用户的姓名、头像和联系方式")
+    @AutoLog(value = "修改个人资料", logType = LogType.OPERATION, operateType = OperateType.SAVE)
+    public BaseResult<CurrentUserProfileVO> updateCurrentUserProfile(
+            @Valid @RequestBody CurrentUserProfileReq req,
+            HttpServletRequest request) {
+        String username = (String) request.getAttribute("username");
+        return BaseResult.success(baseService.updateCurrentUserProfile(username, req));
+    }
+
+    @PostMapping("/profile/avatar")
+    @Operation(summary = "上传个人头像", description = "上传当前登录用户头像图片并保存头像地址")
+    @AutoLog(value = "上传个人头像", logType = LogType.OPERATION, operateType = OperateType.SAVE)
+    public BaseResult<CurrentUserProfileVO> uploadCurrentUserAvatar(
+            @RequestParam("file") MultipartFile file,
+            HttpServletRequest request) {
+        String username = (String) request.getAttribute("username");
+        return BaseResult.success(baseService.uploadCurrentUserAvatar(username, file));
+    }
+
+    @GetMapping("/profile/organization")
+    @Operation(summary = "获取个人组织权限", description = "获取当前登录用户所属部门、角色和权限摘要")
+    public BaseResult<CurrentUserOrganizationVO> getCurrentUserOrganization(HttpServletRequest request) {
+        String username = (String) request.getAttribute("username");
+        return BaseResult.success(baseService.getCurrentUserOrganization(username));
+    }
+
+    @GetMapping("/profile/tenants")
+    @Operation(summary = "获取个人租户列表", description = "获取当前登录用户可切换租户并标记当前租户")
+    public BaseResult<List<CurrentUserTenantVO>> getCurrentUserTenantOptions(HttpServletRequest request) {
+        String username = (String) request.getAttribute("username");
+        return BaseResult.success(baseService.getCurrentUserTenantOptions(username));
+    }
+
+    @PostMapping("/profile/logs/page")
+    @Operation(summary = "分页查询个人日志", description = "分页查询当前登录用户的登录和操作日志")
+    public BaseResult<PageVO<CurrentUserLogVO>> pageCurrentUserLogs(
+            @RequestBody(required = false) BasePageReq req,
+            HttpServletRequest request) {
+        String username = (String) request.getAttribute("username");
+        return BaseResult.success(baseService.pageCurrentUserLogs(username, req));
     }
     
     // 示例：添加权限控制的方法（需要在实际方法上添加注解）

@@ -1,13 +1,21 @@
 package com.lawoffice.system.service;
 
 import com.lawoffice.framework.service.IBaseService;
+import com.lawoffice.framework.req.BasePageReq;
+import com.lawoffice.framework.vo.PageVO;
 import com.lawoffice.system.entity.Permission;
 import com.lawoffice.system.entity.Role;
 import com.lawoffice.system.entity.SysDepart;
 import com.lawoffice.system.entity.Tenant;
 import com.lawoffice.system.entity.User;
+import com.lawoffice.system.req.CurrentUserProfileReq;
+import com.lawoffice.system.vo.CurrentUserLogVO;
+import com.lawoffice.system.vo.CurrentUserOrganizationVO;
+import com.lawoffice.system.vo.CurrentUserProfileVO;
+import com.lawoffice.system.vo.CurrentUserTenantVO;
 import com.lawoffice.system.vo.UserInfoVO;
 import com.lawoffice.system.vo.UserVO;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
 
@@ -232,4 +240,55 @@ public interface IUserService extends IBaseService<User, UserVO> {
      * @return 用户详情，包含角色、权限、菜单和当前租户
      */
     UserInfoVO getCurrentUserDetailInfo(String username);
+
+    /**
+     * 查询当前用户个人中心基础资料。
+     *
+     * @param username 用户名
+     * @return 当前用户个人资料
+     */
+    CurrentUserProfileVO getCurrentUserProfile(String username);
+
+    /**
+     * 修改当前用户个人中心基础资料，仅允许修改非权限边界字段。
+     *
+     * @param username 用户名
+     * @param req 个人资料修改请求
+     * @return 修改后的当前用户个人资料
+     */
+    CurrentUserProfileVO updateCurrentUserProfile(String username, CurrentUserProfileReq req);
+
+    /**
+     * 上传当前用户头像并保存头像地址。
+     *
+     * @param username 用户名
+     * @param file 头像图片文件
+     * @return 修改后的当前用户个人资料
+     */
+    CurrentUserProfileVO uploadCurrentUserAvatar(String username, MultipartFile file);
+
+    /**
+     * 查询当前用户组织、角色和权限摘要。
+     *
+     * @param username 用户名
+     * @return 组织权限信息
+     */
+    CurrentUserOrganizationVO getCurrentUserOrganization(String username);
+
+    /**
+     * 查询当前用户可切换租户并标记当前租户。
+     *
+     * @param username 用户名
+     * @return 租户列表
+     */
+    List<CurrentUserTenantVO> getCurrentUserTenantOptions(String username);
+
+    /**
+     * 分页查询当前用户登录和操作日志，仅返回当前登录用户自己的日志。
+     *
+     * @param username 用户名
+     * @param req 分页、筛选和排序请求
+     * @return 当前用户日志分页结果
+     */
+    PageVO<CurrentUserLogVO> pageCurrentUserLogs(String username, BasePageReq req);
 }

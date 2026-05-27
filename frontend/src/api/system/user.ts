@@ -35,6 +35,73 @@ export interface SwitchTenantResult {
   tenantName?: string;
 }
 
+export interface CurrentUserProfile {
+  id?: string;
+  username?: string;
+  realname?: string;
+  avatar?: string;
+  email?: string;
+  phone?: string;
+  telephone?: string;
+  workNo?: string;
+  post?: string;
+  status?: number;
+  tenantId?: string;
+  tenantName?: string;
+}
+
+export interface CurrentUserOrganization {
+  departs: Array<{
+    id?: string;
+    departName?: string;
+    orgCode?: string;
+    orgType?: string;
+  }>;
+  roles: Array<{
+    id?: string;
+    roleCode?: string;
+    roleName?: string;
+  }>;
+  departRoles: Array<{
+    id?: string;
+    roleCode?: string;
+    roleName?: string;
+    defaultRole?: boolean;
+  }>;
+  menuPermissionCount: number;
+  menuPermissions: CurrentUserPermission[];
+}
+
+export interface CurrentUserPermission {
+  children?: CurrentUserPermission[];
+  id?: string;
+  menuType?: number;
+  name?: string;
+  parentId?: string;
+}
+
+export interface CurrentUserTenant {
+  id?: string;
+  name?: string;
+  status?: number;
+  beginDate?: string;
+  endDate?: string;
+  current?: boolean;
+}
+
+export interface CurrentUserLog {
+  id?: string;
+  logType?: number;
+  logContent?: string;
+  operateType?: number;
+  ip?: string;
+  requestType?: string;
+  requestUrl?: string;
+  clientType?: string;
+  costTime?: number;
+  createTime?: string;
+}
+
 // 创建并导出用户管理的 CRUD API 实例
 export const userApi = new BaseApi('/user');
 
@@ -59,6 +126,42 @@ export const listCurrentUserTenants = () =>
 
 export const switchTenant = (tenantId: string) =>
   requestClient.post<SwitchTenantResult>('/user/switchTenant', { tenantId });
+
+export const getCurrentUserProfile = () =>
+  requestClient.get<CurrentUserProfile>('/user/profile');
+
+export const updateCurrentUserProfile = (data: CurrentUserProfile) =>
+  requestClient.post<CurrentUserProfile>('/user/profile', data);
+
+export const uploadCurrentUserAvatar = (file: File) => {
+  const formData = new FormData();
+  formData.append('file', file);
+  return requestClient.post<CurrentUserProfile>('/user/profile/avatar', formData, {
+    headers: {
+      'Content-Type': 'multipart/form-data',
+    },
+  });
+};
+
+export const getCurrentUserOrganization = () =>
+  requestClient.get<CurrentUserOrganization>('/user/profile/organization');
+
+export const getCurrentUserTenantOptions = () =>
+  requestClient.get<CurrentUserTenant[]>('/user/profile/tenants');
+
+export const pageCurrentUserLogs = (params: BasePageReq) =>
+  requestClient.post<{
+    pageNum: number;
+    pageSize: number;
+    records: CurrentUserLog[];
+    total: number;
+  }>('/user/profile/logs/page', params);
+
+export const changeCurrentUserPassword = (data: {
+  confirmPassword: string;
+  newPassword: string;
+  oldPassword: string;
+}) => requestClient.post<void>('/auth/changePassword', data);
 
 /**
  * 用户 CRUD API 便捷方法工厂

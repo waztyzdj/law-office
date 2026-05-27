@@ -49,6 +49,17 @@ public class MinioUtils {
      * @return 文件访问路径
      */
     public String uploadFile(MultipartFile file) {
+        String objectName = uploadFileAndReturnObjectName(file);
+        return getObjectUrl(objectName);
+    }
+
+    /**
+     * 上传文件并返回服务端对象名，用于数据库持久化。
+     *
+     * @param file 文件
+     * @return MinIO 对象名
+     */
+    public String uploadFileAndReturnObjectName(MultipartFile file) {
         try {
             // 确保存储桶存在
             ensureBucketExists();
@@ -67,7 +78,7 @@ public class MinioUtils {
             );
 
             log.info("文件上传成功: {}", objectName);
-            return getObjectUrl(objectName);
+            return objectName;
         } catch (Exception e) {
             log.error("文件上传失败", e);
             throw new RuntimeException("文件上传失败: " + e.getMessage());
@@ -150,8 +161,7 @@ public class MinioUtils {
                             .build()
             );
             
-            // 如果使用公开访问，可以直接返回完整路径
-            return minioConfig.getEndpoint() + "/" + bucketName + "/" + actualObjectName;
+            return url;
         } catch (Exception e) {
             log.error("获取文件URL失败", e);
             throw new RuntimeException("获取文件URL失败: " + e.getMessage());

@@ -3,19 +3,35 @@ package com.lawoffice.system.service.impl;
 import cn.hutool.core.bean.BeanUtil;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.lawoffice.framework.config.TenantContextHolder;
 import com.lawoffice.framework.dto.BaseDTO;
 import com.lawoffice.framework.dto.BasePageDTO;
 import com.lawoffice.framework.dto.RequestContext;
+import com.lawoffice.framework.entity.SysLog;
+import com.lawoffice.framework.mapper.LogMapper;
+import com.lawoffice.framework.req.BasePageReq;
 import com.lawoffice.framework.result.BaseResult;
 import com.lawoffice.framework.service.impl.BaseServiceImpl;
+import com.lawoffice.framework.util.QueryWrapperBuilderUtils;
+import com.lawoffice.framework.vo.PageVO;
 import com.lawoffice.system.constant.DepartRoleCodes;
+import com.lawoffice.system.req.CurrentUserProfileReq;
+import com.lawoffice.system.vo.CurrentUserLogVO;
+import com.lawoffice.system.vo.CurrentUserOrganizationVO;
+import com.lawoffice.system.vo.CurrentUserPermissionSummaryVO;
+import com.lawoffice.system.vo.CurrentUserProfileVO;
+import com.lawoffice.system.vo.CurrentUserTenantVO;
+import com.lawoffice.system.vo.DepartRoleVO;
+import com.lawoffice.system.vo.RoleVO;
+import com.lawoffice.system.vo.SysDepartVO;
 import com.lawoffice.system.vo.UserInfoVO;
 import com.lawoffice.system.entity.*;
 import com.lawoffice.system.mapper.*;
 import com.lawoffice.system.service.IUserService;
 import com.lawoffice.system.vo.UserVO;
 import com.lawoffice.util.EntityFillUtils;
+import com.lawoffice.util.MinioUtils;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
@@ -23,6 +39,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.interceptor.TransactionAspectSupport;
 import org.springframework.util.StringUtils;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -45,6 +62,10 @@ public class UserServiceImpl extends BaseServiceImpl<UserMapper, User, UserVO> i
     private static final String EMAIL_PATTERN = "^[A-Za-z0-9+_.-]+@[A-Za-z0-9.-]+$";
     private static final String TELEPHONE_PATTERN = "^(?:\\d{3,4}-?)?\\d{7,8}$";
     private static final String ID_CARD_PATTERN = "(^\\d{15}$)|(^\\d{17}[\\dXx]$)";
+    private static final Set<String> CURRENT_USER_LOG_QUERY_FIELDS = Set.of(
+            "logType", "logContent", "operateType", "ip", "requestUrl",
+            "requestType", "costTime", "clientType", "createTime"
+    );
 
     @Autowired
     private UserRoleMapper userRoleMapper;
@@ -78,6 +99,12 @@ public class UserServiceImpl extends BaseServiceImpl<UserMapper, User, UserVO> i
 
     @Autowired
     private PermissionMapper permissionMapper;
+
+    @Autowired
+    private LogMapper logMapper;
+
+    @Autowired
+    private MinioUtils minioUtils;
     
     @Autowired
     private UserMapper userMapper;
@@ -332,6 +359,14 @@ public class UserServiceImpl extends BaseServiceImpl<UserMapper, User, UserVO> i
         if (baseMapper.selectCount(wrapper) > 0) {
             throw new IllegalArgumentException(message);
         }
+    }
+
+    /**
+     * 个人中心只允许当前用户维护联系方式和展示信息，仍复用用户全局唯一约束。
+     */
+    private void validateCurrentUserProfileUnique(String userId, CurrentUserProfileReq req) {
+        validateUniqueField(User::getPhone, req.getPhone(), userId, "手机号已被使用");
+        validateUniqueField(User::getEmail, req.getEmail(), userId, "邮箱已被使用");
     }
 
     /**
@@ -1050,6 +1085,10 @@ public class UserServiceImpl extends BaseServiceImpl<UserMapper, User, UserVO> i
         if (!verifyPassword(oldPassword, user.getPassword())) {
             throw new RuntimeException("旧密码错误");
         }
+
+        if (!StringUtils.hasText(newPassword) || !newPassword.matches(PASSWORD_PATTERN)) {
+            throw new IllegalArgumentException("密码需为8-20位，包含大小写字母、数字和特殊字符");
+        }
         
         // 3. 重置密码
         resetPassword(user.getId(), newPassword);
@@ -1087,6 +1126,7 @@ public class UserServiceImpl extends BaseServiceImpl<UserMapper, User, UserVO> i
         userInfoVO.setUserId(user.getId());
         userInfoVO.setUsername(user.getUsername());
         userInfoVO.setRealName(user.getRealname());
+        userInfoVO.setAvatar(buildAvatarDisplayUrl(user.getAvatar()));
         userInfoVO.setPermissions(permissionCodes);
         userInfoVO.setRoles(roleCodes);
         userInfoVO.setTenantId(currentTenantId);
@@ -1099,6 +1139,137 @@ public class UserServiceImpl extends BaseServiceImpl<UserMapper, User, UserVO> i
         
         log.info("获取用户详细信息成功：{}, 权限数量: {}, 角色数量: {}", username, permissionCodes.size(), roleCodes.size());
         return userInfoVO;
+    }
+
+    @Override
+    public CurrentUserProfileVO getCurrentUserProfile(String username) {
+        User user = getEnabledUserByUsername(username);
+        return buildCurrentUserProfile(user);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public CurrentUserProfileVO updateCurrentUserProfile(String username, CurrentUserProfileReq req) {
+        User user = getEnabledUserByUsername(username);
+        CurrentUserProfileReq normalizedReq = normalizeCurrentUserProfileReq(req);
+        validateCurrentUserProfileUnique(user.getId(), normalizedReq);
+
+        User update = new User();
+        update.setId(user.getId());
+        update.setRealname(normalizedReq.getRealname());
+        update.setEmail(normalizedReq.getEmail());
+        update.setPhone(normalizedReq.getPhone());
+        update.setTelephone(normalizedReq.getTelephone());
+        update.setPost(normalizedReq.getPost());
+        update.setUpdateBy(username);
+        update.setUpdateTime(java.time.LocalDateTime.now());
+        baseMapper.updateById(update);
+
+        return getCurrentUserProfile(username);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public CurrentUserProfileVO uploadCurrentUserAvatar(String username, MultipartFile file) {
+        User user = getEnabledUserByUsername(username);
+        validateAvatarFile(file);
+        String avatarObjectName;
+        try {
+            avatarObjectName = minioUtils.uploadFileAndReturnObjectName(file);
+        } catch (RuntimeException e) {
+            throw new IllegalArgumentException("头像上传服务暂不可用，请检查文件服务配置");
+        }
+
+        User update = new User();
+        update.setId(user.getId());
+        update.setAvatar(avatarObjectName);
+        update.setUpdateBy(username);
+        update.setUpdateTime(java.time.LocalDateTime.now());
+        baseMapper.updateById(update);
+        return getCurrentUserProfile(username);
+    }
+
+    @Override
+    public CurrentUserOrganizationVO getCurrentUserOrganization(String username) {
+        User user = getEnabledUserByUsername(username);
+        CurrentUserOrganizationVO vo = new CurrentUserOrganizationVO();
+        vo.setDeparts(BeanUtil.copyToList(getUserDeparts(user.getId()), SysDepartVO.class));
+        vo.setRoles(BeanUtil.copyToList(getUserRoles(user.getId()), RoleVO.class));
+        vo.setDepartRoles(BeanUtil.copyToList(getUserDepartRoles(user.getId()), DepartRoleVO.class));
+        List<CurrentUserPermissionSummaryVO> menuPermissions = getUserMenuPermissionSummaries(user.getId(), TenantContextHolder.getCurrentTenantId());
+        vo.setMenuPermissions(menuPermissions);
+        vo.setMenuPermissionCount(countCurrentUserPermissionNodes(menuPermissions));
+        return vo;
+    }
+
+    @Override
+    public List<CurrentUserTenantVO> getCurrentUserTenantOptions(String username) {
+        List<Tenant> tenants = getCurrentUserTenants(username);
+        String currentTenantId = TenantContextHolder.getCurrentTenantId();
+        return tenants.stream()
+                .map(tenant -> {
+                    CurrentUserTenantVO vo = BeanUtil.copyProperties(tenant, CurrentUserTenantVO.class);
+                    vo.setCurrent(StringUtils.hasText(currentTenantId) && currentTenantId.equals(tenant.getId()));
+                    return vo;
+                })
+                .collect(Collectors.toList());
+    }
+
+    @Override
+    public PageVO<CurrentUserLogVO> pageCurrentUserLogs(String username, BasePageReq req) {
+        if (!StringUtils.hasText(username)) {
+            throw new IllegalArgumentException("未登录或登录已过期");
+        }
+
+        int pageNum = req == null ? 1 : Math.max(req.getPageNum(), 1);
+        int pageSize = req == null ? 10 : Math.max(req.getPageSize(), 1);
+        validateCurrentUserLogQuery(req);
+        QueryWrapper<SysLog> wrapper = req == null
+                ? new QueryWrapper<>()
+                : QueryWrapperBuilderUtils.build(req);
+        wrapper.eq("delete_flag", 0)
+                .eq("username", username);
+
+        if (req == null || !StringUtils.hasText(req.getSortField())) {
+            wrapper.orderByDesc("create_time");
+        }
+
+        Page<SysLog> page = new Page<>(pageNum, pageSize);
+        Page<SysLog> resultPage = logMapper.selectPage(page, wrapper);
+        List<CurrentUserLogVO> records = BeanUtil.copyToList(resultPage.getRecords(), CurrentUserLogVO.class);
+        return new PageVO<>(records, resultPage.getTotal(), resultPage.getCurrent(), resultPage.getSize());
+    }
+
+    /**
+     * 个人日志接口只能筛选和排序允许展示的字段，避免通过个人中心探测系统日志敏感列。
+     */
+    private void validateCurrentUserLogQuery(BasePageReq req) {
+        if (req == null) {
+            return;
+        }
+
+        if (StringUtils.hasText(req.getSortField())) {
+            for (String sortField : req.getSortField().split(",")) {
+                if (!CURRENT_USER_LOG_QUERY_FIELDS.contains(sortField.trim())) {
+                    throw new IllegalArgumentException("不支持的日志排序字段");
+                }
+            }
+        }
+
+        if (req.getQueryParams() == null || req.getQueryParams().isEmpty()) {
+            return;
+        }
+
+        for (String queryKey : req.getQueryParams().keySet()) {
+            String fieldName = queryKey;
+            int lastUnderscore = queryKey.lastIndexOf('_');
+            if (lastUnderscore > 0) {
+                fieldName = queryKey.substring(0, lastUnderscore);
+            }
+            if (!CURRENT_USER_LOG_QUERY_FIELDS.contains(fieldName)) {
+                throw new IllegalArgumentException("不支持的日志筛选字段");
+            }
+        }
     }
 
     /**
@@ -1184,6 +1355,52 @@ public class UserServiceImpl extends BaseServiceImpl<UserMapper, User, UserVO> i
     }
 
     /**
+     * 查询当前租户下已授权的菜单和权限点树，仅返回中文名称，不暴露权限编码。
+     */
+    private List<CurrentUserPermissionSummaryVO> getUserMenuPermissionSummaries(String userId, String tenantId) {
+        Map<String, CurrentUserPermissionSummaryVO> nodeMap = getUserPermissionsInTenant(userId, tenantId).stream()
+                .filter(permission -> StringUtils.hasText(permission.getId()))
+                .filter(permission -> StringUtils.hasText(permission.getName()))
+                .collect(Collectors.toMap(
+                        Permission::getId,
+                        permission -> {
+                            CurrentUserPermissionSummaryVO vo = new CurrentUserPermissionSummaryVO();
+                            vo.setId(permission.getId());
+                            vo.setParentId(permission.getParentId());
+                            vo.setName(permission.getName());
+                            vo.setMenuType(permission.getMenuType());
+                            return vo;
+                        },
+                        (left, right) -> left,
+                        java.util.LinkedHashMap::new
+                ));
+        List<CurrentUserPermissionSummaryVO> roots = new ArrayList<>();
+
+        nodeMap.values().forEach(node -> {
+            CurrentUserPermissionSummaryVO parent = nodeMap.get(node.getParentId());
+            if (parent == null) {
+                roots.add(node);
+            } else {
+                parent.getChildren().add(node);
+            }
+        });
+        return roots;
+    }
+
+    /**
+     * 递归统计当前用户已授权的菜单和权限点数量，树形返回时不能只统计根节点。
+     */
+    private int countCurrentUserPermissionNodes(List<CurrentUserPermissionSummaryVO> permissions) {
+        if (permissions == null || permissions.isEmpty()) {
+            return 0;
+        }
+
+        return permissions.stream()
+                .mapToInt(permission -> 1 + countCurrentUserPermissionNodes(permission.getChildren()))
+                .sum();
+    }
+
+    /**
      * 查询用户在指定租户下最终生效的权限对象。
      */
     private List<Permission> getUserPermissionsInTenant(String userId, String tenantId) {
@@ -1211,6 +1428,21 @@ public class UserServiceImpl extends BaseServiceImpl<UserMapper, User, UserVO> i
             roleCodes.addAll(runWithTenant("0", () -> getUserRoleCodes(userId)));
         }
         return new ArrayList<>(roleCodes);
+    }
+
+    /**
+     * 查询当前用户通过有效部门角色获得的角色列表。
+     */
+    private List<DepartRole> getUserDepartRoles(String userId) {
+        List<String> departRoleIds = getUserDepartRoleIds(userId);
+        if (departRoleIds.isEmpty()) {
+            return new ArrayList<>();
+        }
+
+        LambdaQueryWrapper<DepartRole> wrapper = new LambdaQueryWrapper<>();
+        wrapper.in(DepartRole::getId, departRoleIds)
+                .eq(DepartRole::getDeleteFlag, 0);
+        return departRoleMapper.selectList(wrapper);
     }
 
     /**
@@ -1865,6 +2097,84 @@ public class UserServiceImpl extends BaseServiceImpl<UserMapper, User, UserVO> i
             return null;
         }
         return tenant;
+    }
+
+    /**
+     * 按用户名查询当前登录的启用用户。
+     */
+    private User getEnabledUserByUsername(String username) {
+        if (!StringUtils.hasText(username)) {
+            throw new IllegalArgumentException("未登录或登录已过期");
+        }
+
+        LambdaQueryWrapper<User> wrapper = new LambdaQueryWrapper<>();
+        wrapper.eq(User::getUsername, username)
+                .eq(User::getDeleteFlag, 0)
+                .last("LIMIT 1");
+        User user = userMapper.selectOne(wrapper);
+        if (user == null || user.getStatus() == null || user.getStatus() != 1) {
+            throw new IllegalArgumentException("用户不存在或已被冻结");
+        }
+        return user;
+    }
+
+    /**
+     * 构建个人中心基础资料，并补齐当前租户名称。
+     */
+    private CurrentUserProfileVO buildCurrentUserProfile(User user) {
+        CurrentUserProfileVO vo = BeanUtil.copyProperties(user, CurrentUserProfileVO.class);
+        vo.setAvatar(buildAvatarDisplayUrl(user.getAvatar()));
+        String currentTenantId = TenantContextHolder.getCurrentTenantId();
+        vo.setTenantId(currentTenantId);
+        Tenant tenant = getEnabledTenantById(currentTenantId);
+        if (tenant != null) {
+            vo.setTenantName(tenant.getName());
+        }
+        return vo;
+    }
+
+    /**
+     * 清洗个人资料可编辑字段，避免空白字符串绕过唯一性校验。
+     */
+    private CurrentUserProfileReq normalizeCurrentUserProfileReq(CurrentUserProfileReq req) {
+        CurrentUserProfileReq normalized = req == null ? new CurrentUserProfileReq() : req;
+        normalized.setRealname(trimToNull(normalized.getRealname()));
+        normalized.setEmail(trimToNull(normalized.getEmail()));
+        normalized.setPhone(trimToNull(normalized.getPhone()));
+        normalized.setTelephone(trimToNull(normalized.getTelephone()));
+        normalized.setPost(trimToNull(normalized.getPost()));
+        return normalized;
+    }
+
+    /**
+     * 头像字段持久化 MinIO 对象名；返回前端时转换为可浏览器访问的预签名 URL。
+     */
+    private String buildAvatarDisplayUrl(String avatar) {
+        if (!StringUtils.hasText(avatar)) {
+            return avatar;
+        }
+        try {
+            return minioUtils.getObjectUrl(avatar);
+        } catch (RuntimeException e) {
+            log.warn("生成头像访问地址失败: {}", e.getMessage());
+            return avatar;
+        }
+    }
+
+    /**
+     * 头像上传只允许常见图片格式，并限制大小，避免把个人中心变成任意文件上传入口。
+     */
+    private void validateAvatarFile(MultipartFile file) {
+        if (file == null || file.isEmpty()) {
+            throw new IllegalArgumentException("头像文件不能为空");
+        }
+        if (file.getSize() > 2 * 1024 * 1024L) {
+            throw new IllegalArgumentException("头像文件不能超过2MB");
+        }
+        String contentType = file.getContentType();
+        if (!StringUtils.hasText(contentType) || !contentType.startsWith("image/")) {
+            throw new IllegalArgumentException("仅支持上传图片文件");
+        }
     }
 
     /**
