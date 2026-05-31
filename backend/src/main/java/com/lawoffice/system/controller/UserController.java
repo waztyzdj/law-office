@@ -148,6 +148,13 @@ public class UserController extends BaseController<IUserService, User, UserVO, U
         return BaseResult.success(baseService.getCurrentUserTenantOptions(username));
     }
 
+    @GetMapping("/profile/tenant-users")
+    @Operation(summary = "获取当前租户用户列表", description = "获取当前登录租户下可接收站内消息的用户列表")
+    public BaseResult<List<UserVO>> getCurrentTenantUsers(HttpServletRequest request) {
+        String username = (String) request.getAttribute("username");
+        return BaseResult.success(baseService.getCurrentTenantUsers(username));
+    }
+
     @PostMapping("/profile/logs/page")
     @Operation(summary = "分页查询个人日志", description = "分页查询当前登录用户的登录和操作日志")
     public BaseResult<PageVO<CurrentUserLogVO>> pageCurrentUserLogs(

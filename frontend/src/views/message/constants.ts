@@ -1,0 +1,46 @@
+import type { SelectOption } from '#/composables/Table';
+
+export const messageTypeOptions: SelectOption[] = [
+  { color: 'blue', label: '普通消息', value: 1 },
+  { color: 'cyan', label: '通知公告', value: 2 },
+  { color: 'purple', label: '待办提醒', value: 3 },
+  { color: 'geekblue', label: '文件消息', value: 4 },
+  { color: 'default', label: '系统消息', value: 9 },
+] as SelectOption[];
+
+export const priorityOptions: SelectOption[] = [
+  { color: 'default', label: '普通', value: 1 },
+  { color: 'orange', label: '重要', value: 2 },
+  { color: 'red', label: '紧急', value: 3 },
+] as SelectOption[];
+
+export const readStatusOptions: SelectOption[] = [
+  { color: 'orange', label: '未读', value: 0 },
+  { color: 'green', label: '已读', value: 1 },
+] as SelectOption[];
+
+export const sendStatusOptions: SelectOption[] = [
+  { color: 'default', label: '草稿', value: 0 },
+  { color: 'green', label: '已发送', value: 1 },
+  { color: 'red', label: '已撤回', value: 2 },
+] as SelectOption[];
+
+export const actionTypeOptions: SelectOption[] = [
+  { label: '内部页面', value: 1 },
+  { label: '外部链接', value: 2 },
+  { label: '待办任务', value: 3 },
+  { label: '文件预览', value: 4 },
+  { label: '自定义', value: 99 },
+] as SelectOption[];
+
+export const openTypeOptions: SelectOption[] = [
+  { label: '当前页', value: 1 },
+  { label: '新窗口', value: 2 },
+] as SelectOption[];
+
+export function getOptionLabel(
+  options: readonly SelectOption[],
+  value?: number,
+) {
+  return options.find((option) => option.value === value)?.label ?? '-';
+}

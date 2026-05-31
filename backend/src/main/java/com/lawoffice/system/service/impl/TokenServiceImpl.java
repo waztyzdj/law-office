@@ -203,5 +203,18 @@ public class TokenServiceImpl implements ITokenService {
         redisUtils.del(ROLE_PREFIX + username);
         log.info("用户 {} 已强制下线", username);
     }
+
+    @Override
+    public void refreshUserAuthorization(String username, List<String> permissions, List<String> roles) {
+        if (username == null || username.isEmpty()) {
+            return;
+        }
+
+        List<String> safePermissions = permissions == null ? java.util.Collections.emptyList() : permissions;
+        List<String> safeRoles = roles == null ? java.util.Collections.emptyList() : roles;
+        redisUtils.set(PERMISSION_PREFIX + username, safePermissions, TOKEN_EXPIRE_TIME);
+        redisUtils.set(ROLE_PREFIX + username, safeRoles, TOKEN_EXPIRE_TIME);
+        log.info("用户 {} 的权限缓存已刷新，权限数: {}, 角色数: {}", username, safePermissions.size(), safeRoles.size());
+    }
 }
 

@@ -6,6 +6,7 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.lawoffice.framework.dto.BaseDTO;
+import com.lawoffice.framework.dto.BasePageDTO;
 import com.lawoffice.framework.dto.TreeDTO;
 import com.lawoffice.framework.service.impl.TreeServiceImpl;
 import com.lawoffice.system.constant.PermissionMenuTypes;
@@ -51,6 +52,16 @@ public class PermissionServiceImpl extends TreeServiceImpl<PermissionMapper, Per
     public List<PermissionVO> tree() {
         TreeDTO<Permission> treeDTO = new TreeDTO<>();
         return tree(treeDTO).getData();
+    }
+
+    @Override
+    protected void doBeforeList(BaseDTO<Permission> baseDTO) {
+        applyPermissionOrder(resolveQueryWrapper(baseDTO));
+    }
+
+    @Override
+    protected void doBeforePage(BasePageDTO<Permission> basePageDTO) {
+        applyPermissionOrder(resolveQueryWrapper(basePageDTO));
     }
 
     @Override
@@ -200,6 +211,39 @@ public class PermissionServiceImpl extends TreeServiceImpl<PermissionMapper, Per
 
     private boolean isBinary(Integer value) {
         return value == null || value == 0 || value == 1;
+    }
+
+    @SuppressWarnings("unchecked")
+    private QueryWrapper<Permission> resolveQueryWrapper(BaseDTO<Permission> baseDTO) {
+        if (baseDTO == null) {
+            return new QueryWrapper<>();
+        }
+
+        QueryWrapper<Permission> wrapper = (QueryWrapper<Permission>) baseDTO.getQueryWrapper();
+        if (wrapper == null) {
+            wrapper = new QueryWrapper<>();
+            baseDTO.setQueryWrapper(wrapper);
+        }
+        return wrapper;
+    }
+
+    @SuppressWarnings("unchecked")
+    private QueryWrapper<Permission> resolveQueryWrapper(BasePageDTO<Permission> basePageDTO) {
+        if (basePageDTO == null) {
+            return new QueryWrapper<>();
+        }
+
+        QueryWrapper<Permission> wrapper = (QueryWrapper<Permission>) basePageDTO.getQueryWrapper();
+        if (wrapper == null) {
+            wrapper = new QueryWrapper<>();
+            basePageDTO.setQueryWrapper(wrapper);
+        }
+        return wrapper;
+    }
+
+    private void applyPermissionOrder(QueryWrapper<Permission> wrapper) {
+        wrapper.orderByAsc("sort_no")
+                .orderByAsc("create_time");
     }
 
     private void validateUniquePerms(Permission permission) {

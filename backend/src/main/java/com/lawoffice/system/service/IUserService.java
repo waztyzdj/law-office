@@ -148,6 +148,14 @@ public interface IUserService extends IBaseService<User, UserVO> {
     List<Tenant> getCurrentUserTenants(String username);
 
     /**
+     * 查询当前租户下可接收站内消息的用户列表。
+     *
+     * @param username 用户名
+     * @return 当前租户用户列表
+     */
+    List<UserVO> getCurrentTenantUsers(String username);
+
+    /**
      * 移除用户的指定租户关系。
      *
      * @param userId 用户 ID

@@ -6,5 +6,6 @@ export * from './log';
 export * from './menu';
 export * from './permission';
 export * from './role';
+export * from './file';
 export * from './tenant';
 export * from './user';

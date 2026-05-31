@@ -47,6 +47,16 @@ const coreRoutes: RouteRecordRaw[] = [
           title: $t('page.auth.profile'),
         },
       },
+      {
+        name: 'MessageCenter',
+        path: 'message-center',
+        component: () => import('#/views/_core/message-center/index.vue'),
+        meta: {
+          hideInBreadcrumb: true,
+          hideInMenu: true,
+          title: '消息中心',
+        },
+      },
     ],
   },
   {

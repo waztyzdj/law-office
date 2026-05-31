@@ -67,7 +67,10 @@ const tableProps = computed(() => {
     ...restProps
   } = props as Props & { class?: any; style?: any };
 
-  return restProps;
+  return {
+    ...restProps,
+    pagination: normalizePagination(restProps.pagination),
+  };
 });
 
 const shouldShowToolbar = computed(
@@ -95,6 +98,31 @@ function getButtonProps(button: BaseTableToolbarButton) {
     type,
     ...buttonProps,
   };
+}
+
+function normalizePagination(pagination: Props['pagination']) {
+  if (pagination === false || pagination === undefined) {
+    return pagination;
+  }
+
+  if (typeof pagination === 'object') {
+    const pageConfig = pagination as Record<string, any>;
+    const total = Number(pageConfig.total || 0);
+
+    return {
+      ...pageConfig,
+      current: pageConfig.current ?? pageConfig.pageNum ?? 1,
+      hideOnSinglePage: false,
+      pageSize: pageConfig.pageSize ?? 10,
+      showSizeChanger: pageConfig.showSizeChanger ?? true,
+      showTotal: pageConfig.showTotal
+        ? () => pageConfig.showTotal(total)
+        : () => `共 ${total} 条`,
+      total: total > 0 ? total : 1,
+    };
+  }
+
+  return pagination;
 }
 
 async function handleToolbarButtonClick(

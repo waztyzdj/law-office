@@ -1,3 +1,5 @@
+import type { HistoryState, LocationQueryRaw } from 'vue-router';
+
 interface NotificationItem {
   id: number | string;
   avatar: string;
@@ -10,10 +12,8 @@ interface NotificationItem {
    * @example '/dashboard' 或 'https://example.com'
    */
   link?: string;
-  query?: Record<string, any>;
-  state?: Record<string, any>;
-  /** 业务字段 */
-  [key: string]: any;
+  query?: LocationQueryRaw;
+  state?: HistoryState;
 }
 
 export type { NotificationItem };

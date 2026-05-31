@@ -136,8 +136,9 @@ export class BaseApi {
    * @param params - 查询条件（BaseQueryReq 格式）
    */
   exportExcel(params?: BaseQueryReq) {
-    return requestClient.post(`${this.baseUrl}/export`, params || {}, {
-      responseType: 'blob',
+    return requestClient.download(`${this.baseUrl}/export`, {
+      data: params || {},
+      method: 'POST',
     });
   }
 }

@@ -133,7 +133,7 @@ public class RoleServiceImpl extends BaseServiceImpl<RoleMapper, Role, RoleVO> i
         }
 
         log.info("为角色分配权限成功，角色ID: {}, 权限数量: {}", roleId, normalizedPermissionIds.size());
-        forceLogoutUsersByRoleIds(List.of(roleId));
+        refreshUsersAuthorizationByRoleIds(List.of(roleId));
     }
 
     @Override
@@ -174,7 +174,7 @@ public class RoleServiceImpl extends BaseServiceImpl<RoleMapper, Role, RoleVO> i
         rolePermissionMapper.delete(wrapper);
 
         log.info("移除角色权限成功，角色ID: {}, 移除权限数量: {}", roleId, permissionIds.size());
-        forceLogoutUsersByRoleIds(List.of(roleId));
+        refreshUsersAuthorizationByRoleIds(List.of(roleId));
     }
 
     @Override
@@ -206,7 +206,7 @@ public class RoleServiceImpl extends BaseServiceImpl<RoleMapper, Role, RoleVO> i
             return;
         }
 
-        forceLogoutUsersByRoleIds(roleIds);
+        refreshUsersAuthorizationByRoleIds(roleIds);
 
         LambdaQueryWrapper<RolePermission> rolePermissionWrapper = new LambdaQueryWrapper<>();
         rolePermissionWrapper.in(RolePermission::getRoleId, roleIds)
@@ -367,7 +367,7 @@ public class RoleServiceImpl extends BaseServiceImpl<RoleMapper, Role, RoleVO> i
     /**
      * 角色权限或角色删除后，清理受影响用户的登录态。
      */
-    private void forceLogoutUsersByRoleIds(List<String> roleIds) {
+    private void refreshUsersAuthorizationByRoleIds(List<String> roleIds) {
         if (roleIds == null || roleIds.isEmpty()) {
             return;
         }
@@ -390,7 +390,10 @@ public class RoleServiceImpl extends BaseServiceImpl<RoleMapper, Role, RoleVO> i
                 .map(User::getUsername)
                 .filter(StringUtils::hasText)
                 .distinct()
-                .forEach(tokenService::forceLogout);
+                .forEach(username -> {
+                    var userInfo = userService.getCurrentUserDetailInfo(username);
+                    tokenService.refreshUserAuthorization(username, userInfo.getPermissions(), userInfo.getRoles());
+                });
     }
 
     /**

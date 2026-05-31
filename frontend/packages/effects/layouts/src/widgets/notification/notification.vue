@@ -1,7 +1,9 @@
 <script lang="ts" setup>
 import type { NotificationItem } from './types';
 
-import { Bell, CircleCheckBig, CircleX, MailCheck } from '@vben/icons';
+import { watch } from 'vue';
+
+import { Bell, MailCheck } from '@vben/icons';
 import { $t } from '@vben/locales';
 
 import {
@@ -30,10 +32,11 @@ withDefaults(
 
 const emit = defineEmits<{
   clear: [];
+  click: [NotificationItem];
   makeAll: [];
-  onClick: [NotificationItem];
+  openChange: [boolean];
   read: [NotificationItem];
-  remove: [NotificationItem];
+  select: [NotificationItem];
   viewAll: [];
 }>();
 
@@ -42,6 +45,10 @@ const [open, toggle] = useToggle();
 const close = () => {
   open.value = false;
 };
+
+watch(open, (value) => {
+  emit('openChange', value);
+});
 
 const handleViewAll = () => {
   emit('viewAll');
@@ -54,6 +61,16 @@ const handleMakeAll = () => {
 
 const handleClear = () => {
   emit('clear');
+};
+
+const handleSelect = (item: NotificationItem) => {
+  emit('click', item);
+  emit('select', item);
+  close();
+};
+
+const handleRead = (item: NotificationItem) => {
+  emit('read', item);
 };
 </script>
 <template>
@@ -85,15 +102,10 @@ const handleClear = () => {
         <ul class="flex! max-h-90 w-full flex-col">
           <template v-for="item in notifications" :key="item.id ?? item.title">
             <li
-              class="relative flex w-full cursor-pointer items-start gap-5 border-t border-border p-3 hover:bg-accent"
-              @click="emit('onClick', item)"
+              class="relative flex w-full cursor-pointer items-center gap-3 border-t border-border p-3 pr-10 hover:bg-accent"
+              @click="handleSelect(item)"
             >
               <slot name="content" :item="item">
-                <span
-                  v-if="!item.isRead"
-                  class="absolute top-2 right-2 size-2 rounded-sm bg-primary"
-                ></span>
-
                 <span
                   class="relative flex size-10 shrink-0 overflow-hidden rounded-full"
                 >
@@ -102,13 +114,13 @@ const handleClear = () => {
                     class="aspect-square size-full object-cover"
                   />
                 </span>
-                <div class="flex flex-col gap-1 leading-none">
-                  <p class="font-semibold">{{ item.title }}</p>
-                  <p class="my-1 line-clamp-2 text-xs text-muted-foreground">
-                    {{ item.message }}
+                <div class="flex min-w-0 flex-1 flex-col gap-1">
+                  <p class="line-clamp-1 font-semibold leading-5">
+                    {{ item.title }}
                   </p>
-                  <p class="line-clamp-2 text-xs text-muted-foreground">
-                    {{ item.date }}
+                  <p class="line-clamp-1 text-xs leading-5 text-muted-foreground">
+                    {{ item.message }}
+                    <span v-if="item.date"> · {{ item.date }}</span>
                   </p>
                 </div>
                 <div
@@ -116,26 +128,14 @@ const handleClear = () => {
                 >
                   <slot name="action" :item="item">
                     <slot name="action-prepend" :item="item"></slot>
-                    <VbenIconButton
+                    <button
                       v-if="!item.isRead"
-                      size="xs"
-                      variant="ghost"
-                      class="h-6 px-2"
-                      :tooltip="$t('common.confirm')"
-                      @click.stop="emit('read', item)"
-                    >
-                      <CircleCheckBig class="size-4" />
-                    </VbenIconButton>
-                    <VbenIconButton
-                      v-if="item.isRead"
-                      size="xs"
-                      variant="ghost"
-                      class="h-6 px-2 text-destructive"
-                      :tooltip="$t('common.delete')"
-                      @click.stop="emit('remove', item)"
-                    >
-                      <CircleX class="size-4" />
-                    </VbenIconButton>
+                      aria-label="标记已读"
+                      class="size-2.5 rounded-full bg-primary transition-transform hover:scale-125"
+                      title="标记已读"
+                      type="button"
+                      @click.stop="handleRead(item)"
+                    ></button>
                     <slot name="action-append" :item="item"></slot>
                   </slot>
                 </div>
@@ -156,6 +156,7 @@ const handleClear = () => {
       >
         <VbenButton
           :disabled="notifications.length <= 0"
+          class="notification-clear-button"
           size="sm"
           variant="ghost"
           @click="handleClear"
@@ -177,6 +178,10 @@ const handleClear = () => {
       animation: bell-ring 1s both;
     }
   }
+}
+
+:deep(.notification-clear-button) {
+  border: 1px solid hsl(var(--border));
 }
 
 @keyframes bell-ring {

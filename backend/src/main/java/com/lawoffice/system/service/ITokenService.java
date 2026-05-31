@@ -91,4 +91,13 @@ public interface ITokenService {
      * @param username 用户名
      */
     void forceLogout(String username);
+
+    /**
+     * 刷新用户权限和角色缓存，不删除已登录 Token。
+     *
+     * @param username 用户名
+     * @param permissions 最新权限列表
+     * @param roles 最新角色列表
+     */
+    void refreshUserAuthorization(String username, List<String> permissions, List<String> roles);
 }

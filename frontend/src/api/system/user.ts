@@ -149,6 +149,9 @@ export const getCurrentUserOrganization = () =>
 export const getCurrentUserTenantOptions = () =>
   requestClient.get<CurrentUserTenant[]>('/user/profile/tenants');
 
+export const getCurrentTenantUsers = () =>
+  requestClient.get<UserInfo[]>('/user/profile/tenant-users');
+
 export const pageCurrentUserLogs = (params: BasePageReq) =>
   requestClient.post<{
     pageNum: number;

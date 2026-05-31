@@ -28,6 +28,14 @@
 - `POST /import`
 - `POST /export`
 
+## 文件扩展接口
+
+### 下载文件
+
+- 方法：`GET`
+- 路径：`/files/download/{fileId}`
+- 说明：上传人按文件 ID 下载文件，响应头 `Content-Disposition` 使用原始上传文件名并兼容中文文件名；业务附件应使用对应业务模块的下载接口。
+
 ## 菜单接口
 
 ### 获取所有菜单

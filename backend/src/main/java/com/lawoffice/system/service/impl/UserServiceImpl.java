@@ -17,6 +17,7 @@ import com.lawoffice.framework.util.QueryWrapperBuilderUtils;
 import com.lawoffice.framework.vo.PageVO;
 import com.lawoffice.system.constant.DepartRoleCodes;
 import com.lawoffice.system.req.CurrentUserProfileReq;
+import com.lawoffice.system.req.FileUploadReq;
 import com.lawoffice.system.vo.CurrentUserLogVO;
 import com.lawoffice.system.vo.CurrentUserOrganizationVO;
 import com.lawoffice.system.vo.CurrentUserPermissionSummaryVO;
@@ -29,9 +30,9 @@ import com.lawoffice.system.vo.UserInfoVO;
 import com.lawoffice.system.entity.*;
 import com.lawoffice.system.mapper.*;
 import com.lawoffice.system.service.IUserService;
+import com.lawoffice.system.service.ISysFilesService;
 import com.lawoffice.system.vo.UserVO;
 import com.lawoffice.util.EntityFillUtils;
-import com.lawoffice.util.MinioUtils;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
@@ -104,7 +105,7 @@ public class UserServiceImpl extends BaseServiceImpl<UserMapper, User, UserVO> i
     private LogMapper logMapper;
 
     @Autowired
-    private MinioUtils minioUtils;
+    private ISysFilesService sysFilesService;
     
     @Autowired
     private UserMapper userMapper;
@@ -855,6 +856,26 @@ public class UserServiceImpl extends BaseServiceImpl<UserMapper, User, UserVO> i
     }
 
     @Override
+    public List<UserVO> getCurrentTenantUsers(String username) {
+        if (!StringUtils.hasText(username)) {
+            throw new IllegalArgumentException("未登录或登录已过期");
+        }
+
+        String tenantId = getRequiredTenantId();
+        List<String> userIds = getTenantMemberUserIds(tenantId);
+        if (userIds.isEmpty()) {
+            return new ArrayList<>();
+        }
+
+        LambdaQueryWrapper<User> wrapper = new LambdaQueryWrapper<>();
+        wrapper.in(User::getId, userIds)
+                .eq(User::getDeleteFlag, 0)
+                .eq(User::getStatus, 1)
+                .orderByAsc(User::getUsername);
+        return BeanUtil.copyToList(userMapper.selectList(wrapper), UserVO.class);
+    }
+
+    @Override
     @Transactional(rollbackFor = Exception.class)
     public void removeTenants(String userId, List<String> tenantIds) {
         if (tenantIds == null || tenantIds.isEmpty()) {
@@ -1173,16 +1194,14 @@ public class UserServiceImpl extends BaseServiceImpl<UserMapper, User, UserVO> i
     public CurrentUserProfileVO uploadCurrentUserAvatar(String username, MultipartFile file) {
         User user = getEnabledUserByUsername(username);
         validateAvatarFile(file);
-        String avatarObjectName;
-        try {
-            avatarObjectName = minioUtils.uploadFileAndReturnObjectName(file);
-        } catch (RuntimeException e) {
-            throw new IllegalArgumentException("头像上传服务暂不可用，请检查文件服务配置");
-        }
+        FileUploadReq uploadReq = new FileUploadReq();
+        uploadReq.setBizType("user-avatar");
+        uploadReq.setBizId(user.getId());
+        var uploadVO = sysFilesService.uploadFile(username, file, uploadReq);
 
         User update = new User();
         update.setId(user.getId());
-        update.setAvatar(avatarObjectName);
+        update.setAvatar(uploadVO.getFileId());
         update.setUpdateBy(username);
         update.setUpdateTime(java.time.LocalDateTime.now());
         baseMapper.updateById(update);
@@ -2154,7 +2173,7 @@ public class UserServiceImpl extends BaseServiceImpl<UserMapper, User, UserVO> i
             return avatar;
         }
         try {
-            return minioUtils.getObjectUrl(avatar);
+            return sysFilesService.getFileById(avatar).getFileUrl();
         } catch (RuntimeException e) {
             log.warn("生成头像访问地址失败: {}", e.getMessage());
             return avatar;
