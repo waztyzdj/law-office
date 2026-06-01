@@ -15,6 +15,7 @@
 | `sys_dict` | 字典主表。 |
 | `sys_dict_item` | 字典明细。 |
 | `sys_files` | 文件元数据。 |
+| `sys_file_acl` | 文件访问授权。 |
 | `sys_file_relation` | 文件业务关联。 |
 | `sys_permission` | 菜单和权限。 |
 | `sys_role` | 角色。 |

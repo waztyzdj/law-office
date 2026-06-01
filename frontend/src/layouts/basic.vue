@@ -13,7 +13,13 @@ import {
   LockScreenModal,
   Notification,
 } from '@vben/layouts';
-import { Inbox, LockKeyhole, LogOut, UserRoundPen } from '@vben/icons';
+import {
+  BookOpenText,
+  Inbox,
+  LockKeyhole,
+  LogOut,
+  UserRoundPen,
+} from '@vben/icons';
 import { preferences, usePreferences } from '@vben/preferences';
 import { useAccessStore, useUserStore } from '@vben/stores';
 
@@ -339,6 +345,11 @@ function handleOpenMessageCenter() {
   router.push({ name: 'MessageCenter' });
 }
 
+function handleOpenDocumentCenter() {
+  closeUserMenu();
+  router.push({ name: 'DocumentCenter' });
+}
+
 function handleOpenLock() {
   closeUserMenu();
   lockModalApi.open();
@@ -581,6 +592,14 @@ watch(
             >
               <Inbox class="mr-2 size-4" />
               消息中心
+            </button>
+            <button
+              class="flex w-full cursor-pointer items-center rounded-sm px-3 py-2 text-left leading-6 hover:bg-accent"
+              type="button"
+              @click="handleOpenDocumentCenter"
+            >
+              <BookOpenText class="mr-2 size-4" />
+              文档中心
             </button>
             <button
               v-if="preferences.widget.lockScreen"

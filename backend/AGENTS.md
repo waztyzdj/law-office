@@ -90,6 +90,17 @@ public class UserController extends BaseController<IUserService, User, UserVO, U
 - 批量操作避免逐条无事务写入；如必须逐条处理，要明确失败策略：全量回滚、跳过失败、返回失败明细。
 - 认证、权限、租户、审计、逻辑删除属于核心规则，扩展时优先复用现有工具和上下文。
 
+## 业务文档接入规范
+
+- 业务模块涉及附件上传、绑定、解绑、查询或下载时，必须优先复用 `ISysFilesService` 的通用能力：`uploadFile`、`bindFile`、`unbindFile`、`listFilesByBiz`、`listFilesByBizForOwner`、`getFileById`、`downloadFileContent`。不要在业务模块内重复实现文件元数据表、对象存储 key、业务关联表或下载流处理。
+- 业务附件与业务数据的关系统一写入 `sys_file_relation`，其中 `biz_type` 使用稳定的模块业务类型，`biz_id` 使用业务数据主键。`biz_type` 一经上线不得随意修改；确需修改时必须提供数据迁移 SQL，并同步接口、前端和模块文档。
+- 需要在“业务文档”分类中展示的业务模块，必须实现 `IBusinessDocumentProvider` 并注册为 Spring Bean。Provider 至少声明 `bizType()`、`moduleName()` 和 `canAccess(...)`；如业务数据目录需要展示标题、编号等核心字段，必须实现 `resolveRecordNames(...)` 批量返回名称，禁止在文档中心按具体业务模块写 `if/else`。
+- `IBusinessDocumentProvider.canAccess(...)` 是业务文档的数据权限入口，必须按当前用户、租户和业务状态校验访问权，例如发起人、接收人、审批人、成员范围等。不能只判断文件上传人，也不能信任前端传入的用户、租户或部门参数。
+- 业务文档目录结构由文档中心统一生成：一级为业务模块虚拟目录，二级为业务数据虚拟目录，具体业务数据目录下展示业务附件和用户个人整理文件夹。业务模块只负责维护附件关系和访问判断，不直接创建这些虚拟目录。
+- 业务附件不允许在文档中心上传、重命名或删除。新增、删除、解除关联等生命周期必须由业务模块发起；文档中心只负责查询、下载鉴权和个人归类展示。
+- 业务文档个人归类由文档中心通过 `sys_file_relation` 的个人整理关系维护，不改变业务附件原始 `parent_id` 和业务绑定关系。业务模块不得依赖个人归类关系作为业务事实。
+- 新增业务文档 Provider 时，必须补充或检查模块文档，说明 `biz_type`、业务目录名称、目录展示核心字段、访问权限规则和附件生命周期；涉及数据库字段含义变化时同步 `sql/建表脚本.sql` 与数据库文档。
+
 ## 注释规范
 
 - Service 接口的公共方法必须写 JavaDoc，说明业务语义、关键约束、参数和返回值。

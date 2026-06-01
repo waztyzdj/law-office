@@ -57,6 +57,16 @@ const coreRoutes: RouteRecordRaw[] = [
           title: '消息中心',
         },
       },
+      {
+        name: 'DocumentCenter',
+        path: 'document-center',
+        component: () => import('#/views/system/files/index.vue'),
+        meta: {
+          hideInBreadcrumb: true,
+          hideInMenu: true,
+          title: '文档中心',
+        },
+      },
     ],
   },
   {

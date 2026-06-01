@@ -47,6 +47,7 @@ import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -718,21 +719,59 @@ public class UserServiceImpl extends BaseServiceImpl<UserMapper, User, UserVO> i
         LambdaQueryWrapper<UserDepart> wrapper = new LambdaQueryWrapper<>();
         wrapper.eq(UserDepart::getUserId, userId)
                 .eq(UserDepart::getDeleteFlag, 0);
+        String tenantId = TenantContextHolder.getCurrentTenantId();
+        if (StringUtils.hasText(tenantId)) {
+            wrapper.eq(UserDepart::getTenantId, tenantId);
+        }
         List<UserDepart> userDeparts = userDepartMapper.selectList(wrapper);
 
         if (userDeparts.isEmpty()) {
             return new ArrayList<>();
         }
 
-        // 根据部门ID查询部门详情
         List<String> departIds = userDeparts.stream()
             .map(UserDepart::getDepId)
+            .filter(StringUtils::hasText)
             .collect(Collectors.toList());
+        List<String> visibleDepartIds = collectDepartIdsWithAncestors(departIds, tenantId);
+        if (visibleDepartIds.isEmpty()) {
+            return new ArrayList<>();
+        }
 
         LambdaQueryWrapper<SysDepart> departWrapper = new LambdaQueryWrapper<>();
-        departWrapper.in(SysDepart::getId, departIds)
+        departWrapper.in(SysDepart::getId, visibleDepartIds)
                 .eq(SysDepart::getDeleteFlag, 0);
-        return sysDepartMapper.selectList(departWrapper);
+        if (StringUtils.hasText(tenantId)) {
+            departWrapper.eq(SysDepart::getTenantId, tenantId);
+        }
+        List<SysDepart> departs = sysDepartMapper.selectList(departWrapper);
+        Map<String, SysDepart> departMap = departs.stream()
+                .filter(item -> StringUtils.hasText(item.getId()))
+                .collect(Collectors.toMap(SysDepart::getId, item -> item, (left, right) -> left));
+        return visibleDepartIds.stream()
+                .map(departMap::get)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toList());
+    }
+
+    private List<String> collectDepartIdsWithAncestors(List<String> departIds, String tenantId) {
+        LinkedHashSet<String> visibleIds = new LinkedHashSet<>();
+        for (String departId : departIds) {
+            String currentId = departId;
+            int guard = 0;
+            while (StringUtils.hasText(currentId) && guard++ < 20 && visibleIds.add(currentId)) {
+                LambdaQueryWrapper<SysDepart> wrapper = new LambdaQueryWrapper<>();
+                wrapper.eq(SysDepart::getId, currentId)
+                        .eq(SysDepart::getDeleteFlag, 0)
+                        .last("LIMIT 1");
+                if (StringUtils.hasText(tenantId)) {
+                    wrapper.eq(SysDepart::getTenantId, tenantId);
+                }
+                SysDepart depart = sysDepartMapper.selectOne(wrapper);
+                currentId = depart == null ? null : depart.getParentId();
+            }
+        }
+        return new ArrayList<>(visibleIds);
     }
 
     @Override

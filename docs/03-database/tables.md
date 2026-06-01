@@ -94,11 +94,42 @@
 重点字段：
 
 - `file_name`
-- `file_url`
+- `url`
 - `file_size`
 - `file_type`
-- `bucket_name`
-- `object_name`
+- `store_type`：文件上传或虚拟整理类型，文档中心使用 `shared_view` 表示“共享给我”个人整理文件夹，`shared_by_me` 表示“我的共享”整理文件夹，`business_view` 表示“业务文档”个人整理文件夹，`business_module_view` 和 `business_record_view` 表示业务文档接口返回的虚拟业务模块/业务数据目录。
+- `parent_id`
+- `tenant_id`
+- `iz_folder`
+- `iz_star`
+- `share_perms`
+- `enable_down`
+- `enable_updat`
+
+## `sys_file_acl`
+
+文件访问授权表，用于文档中心共享给当前租户、当前租户内用户、部门或角色。
+
+重点字段：
+
+- `file_id`：文件 ID。
+- `target_type`：授权目标类型，取值 `user`、`depart`、`role`、`tenant`。
+- `target_id`：授权目标 ID。
+- `permission`：授权权限，取值 `read`、`download`、`update`、`manage`。
+- `expire_time`：授权过期时间。
+- `tenant_id`：租户 ID。
+
+## `sys_file_relation`
+
+文件业务关联表，用于业务模块附件绑定，也复用为文档中心个人归类关系。
+
+重点字段：
+
+- `file_id`：文件 ID。
+- `biz_type`：业务类型；文档中心内部使用 `document_shared:<userId>` 记录“共享给我”个人归类，使用 `document_business:<userId>` 记录“业务文档”个人归类。
+- `biz_id`：业务数据 ID；文档中心个人归类场景下为目标整理文件夹 ID。
+- `relation_type`：关系类型，`1` 表示业务附件，`2` 表示“共享给我”个人整理，`3` 表示“业务文档”个人整理。
+- `tenant_id`：租户 ID。
 
 ## `sys_log`
 

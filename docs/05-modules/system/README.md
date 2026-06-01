@@ -17,5 +17,5 @@
 | 租户管理 | [tenant.md](tenant.md) | `/tenant` | `views/system/tenant` |
 | 字典管理 | [dict.md](dict.md) | `/dict`、`/dictItem` | `views/system/dict` |
 | 通用类型 | [category.md](category.md) | `/category` | `views/system/category` |
-| 文件管理 | [files.md](files.md) | `/files` | 待补充 |
+| 文件管理 | [files.md](files.md) | `/files`、`/files/document` | `views/system/files` |
 | 日志审计 | [log.md](log.md) | `sys_log` | `views/system/log` |

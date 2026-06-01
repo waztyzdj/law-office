@@ -56,6 +56,7 @@ export interface CurrentUserOrganization {
     departName?: string;
     orgCode?: string;
     orgType?: string;
+    parentId?: string;
   }>;
   roles: Array<{
     id?: string;

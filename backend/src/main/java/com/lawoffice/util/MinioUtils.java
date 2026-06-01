@@ -192,6 +192,30 @@ public class MinioUtils {
     }
 
     /**
+     * 在对象存储中复制文件并返回新对象名。
+     */
+    public String copyFileAndReturnObjectName(String sourceObjectName, String fileName) {
+        try (InputStream inputStream = downloadFile(sourceObjectName)) {
+            ensureBucketExists();
+            String bucketName = minioConfig.getBucketName();
+            String objectName = generateObjectName(fileName);
+            minioClient.putObject(
+                    PutObjectArgs.builder()
+                            .bucket(bucketName)
+                            .object(objectName)
+                            .stream(inputStream, -1, 10485760)
+                            .contentType("application/octet-stream")
+                            .build()
+            );
+            log.info("文件复制成功: {}", objectName);
+            return objectName;
+        } catch (Exception e) {
+            log.error("文件复制失败", e);
+            throw new RuntimeException("文件复制失败: " + e.getMessage());
+        }
+    }
+
+    /**
      * 生成对象名称（避免文件名冲突）
      *
      * @param originalFilename 原始文件名

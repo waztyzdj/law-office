@@ -59,12 +59,12 @@ public class SysFiles extends BaseTenantEntity {
     @Schema(description = "阅读次数")
     private Integer readCount;
 
-    @ExcelProperty("分享链接")
-    @Schema(description = "分享链接")
+    @ExcelProperty("共享链接")
+    @Schema(description = "共享链接")
     private String shareUrl;
 
-    @ExcelProperty("分享权限")
-    @Schema(description = "分享权限")
+    @ExcelProperty("共享权限")
+    @Schema(description = "共享权限")
     private String sharePerms;
 
     @ExcelProperty("允许下载")
