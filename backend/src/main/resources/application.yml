@@ -30,6 +30,7 @@ onlyoffice:
   server-base-url: ${ONLYOFFICE_SERVER_BASE_URL:http://host.docker.internal:8080/api}
   jwt-secret: ${ONLYOFFICE_JWT_SECRET:lawoffice_onlyoffice_jwt_secret_2026_change_this}
   preview-token-minutes: ${ONLYOFFICE_PREVIEW_TOKEN_MINUTES:10}
+  callback-token-minutes: ${ONLYOFFICE_CALLBACK_TOKEN_MINUTES:1440}
   render-version: ${ONLYOFFICE_RENDER_VERSION:fonts-20260602-alias3}
 
 # Shiro 配置

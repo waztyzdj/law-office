@@ -2,10 +2,12 @@ package com.lawoffice.system.controller;
 
 import com.lawoffice.framework.config.TenantContextHolder;
 import com.lawoffice.framework.result.BaseResult;
+import com.lawoffice.system.dto.OnlyOfficeCallbackReq;
 import com.lawoffice.system.dto.OnlyOfficeDownloadContext;
 import com.lawoffice.system.service.IOnlyOfficeDocumentService;
 import com.lawoffice.system.service.ISysFilesService;
 import com.lawoffice.system.vo.FileUploadVO;
+import com.lawoffice.system.vo.OnlyOfficeHistoryVersionVO;
 import com.lawoffice.system.vo.OnlyOfficePreviewVO;
 import com.lawoffice.util.HttpDownloadUtils;
 import io.swagger.v3.oas.annotations.Operation;
@@ -13,8 +15,11 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -22,18 +27,21 @@ import org.springframework.web.bind.annotation.RestController;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
+import java.util.List;
+import java.util.Map;
 
+@Slf4j
 @RestController
 @RequiredArgsConstructor
 @RequestMapping("/files/document/onlyoffice")
-@Tag(name = "ONLYOFFICE 文档预览", description = "ONLYOFFICE 只读预览配置和文件回源")
+@Tag(name = "ONLYOFFICE 文档协作", description = "ONLYOFFICE 在线预览、编辑保存和文档回源")
 public class OnlyOfficeDocumentController {
 
     private final IOnlyOfficeDocumentService onlyOfficeDocumentService;
     private final ISysFilesService sysFilesService;
 
     @GetMapping("/config/{fileId}")
-    @Operation(summary = "生成 ONLYOFFICE 预览配置", description = "按文档中心权限生成只读预览配置")
+    @Operation(summary = "生成 ONLYOFFICE 配置", description = "按文档中心权限生成预览或编辑配置")
     public BaseResult<OnlyOfficePreviewVO> getPreviewConfig(
             @PathVariable String fileId,
             @RequestParam(required = false, defaultValue = "view") String mode,
@@ -63,6 +71,29 @@ public class OnlyOfficeDocumentController {
         } finally {
             TenantContextHolder.clear();
         }
+    }
+
+    @PostMapping("/callback/{token}")
+    @Operation(summary = "ONLYOFFICE 保存回调", description = "Document Server 保存在线编辑内容时调用")
+    public Map<String, Integer> handleCallback(
+            @PathVariable String token,
+            @RequestBody(required = false) OnlyOfficeCallbackReq req) {
+        try {
+            onlyOfficeDocumentService.handleCallback(token, req);
+            return Map.of("error", 0);
+        } catch (RuntimeException ex) {
+            log.error("ONLYOFFICE 保存回调处理失败", ex);
+            return Map.of("error", 1);
+        }
+    }
+
+    @GetMapping("/history/{fileId}")
+    @Operation(summary = "ONLYOFFICE 历史版本预留接口", description = "当前仅预留接口，版本控制下一阶段实现")
+    public BaseResult<List<OnlyOfficeHistoryVersionVO>> listHistory(
+            @PathVariable String fileId,
+            HttpServletRequest request) {
+        String username = (String) request.getAttribute("username");
+        return BaseResult.success(onlyOfficeDocumentService.listHistory(username, fileId));
     }
 
     private String resolveContentType(String fileType) {

@@ -11,6 +11,7 @@ export type DocumentScope =
   | 'trash';
 export type DocumentShareTargetType = 'depart' | 'role' | 'tenant' | 'user';
 export type DocumentPermission = 'download' | 'manage' | 'read' | 'update';
+export type OnlyOfficePreviewMode = 'edit' | 'view';
 
 export interface DocumentFileInfo {
   canDownload?: boolean;
@@ -68,6 +69,14 @@ export interface DocumentShareTarget {
 export interface OnlyOfficePreviewConfig {
   config: Record<string, unknown>;
   documentServerApiUrl: string;
+}
+
+export interface OnlyOfficeHistoryVersion {
+  editTime?: string;
+  editor?: string;
+  fileId?: string;
+  remark?: string;
+  version?: string;
 }
 
 export const pageDocuments = (params: DocumentPageReq) =>
@@ -165,12 +174,20 @@ export const downloadDocument = (fileId: string) =>
 export const downloadDocumentThumbnail = (fileId: string) =>
   requestClient.download<Blob>(`/files/document/thumbnail/${fileId}`);
 
-export const getOnlyOfficePreviewConfig = (fileId: string) =>
+export const getOnlyOfficePreviewConfig = (
+  fileId: string,
+  mode: OnlyOfficePreviewMode = 'view',
+) =>
   requestClient.get<OnlyOfficePreviewConfig>(
     `/files/document/onlyoffice/config/${fileId}`,
     {
       params: {
-        mode: 'view',
+        mode,
       },
     },
+  );
+
+export const listOnlyOfficeHistory = (fileId: string) =>
+  requestClient.get<OnlyOfficeHistoryVersion[]>(
+    `/files/document/onlyoffice/history/${fileId}`,
   );

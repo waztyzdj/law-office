@@ -155,4 +155,31 @@ public interface ISysFilesService extends IBaseService<SysFiles, SysFilesVO> {
      * Lightweight reads such as image thumbnails should not be counted as user previews.
      */
     DocumentFileVO checkDocumentRead(String fileId, String username);
+
+    /**
+     * Check document-center edit access and return file metadata.
+     *
+     * @param fileId document file id
+     * @param username current username
+     * @return file metadata after edit permission validation
+     */
+    DocumentFileVO checkDocumentEdit(String fileId, String username);
+
+    /**
+     * Save edited document content back to object storage after rechecking edit permission.
+     *
+     * @param fileId document file id
+     * @param username current username
+     * @param inputStream edited file content
+     * @param contentType edited file MIME type
+     * @param contentLength edited file byte length, may be unknown
+     * @param touchUpdateTime whether this save should create a new persisted document version
+     */
+    void saveDocumentEdit(
+            String fileId,
+            String username,
+            InputStream inputStream,
+            String contentType,
+            Long contentLength,
+            boolean touchUpdateTime);
 }

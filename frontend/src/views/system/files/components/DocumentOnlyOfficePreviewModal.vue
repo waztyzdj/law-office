@@ -2,6 +2,7 @@
 import type {
   DocumentFileInfo,
   OnlyOfficePreviewConfig,
+  OnlyOfficePreviewMode,
 } from '#/api/system/document';
 
 import { computed, nextTick, onBeforeUnmount, ref, shallowRef } from 'vue';
@@ -37,10 +38,11 @@ const openState = ref(false);
 const loading = ref(false);
 const errorText = ref('');
 const currentRecord = ref<DocumentFileInfo>();
+const currentMode = ref<OnlyOfficePreviewMode>('view');
 const editor = shallowRef<OnlyOfficeEditor>();
 let previewLoadVersion = 0;
 
-const modalTitle = computed(() => currentRecord.value?.fileName || '文档预览');
+const modalTitle = computed(() => currentRecord.value?.fileName || (currentMode.value === 'edit' ? '文档编辑' : '文档预览'));
 
 function destroyEditor() {
   try {
@@ -86,17 +88,18 @@ async function mountEditor(preview: OnlyOfficePreviewConfig, version: number) {
   editor.value = new docsApi.DocEditor(EDITOR_CONTAINER_ID, preview.config);
 }
 
-async function open(record: DocumentFileInfo) {
+async function open(record: DocumentFileInfo, mode: OnlyOfficePreviewMode = 'view') {
   if (!record.id || record.izFolder === '1') {
     return;
   }
   currentRecord.value = record;
+  currentMode.value = mode;
   errorText.value = '';
   openState.value = true;
   loading.value = true;
   const version = ++previewLoadVersion;
   try {
-    const preview = await getOnlyOfficePreviewConfig(record.id);
+    const preview = await getOnlyOfficePreviewConfig(record.id, mode);
     if (version !== previewLoadVersion) {
       return;
     }
@@ -121,6 +124,7 @@ function handleAfterClose() {
   destroyEditor();
   errorText.value = '';
   currentRecord.value = undefined;
+  currentMode.value = 'view';
 }
 
 defineExpose({

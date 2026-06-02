@@ -21,6 +21,7 @@ const ONLYOFFICE_PREVIEW_EXTENSIONS = new Set([
   'xls',
   'xlsx',
 ]);
+const ONLYOFFICE_EDIT_EXTENSIONS = new Set(['doc', 'docx', 'ppt', 'pptx', 'xls', 'xlsx']);
 const IMAGE_PREVIEW_EXTENSIONS = new Set(['bmp', 'gif', 'jpeg', 'jpg', 'png', 'webp']);
 
 interface InlineEditorState {
@@ -374,6 +375,17 @@ function canPreviewItem(record: DocumentFileInfo) {
     record.izFolder !== '1' &&
     Boolean(record.id) &&
     (ONLYOFFICE_PREVIEW_EXTENSIONS.has(extension) || isImageFile(record))
+  );
+}
+
+function canEditContentItem(record: DocumentFileInfo) {
+  const extension = getFileExtension(record);
+  return (
+    props.scope !== 'trash' &&
+    record.izFolder !== '1' &&
+    Boolean(record.id) &&
+    Boolean(record.canUpdate) &&
+    ONLYOFFICE_EDIT_EXTENSIONS.has(extension)
   );
 }
 
@@ -997,6 +1009,13 @@ onBeforeUnmount(() => {
                         预览
                       </Menu.Item>
                       <Menu.Item
+                        v-if="canEditContentItem(item)"
+                        @click="emitAction('edit', item)"
+                      >
+                        <IconifyIcon class="document-menu-icon" icon="lucide:file-pen-line" />
+                        在线编辑
+                      </Menu.Item>
+                      <Menu.Item
                         v-if="canCreateFolderInItem(item)"
                         @click="$emit('createFolderIn', item)"
                       >
@@ -1083,6 +1102,13 @@ onBeforeUnmount(() => {
                   >
                     <IconifyIcon class="document-menu-icon" icon="lucide:eye" />
                     预览
+                  </Menu.Item>
+                  <Menu.Item
+                    v-if="isSingleContext(item) && canEditContentItem(item)"
+                    @click="emitAction('edit', item)"
+                  >
+                    <IconifyIcon class="document-menu-icon" icon="lucide:file-pen-line" />
+                    在线编辑
                   </Menu.Item>
                   <Menu.Item
                     v-if="isSingleContext(item) && canEditItem(item)"
@@ -1233,6 +1259,13 @@ onBeforeUnmount(() => {
                           预览
                         </Menu.Item>
                         <Menu.Item
+                          v-if="canEditContentItem(item)"
+                          @click="emitAction('edit', item)"
+                        >
+                          <IconifyIcon class="document-menu-icon" icon="lucide:file-pen-line" />
+                          在线编辑
+                        </Menu.Item>
+                        <Menu.Item
                           v-if="canCreateFolderInItem(item)"
                           @click="$emit('createFolderIn', item)"
                         >
@@ -1320,6 +1353,13 @@ onBeforeUnmount(() => {
                   >
                     <IconifyIcon class="document-menu-icon" icon="lucide:eye" />
                     预览
+                  </Menu.Item>
+                  <Menu.Item
+                    v-if="isSingleContext(item) && canEditContentItem(item)"
+                    @click="emitAction('edit', item)"
+                  >
+                    <IconifyIcon class="document-menu-icon" icon="lucide:file-pen-line" />
+                    在线编辑
                   </Menu.Item>
                   <Menu.Item
                     v-if="isSingleContext(item) && canEditItem(item)"

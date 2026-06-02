@@ -19,5 +19,7 @@ public class OnlyOfficeProperties {
 
     private Integer previewTokenMinutes = 10;
 
+    private Integer callbackTokenMinutes = 1440;
+
     private String renderVersion = "default";
 }

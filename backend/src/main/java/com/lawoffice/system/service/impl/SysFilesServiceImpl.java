@@ -748,6 +748,46 @@ public class SysFilesServiceImpl extends BaseServiceImpl<SysFilesMapper, SysFile
         return buildDocumentVO(access.file(), access.context());
     }
 
+    @Override
+    @Transactional(readOnly = true)
+    public DocumentFileVO checkDocumentEdit(String fileId, String username) {
+        DocumentReadAccess access = checkDocumentReadAccess(fileId, username);
+        if (!canUpdate(access.file(), access.context())) {
+            throw new IllegalArgumentException("无权编辑该文档");
+        }
+        return buildDocumentVO(access.file(), access.context());
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void saveDocumentEdit(
+            String fileId,
+            String username,
+            InputStream inputStream,
+            String contentType,
+            Long contentLength,
+            boolean touchUpdateTime) {
+        DocumentReadAccess access = checkDocumentReadAccess(fileId, username);
+        SysFiles file = access.file();
+        if (!canUpdate(file, access.context())) {
+            throw new IllegalArgumentException("无权保存该文档");
+        }
+        if (!StringUtils.hasText(file.getUrl())) {
+            throw new IllegalArgumentException("文档内容不存在，无法保存");
+        }
+        String safeContentType = StringUtils.hasText(contentType)
+                ? contentType.split(";", 2)[0].trim()
+                : "application/octet-stream";
+        minioUtils.replaceFile(file.getUrl(), inputStream, safeContentType);
+        if (contentLength != null && contentLength > 0) {
+            file.setFileSize(contentLength / 1024.0);
+        }
+        if (touchUpdateTime) {
+            fillUpdate(file, username);
+        }
+        baseMapper.updateById(file);
+    }
+
     private DocumentReadAccess checkDocumentReadAccess(String fileId, String username) {
         SysFiles file = getActiveFile(fileId);
         UserAccessContext context = buildUserAccessContext(username, requireTenantId());
@@ -1655,10 +1695,7 @@ public class SysFilesServiceImpl extends BaseServiceImpl<SysFilesMapper, SysFile
         if (Objects.equals(file.getCreateBy(), context.username())) {
             return true;
         }
-        if (FLAG_NO.equals(file.getEnableUpdat())) {
-            return false;
-        }
-        return resolvePermissionRank(file, context) >= permissionRank(PERMISSION_UPDATE);
+        return resolveUpdatePermission(file, context);
     }
 
     private void assertCanViewDocument(SysFiles file, UserAccessContext context) {
@@ -1695,6 +1732,32 @@ public class SysFilesServiceImpl extends BaseServiceImpl<SysFilesMapper, SysFile
             parentId = parent.getParentId();
         }
         return 0;
+    }
+
+    /**
+     * 共享文件夹下的子文件继承父级 ACL，编辑开关也应以提供 ACL 的文件或文件夹为准。
+     */
+    private boolean resolveUpdatePermission(SysFiles file, UserAccessContext context) {
+        int directRank = maxAclRank(file.getId(), context);
+        if (directRank > 0) {
+            return directRank >= permissionRank(PERMISSION_UPDATE)
+                    && !FLAG_NO.equals(file.getEnableUpdat());
+        }
+        String parentId = file.getParentId();
+        int guard = 0;
+        while (StringUtils.hasText(parentId) && guard++ < 20) {
+            SysFiles parent = getFileIncludingDeleted(parentId);
+            if (parent == null || Objects.equals(parent.getDeleteFlag(), 1)) {
+                return false;
+            }
+            int parentRank = maxAclRank(parent.getId(), context);
+            if (parentRank > 0) {
+                return parentRank >= permissionRank(PERMISSION_UPDATE)
+                        && !FLAG_NO.equals(parent.getEnableUpdat());
+            }
+            parentId = parent.getParentId();
+        }
+        return false;
     }
 
     private int maxAclRank(String fileId, UserAccessContext context) {

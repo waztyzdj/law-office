@@ -124,6 +124,28 @@ public class MinioUtils {
      *
      * @param objectName 对象名称
      */
+    public void replaceFile(String objectName, InputStream inputStream, String contentType) {
+        try {
+            ensureBucketExists();
+
+            String bucketName = minioConfig.getBucketName();
+            String actualObjectName = extractObjectName(objectName);
+            minioClient.putObject(
+                    PutObjectArgs.builder()
+                            .bucket(bucketName)
+                            .object(actualObjectName)
+                            .stream(inputStream, -1, 10485760)
+                            .contentType(contentType)
+                            .build()
+            );
+
+            log.info("文件覆盖保存成功: {}", actualObjectName);
+        } catch (Exception e) {
+            log.error("文件覆盖保存失败", e);
+            throw new RuntimeException("文件覆盖保存失败: " + e.getMessage());
+        }
+    }
+
     public void deleteFile(String objectName) {
         try {
             String bucketName = minioConfig.getBucketName();

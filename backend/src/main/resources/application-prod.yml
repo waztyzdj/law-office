@@ -82,6 +82,7 @@ onlyoffice:
   server-base-url: http://host.docker.internal:8080/api
   jwt-secret: lawoffice_onlyoffice_jwt_secret_2026_change_this
   preview-token-minutes: 10
+  callback-token-minutes: 1440
   render-version: fonts-20260602-alias3
 
 mybatis:

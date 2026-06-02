@@ -1520,6 +1520,10 @@ function handleAction(event: string, record: DocumentFileInfo) {
     previewModalRef.value?.open(record);
     return;
   }
+  if (event === 'edit') {
+    previewModalRef.value?.open(record, 'edit');
+    return;
+  }
   if (event === 'download') {
     void handleDownload(record);
     return;

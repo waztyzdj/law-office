@@ -35,7 +35,7 @@ supervisorctl restart ds:docservice ds:converter || true
 
 if ($Compose) {
   docker compose -f $ComposeFile up -d
-  docker compose -f $ComposeFile exec -T onlyoffice-document-server bash -lc $generateFontsCommand
+  $generateFontsCommand | docker compose -f $ComposeFile exec -T onlyoffice-document-server bash -s
   Write-Host 'ONLYOFFICE fonts initialized through Docker Compose.'
   exit 0
 }
@@ -49,5 +49,5 @@ if (Test-Path -LiteralPath $fontAliasConfig) {
   docker cp $fontAliasConfig "${ContainerName}:/etc/fonts/conf.d/99-law-office-font-aliases.conf"
 }
 docker cp $fontAliasScript "${ContainerName}:/usr/local/bin/law-office-apply-font-aliases.py"
-docker exec $ContainerName bash -lc $generateFontsCommand
+$generateFontsCommand | docker exec -i $ContainerName bash -s
 Write-Host "ONLYOFFICE fonts initialized in container $ContainerName."
