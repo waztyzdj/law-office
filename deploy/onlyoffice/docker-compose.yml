@@ -1,0 +1,17 @@
+name: law-office-onlyoffice
+
+services:
+  onlyoffice-document-server:
+    image: onlyoffice/documentserver:latest
+    container_name: onlyoffice-document-server
+    restart: unless-stopped
+    ports:
+      - "${ONLYOFFICE_PORT:-8088}:80"
+    environment:
+      JWT_ENABLED: "true"
+      JWT_SECRET: "${ONLYOFFICE_JWT_SECRET:-lawoffice_onlyoffice_jwt_secret_2026_change_this}"
+    volumes:
+      - ./fonts:/usr/share/fonts/truetype/law-office:ro
+      - ./fonts:/var/www/onlyoffice/Data/custom-fonts/law-office:ro
+      - ./fontconfig/law-office-font-aliases.conf:/etc/fonts/conf.d/99-law-office-font-aliases.conf:ro
+      - ./apply-font-aliases.py:/usr/local/bin/law-office-apply-font-aliases.py:ro

@@ -51,6 +51,8 @@ import {
 } from '#/api/system/user';
 
 import DocumentExplorer from './components/DocumentExplorer.vue';
+import DocumentImagePreviewModal from './components/DocumentImagePreviewModal.vue';
+import DocumentOnlyOfficePreviewModal from './components/DocumentOnlyOfficePreviewModal.vue';
 import DocumentShareDrawer from './components/DocumentShareDrawer.vue';
 
 const SCOPE_ROOT_PREFIX = 'scope:';
@@ -60,6 +62,7 @@ const BUSINESS_VIEW_STORE_TYPE = 'business_view';
 const BUSINESS_MODULE_VIEW_STORE_TYPE = 'business_module_view';
 const BUSINESS_RECORD_VIEW_STORE_TYPE = 'business_record_view';
 const DOCUMENT_VIEW_MODE_STORAGE_KEY = 'document_center_view_mode';
+const IMAGE_PREVIEW_EXTENSIONS = new Set(['bmp', 'gif', 'jpeg', 'jpg', 'png', 'webp']);
 const DOCUMENT_UPLOAD_ACCEPT = [
   '.doc',
   '.docx',
@@ -149,6 +152,8 @@ const currentDeparts = ref<CurrentUserOrganization['departs']>([]);
 const currentTenant = ref<CurrentUserTenant>();
 const fileInputRef = ref<HTMLInputElement>();
 const shareDrawerRef = ref<InstanceType<typeof DocumentShareDrawer>>();
+const imagePreviewModalRef = ref<InstanceType<typeof DocumentImagePreviewModal>>();
+const previewModalRef = ref<InstanceType<typeof DocumentOnlyOfficePreviewModal>>();
 const documentClipboard = ref<{
   ids: string[];
   mode: Extract<DocumentBatchAction, 'copy' | 'cut'>;
@@ -1469,6 +1474,26 @@ function isDocumentDrag(event: DragEvent) {
   return types.includes('application/x-document-id') || types.includes('application/x-document-ids');
 }
 
+function getFileExtension(record: DocumentFileInfo) {
+  const fileName = record.fileName || '';
+  const dotIndex = fileName.lastIndexOf('.');
+  return dotIndex >= 0 ? fileName.slice(dotIndex + 1).toLowerCase() : '';
+}
+
+function isImagePreviewFile(record: DocumentFileInfo) {
+  const fileType = String(record.fileType || '').toLowerCase();
+  const extension = getFileExtension(record);
+  if (extension === 'svg') {
+    return false;
+  }
+  return (
+    record.izFolder !== '1' &&
+    (fileType === 'image' ||
+      fileType.startsWith('image/') ||
+      IMAGE_PREVIEW_EXTENSIONS.has(extension))
+  );
+}
+
 function handleTreeDragOver(event: DragEvent, targetKey: string) {
   if (!isDocumentDrag(event) || scope.value === 'trash') {
     return;
@@ -1485,6 +1510,14 @@ function handleTreeDragOver(event: DragEvent, targetKey: string) {
 function handleAction(event: string, record: DocumentFileInfo) {
   if (event === 'open') {
     handleOpenFolder(record);
+    return;
+  }
+  if (event === 'preview') {
+    if (isImagePreviewFile(record)) {
+      imagePreviewModalRef.value?.open(record);
+      return;
+    }
+    previewModalRef.value?.open(record);
     return;
   }
   if (event === 'download') {
@@ -1810,6 +1843,8 @@ onBeforeUnmount(() => {
       @change="handleFilesSelected"
     />
     <DocumentShareDrawer ref="shareDrawerRef" @success="reloadAll" />
+    <DocumentImagePreviewModal ref="imagePreviewModalRef" />
+    <DocumentOnlyOfficePreviewModal ref="previewModalRef" />
   </div>
 </template>
 

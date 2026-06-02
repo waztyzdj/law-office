@@ -23,6 +23,15 @@ jasypt:
 jwt:
   secret: ${JWT_SECRET:lawoffice_jwt_secret_key_2026_change_this_in_production}
 
+# ONLYOFFICE 配置
+onlyoffice:
+  enabled: ${ONLYOFFICE_ENABLED:false}
+  document-server-url: ${ONLYOFFICE_DOCUMENT_SERVER_URL:http://localhost:8088}
+  server-base-url: ${ONLYOFFICE_SERVER_BASE_URL:http://host.docker.internal:8080/api}
+  jwt-secret: ${ONLYOFFICE_JWT_SECRET:lawoffice_onlyoffice_jwt_secret_2026_change_this}
+  preview-token-minutes: ${ONLYOFFICE_PREVIEW_TOKEN_MINUTES:10}
+  render-version: ${ONLYOFFICE_RENDER_VERSION:fonts-20260602-alias3}
+
 # Shiro 配置
 shiro:
   # 是否启用Shiro

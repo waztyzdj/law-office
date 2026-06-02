@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import type { DocumentFileInfo, DocumentScope } from '#/api/system/document';
 
+import { downloadDocumentThumbnail } from '#/api/system/document';
+
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 
 import { IconifyIcon } from '@vben/icons';
@@ -10,6 +12,16 @@ import { Button, Dropdown, Empty, Input, Menu, Spin, Tooltip } from 'ant-design-
 const BUSINESS_VIEW_STORE_TYPE = 'business_view';
 const BUSINESS_MODULE_VIEW_STORE_TYPE = 'business_module_view';
 const BUSINESS_RECORD_VIEW_STORE_TYPE = 'business_record_view';
+const ONLYOFFICE_PREVIEW_EXTENSIONS = new Set([
+  'doc',
+  'docx',
+  'pdf',
+  'ppt',
+  'pptx',
+  'xls',
+  'xlsx',
+]);
+const IMAGE_PREVIEW_EXTENSIONS = new Set(['bmp', 'gif', 'jpeg', 'jpg', 'png', 'webp']);
 
 interface InlineEditorState {
   extension?: string;
@@ -105,6 +117,8 @@ const selectionBox = ref({
   startX: 0,
   startY: 0,
 });
+const imageThumbnailUrls = ref<Record<string, string>>({});
+let imageThumbnailLoadVersion = 0;
 const selectionBoxStyle = computed(() => {
   const left = Math.min(selectionBox.value.startX, selectionBox.value.currentX);
   const top = Math.min(selectionBox.value.startY, selectionBox.value.currentY);
@@ -189,18 +203,34 @@ function fileIcon(record: DocumentFileInfo) {
   if (record.izFolder === '1') {
     return 'lucide:folder';
   }
+  const extension = getFileExtension(record);
+  if (['doc', 'docx'].includes(extension)) {
+    return 'vscode-icons:file-type-word';
+  }
+  if (['xls', 'xlsx'].includes(extension)) {
+    return 'vscode-icons:file-type-excel';
+  }
+  if (['ppt', 'pptx'].includes(extension)) {
+    return 'vscode-icons:file-type-powerpoint';
+  }
+  if (extension === 'pdf') {
+    return 'vscode-icons:file-type-pdf2';
+  }
   const type = String(record.fileType || '').toLowerCase();
   if (type === 'image') {
     return 'lucide:file-image';
   }
   if (type === 'pdf') {
-    return 'lucide:file-text';
+    return 'vscode-icons:file-type-pdf2';
   }
   if (type === 'excel') {
-    return 'lucide:file-spreadsheet';
+    return 'vscode-icons:file-type-excel';
   }
   if (type === 'ppt') {
-    return 'lucide:file-type-2';
+    return 'vscode-icons:file-type-powerpoint';
+  }
+  if (type === 'doc') {
+    return 'vscode-icons:file-type-word';
   }
   if (type === 'archive') {
     return 'lucide:file-archive';
@@ -209,6 +239,73 @@ function fileIcon(record: DocumentFileInfo) {
     return 'lucide:file-video';
   }
   return 'lucide:file';
+}
+
+function isImageFile(record: DocumentFileInfo) {
+  if (record.izFolder === '1') {
+    return false;
+  }
+  const extension = getFileExtension(record);
+  if (extension === 'svg') {
+    return false;
+  }
+  const type = String(record.fileType || '').toLowerCase();
+  return (
+    type === 'image' ||
+    type.startsWith('image/') ||
+    IMAGE_PREVIEW_EXTENSIONS.has(extension)
+  );
+}
+
+function imageThumbnailUrl(record: DocumentFileInfo) {
+  const key = itemKey(record);
+  return key ? imageThumbnailUrls.value[key] : undefined;
+}
+
+function revokeImageThumbnailUrl(key: string) {
+  const url = imageThumbnailUrls.value[key];
+  if (url) {
+    URL.revokeObjectURL(url);
+  }
+}
+
+function revokeAllImageThumbnailUrls() {
+  for (const key of Object.keys(imageThumbnailUrls.value)) {
+    revokeImageThumbnailUrl(key);
+  }
+  imageThumbnailUrls.value = {};
+}
+
+async function loadImageThumbnails() {
+  const version = ++imageThumbnailLoadVersion;
+  const imageItems = sortedItems.value.filter((item) => item.id && isImageFile(item));
+  const activeKeys = new Set(imageItems.map((item) => itemKey(item)).filter(Boolean));
+
+  for (const key of Object.keys(imageThumbnailUrls.value)) {
+    if (!activeKeys.has(key)) {
+      revokeImageThumbnailUrl(key);
+      delete imageThumbnailUrls.value[key];
+    }
+  }
+
+  for (const item of imageItems) {
+    const key = itemKey(item);
+    if (!item.id || !key || imageThumbnailUrls.value[key]) {
+      continue;
+    }
+    try {
+      const blob = await downloadDocumentThumbnail(item.id);
+      if (version !== imageThumbnailLoadVersion) {
+        continue;
+      }
+      imageThumbnailUrls.value = {
+        ...imageThumbnailUrls.value,
+        [key]: URL.createObjectURL(blob),
+      };
+    } catch {
+      // 缩略图加载失败时保留文件类型图标，避免影响文件列表使用。
+    }
+  }
 }
 
 function fileTypeText(record: DocumentFileInfo) {
@@ -264,6 +361,22 @@ function canCreateFolderInItem(record: DocumentFileInfo) {
   return canEditItem(record);
 }
 
+function getFileExtension(record: DocumentFileInfo) {
+  const fileName = record.fileName || '';
+  const dotIndex = fileName.lastIndexOf('.');
+  return dotIndex >= 0 ? fileName.slice(dotIndex + 1).toLowerCase() : '';
+}
+
+function canPreviewItem(record: DocumentFileInfo) {
+  const extension = getFileExtension(record);
+  return (
+    props.scope !== 'trash' &&
+    record.izFolder !== '1' &&
+    Boolean(record.id) &&
+    (ONLYOFFICE_PREVIEW_EXTENSIONS.has(extension) || isImageFile(record))
+  );
+}
+
 function canDropOnFolder(target: DocumentFileInfo) {
   if (props.scope === 'trash' || target.izFolder !== '1' || !target.id) {
     return false;
@@ -283,6 +396,10 @@ function canDropOnFolder(target: DocumentFileInfo) {
 function handleOpen(record: DocumentFileInfo) {
   if (record.izFolder === '1') {
     emit('action', 'open', record);
+    return;
+  }
+  if (canPreviewItem(record)) {
+    emit('action', 'preview', record);
     return;
   }
   if (record.canDownload) {
@@ -724,11 +841,25 @@ function handleInlineKeydown(event: KeyboardEvent) {
   }
 }
 
+watch(
+  () =>
+    sortedItems.value
+      .filter((item) => item.id && isImageFile(item))
+      .map((item) => itemKey(item))
+      .join(','),
+  () => {
+    void loadImageThumbnails();
+  },
+  { immediate: true },
+);
+
 onMounted(() => {
   window.addEventListener('keydown', handleShortcutKeydown);
 });
 
 onBeforeUnmount(() => {
+  imageThumbnailLoadVersion += 1;
+  revokeAllImageThumbnailUrls();
   clearRenameTimer();
   window.removeEventListener('keydown', handleShortcutKeydown);
   window.removeEventListener('mousemove', handleSelectionMouseMove);
@@ -803,7 +934,14 @@ onBeforeUnmount(() => {
                 @keydown.enter="handleOpen(item)"
               >
                 <div class="document-tile__main">
+                  <img
+                    v-if="imageThumbnailUrl(item)"
+                    :alt="item.fileName || '图片预览'"
+                    class="document-tile__thumbnail"
+                    :src="imageThumbnailUrl(item)"
+                  />
                   <IconifyIcon
+                    v-else
                     :icon="fileIcon(item)"
                     class="document-tile__icon"
                     :class="{ 'document-tile__icon--folder': item.izFolder === '1' }"
@@ -850,6 +988,13 @@ onBeforeUnmount(() => {
                       <Menu.Item v-if="item.izFolder === '1'" @click="emitAction('open', item)">
                         <IconifyIcon class="document-menu-icon" icon="lucide:folder-open" />
                         打开
+                      </Menu.Item>
+                      <Menu.Item
+                        v-if="canPreviewItem(item)"
+                        @click="emitAction('preview', item)"
+                      >
+                        <IconifyIcon class="document-menu-icon" icon="lucide:eye" />
+                        预览
                       </Menu.Item>
                       <Menu.Item
                         v-if="canCreateFolderInItem(item)"
@@ -933,6 +1078,13 @@ onBeforeUnmount(() => {
                     下载
                   </Menu.Item>
                   <Menu.Item
+                    v-if="isSingleContext(item) && canPreviewItem(item)"
+                    @click="emitAction('preview', item)"
+                  >
+                    <IconifyIcon class="document-menu-icon" icon="lucide:eye" />
+                    预览
+                  </Menu.Item>
+                  <Menu.Item
                     v-if="isSingleContext(item) && canEditItem(item)"
                     @click="emitAction('rename', item)"
                   >
@@ -1012,7 +1164,14 @@ onBeforeUnmount(() => {
                 @keydown.enter="handleOpen(item)"
               >
                 <div class="document-list__cell document-list__cell--name">
+                  <img
+                    v-if="imageThumbnailUrl(item)"
+                    :alt="item.fileName || '图片预览'"
+                    class="document-list-row__thumbnail"
+                    :src="imageThumbnailUrl(item)"
+                  />
                   <IconifyIcon
+                    v-else
                     :icon="fileIcon(item)"
                     class="document-list-row__icon"
                     :class="{ 'document-list-row__icon--folder': item.izFolder === '1' }"
@@ -1065,6 +1224,13 @@ onBeforeUnmount(() => {
                         <Menu.Item v-if="item.izFolder === '1'" @click="emitAction('open', item)">
                           <IconifyIcon class="document-menu-icon" icon="lucide:folder-open" />
                           打开
+                        </Menu.Item>
+                        <Menu.Item
+                          v-if="canPreviewItem(item)"
+                          @click="emitAction('preview', item)"
+                        >
+                          <IconifyIcon class="document-menu-icon" icon="lucide:eye" />
+                          预览
                         </Menu.Item>
                         <Menu.Item
                           v-if="canCreateFolderInItem(item)"
@@ -1147,6 +1313,13 @@ onBeforeUnmount(() => {
                   >
                     <IconifyIcon class="document-menu-icon" icon="lucide:download" />
                     下载
+                  </Menu.Item>
+                  <Menu.Item
+                    v-if="isSingleContext(item) && canPreviewItem(item)"
+                    @click="emitAction('preview', item)"
+                  >
+                    <IconifyIcon class="document-menu-icon" icon="lucide:eye" />
+                    预览
                   </Menu.Item>
                   <Menu.Item
                     v-if="isSingleContext(item) && canEditItem(item)"
@@ -1350,6 +1523,16 @@ onBeforeUnmount(() => {
   color: hsl(var(--muted-foreground));
 }
 
+.document-list-row__thumbnail {
+  flex: 0 0 auto;
+  width: 28px;
+  height: 28px;
+  border: 1px solid hsl(var(--border));
+  border-radius: 4px;
+  background: hsl(var(--muted) / 40%);
+  object-fit: cover;
+}
+
 .document-list-row__icon--folder {
   color: #f5b93f;
 }
@@ -1478,6 +1661,17 @@ onBeforeUnmount(() => {
   width: 42px;
   height: 42px;
   color: hsl(var(--muted-foreground));
+}
+
+.document-tile__thumbnail {
+  display: block;
+  width: 56px;
+  height: 56px;
+  margin: 0 auto 8px;
+  border: 1px solid hsl(var(--border));
+  border-radius: 6px;
+  background: hsl(var(--muted) / 40%);
+  object-fit: cover;
 }
 
 .document-tile__icon--folder {

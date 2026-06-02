@@ -75,6 +75,15 @@ minio:
   secret-key: ${MINIO_SECRET_KEY:minio@9000}
   bucket-name: ${MINIO_BUCKET_NAME:law-office}
 
+# ONLYOFFICE 配置（生产环境）
+onlyoffice:
+  enabled: true
+  document-server-url: http://localhost:8088
+  server-base-url: http://host.docker.internal:8080/api
+  jwt-secret: lawoffice_onlyoffice_jwt_secret_2026_change_this
+  preview-token-minutes: 10
+  render-version: fonts-20260602-alias3
+
 mybatis:
   mapper-locations: classpath:mapper/*.xml
   type-aliases-package: com.lawoffice.entity

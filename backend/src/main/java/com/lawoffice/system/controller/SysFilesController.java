@@ -42,11 +42,15 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
+import java.util.Locale;
+import java.util.Set;
 
 @RestController
 @RequestMapping("/files")
 @Tag(name = "文件中心", description = "文件元数据和业务关联管理")
 public class SysFilesController extends BaseController<ISysFilesService, SysFiles, SysFilesVO, SysFilesReq> {
+
+    private static final Set<String> IMAGE_PREVIEW_EXTENSIONS = Set.of("bmp", "gif", "jpeg", "jpg", "png", "webp");
 
     public SysFilesController(ISysFilesService sysFilesService) {
         this.baseService = sysFilesService;
@@ -264,11 +268,54 @@ public class SysFilesController extends BaseController<ISysFilesService, SysFile
         }
     }
 
+    @GetMapping("/document/thumbnail/{fileId}")
+    @Operation(summary = "预览文档中心图片缩略图", description = "按文档中心读取权限返回图片内容")
+    public void previewDocumentImageThumbnail(
+            @PathVariable String fileId,
+            HttpServletRequest request,
+            HttpServletResponse response) throws IOException {
+        DocumentFileVO file = baseService.checkDocumentRead(fileId, getUsername(request));
+        String fileType = file.getFileType() == null ? "" : file.getFileType().toLowerCase(Locale.ROOT);
+        String extension = resolveExtension(file.getFileName());
+        if ("svg".equals(extension) || (!IMAGE_PREVIEW_EXTENSIONS.contains(extension)
+                && !"image".equals(fileType) && !fileType.startsWith("image/"))) {
+            throw new IllegalArgumentException("仅图片文件支持缩略图预览");
+        }
+        response.setCharacterEncoding(StandardCharsets.UTF_8.name());
+        response.setContentType(resolveImageContentType(file.getFileName()));
+        response.setHeader("Content-Disposition", "inline");
+
+        try (InputStream inputStream = baseService.downloadFileContent(fileId)) {
+            inputStream.transferTo(response.getOutputStream());
+        }
+    }
+
     private String resolveContentType(String fileType) {
         if (fileType != null && fileType.contains("/")) {
             return fileType;
         }
         return "application/octet-stream";
+    }
+
+    private String resolveImageContentType(String fileName) {
+        String extension = resolveExtension(fileName);
+        if (extension == null) {
+            return "image/*";
+        }
+        return switch (extension) {
+            case "gif" -> "image/gif";
+            case "jpg", "jpeg" -> "image/jpeg";
+            case "png" -> "image/png";
+            case "webp" -> "image/webp";
+            default -> "image/*";
+        };
+    }
+
+    private String resolveExtension(String fileName) {
+        if (fileName == null || !fileName.contains(".")) {
+            return null;
+        }
+        return fileName.substring(fileName.lastIndexOf('.') + 1).toLowerCase(Locale.ROOT);
     }
 
     private String getUsername(HttpServletRequest request) {

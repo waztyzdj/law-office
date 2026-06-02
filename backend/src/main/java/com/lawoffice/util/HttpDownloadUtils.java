@@ -20,11 +20,19 @@ public final class HttpDownloadUtils {
      * @return Content-Disposition 响应头
      */
     public static String buildContentDisposition(String fileName) {
+        return buildContentDisposition(fileName, "attachment");
+    }
+
+    public static String buildInlineContentDisposition(String fileName) {
+        return buildContentDisposition(fileName, "inline");
+    }
+
+    private static String buildContentDisposition(String fileName, String dispositionType) {
         String safeFileName = resolveDownloadFileName(fileName);
         String fallbackName = buildAsciiFallbackName(safeFileName);
         String encodedName = URLEncoder.encode(safeFileName, StandardCharsets.UTF_8)
                 .replace("+", "%20");
-        return "attachment; filename=\"" + fallbackName + "\"; filename*=UTF-8''" + encodedName;
+        return dispositionType + "; filename=\"" + fallbackName + "\"; filename*=UTF-8''" + encodedName;
     }
 
     /**

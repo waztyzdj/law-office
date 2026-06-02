@@ -65,6 +65,11 @@ export interface DocumentShareTarget {
   targetType: DocumentShareTargetType;
 }
 
+export interface OnlyOfficePreviewConfig {
+  config: Record<string, unknown>;
+  documentServerApiUrl: string;
+}
+
 export const pageDocuments = (params: DocumentPageReq) =>
   requestClient.post<{
     pageNum: number;
@@ -156,3 +161,16 @@ export const revokeDocumentShare = (aclId: string) =>
 
 export const downloadDocument = (fileId: string) =>
   requestClient.download<Blob>(`/files/document/download/${fileId}`);
+
+export const downloadDocumentThumbnail = (fileId: string) =>
+  requestClient.download<Blob>(`/files/document/thumbnail/${fileId}`);
+
+export const getOnlyOfficePreviewConfig = (fileId: string) =>
+  requestClient.get<OnlyOfficePreviewConfig>(
+    `/files/document/onlyoffice/config/${fileId}`,
+    {
+      params: {
+        mode: 'view',
+      },
+    },
+  );

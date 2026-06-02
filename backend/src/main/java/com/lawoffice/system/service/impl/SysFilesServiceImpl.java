@@ -731,6 +731,33 @@ public class SysFilesServiceImpl extends BaseServiceImpl<SysFilesMapper, SysFile
         return buildDocumentVO(file, context);
     }
 
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public DocumentFileVO checkDocumentPreview(String fileId, String username) {
+        DocumentReadAccess access = checkDocumentReadAccess(fileId, username);
+        SysFiles file = access.file();
+        file.setReadCount((file.getReadCount() == null ? 0 : file.getReadCount()) + 1);
+        baseMapper.updateById(file);
+        return buildDocumentVO(file, access.context());
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public DocumentFileVO checkDocumentRead(String fileId, String username) {
+        DocumentReadAccess access = checkDocumentReadAccess(fileId, username);
+        return buildDocumentVO(access.file(), access.context());
+    }
+
+    private DocumentReadAccess checkDocumentReadAccess(String fileId, String username) {
+        SysFiles file = getActiveFile(fileId);
+        UserAccessContext context = buildUserAccessContext(username, requireTenantId());
+        if (FLAG_YES.equals(file.getIzFolder())) {
+            throw new IllegalArgumentException("文件夹不能预览");
+        }
+        assertCanViewDocument(file, context);
+        return new DocumentReadAccess(file, context);
+    }
+
     private PageVO<DocumentFileVO> pageDocumentChildrenByParent(
             UserAccessContext context,
             DocumentPageReq pageReq,
@@ -2359,6 +2386,9 @@ public class SysFilesServiceImpl extends BaseServiceImpl<SysFilesMapper, SysFile
 
     private String newId() {
         return UUID.randomUUID().toString().replace("-", "");
+    }
+
+    private record DocumentReadAccess(SysFiles file, UserAccessContext context) {
     }
 
     private record UserAccessContext(

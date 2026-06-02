@@ -143,4 +143,16 @@ public interface ISysFilesService extends IBaseService<SysFiles, SysFilesVO> {
      * 校验文档中心下载权限并返回文件元数据。
      */
     DocumentFileVO checkDocumentDownload(String fileId, String username);
+
+    /**
+     * Check document-center preview access and return file metadata.
+     * Preview uses read permission and does not grant direct object-storage access.
+     */
+    DocumentFileVO checkDocumentPreview(String fileId, String username);
+
+    /**
+     * Check document-center read access and return file metadata without changing counters.
+     * Lightweight reads such as image thumbnails should not be counted as user previews.
+     */
+    DocumentFileVO checkDocumentRead(String fileId, String username);
 }

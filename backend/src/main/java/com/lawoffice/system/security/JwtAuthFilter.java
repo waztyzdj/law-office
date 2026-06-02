@@ -51,7 +51,8 @@ public class JwtAuthFilter extends OncePerRequestFilter {
             "/api/swagger-resources",
             "/api/webjars",
             "/api/static",
-            "/api/favicon.ico"
+            "/api/favicon.ico",
+            "/api/files/document/onlyoffice/download/"
     );
 
     @Override
