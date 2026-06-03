@@ -283,19 +283,24 @@ public class OnlyOfficeDocumentServiceImpl implements IOnlyOfficeDocumentService
             objectName = minioUtils.uploadFileAndReturnObjectName(versionInput, versionFileName, contentType);
         }
 
-        SysFileVersion version = new SysFileVersion();
-        fillNewVersion(version, file, context.username(), versionNo, VERSION_TYPE_FINAL);
-        version.setObjectName(objectName);
-        version.setFileName(file.getFileName());
-        version.setFileType(file.getFileType());
-        version.setContentType(contentType);
-        version.setFileSize(downloaded.contentLength());
-        version.setChecksum(downloaded.checksum());
-        version.setDocumentKey(req.getKey());
-        version.setServerVersion(resolveServerVersion(req.getHistory()));
-        version.setHistoryJson(serializeHistory(req.getHistory()));
-        version.setRemark("ONLYOFFICE final save");
-        sysFileVersionMapper.insert(version);
+        try {
+            SysFileVersion version = new SysFileVersion();
+            fillNewVersion(version, file, context.username(), versionNo, VERSION_TYPE_FINAL);
+            version.setObjectName(objectName);
+            version.setFileName(file.getFileName());
+            version.setFileType(file.getFileType());
+            version.setContentType(contentType);
+            version.setFileSize(downloaded.contentLength());
+            version.setChecksum(downloaded.checksum());
+            version.setDocumentKey(req.getKey());
+            version.setServerVersion(resolveServerVersion(req.getHistory()));
+            version.setHistoryJson(serializeHistory(req.getHistory()));
+            version.setRemark("ONLYOFFICE final save");
+            sysFileVersionMapper.insert(version);
+        } catch (RuntimeException ex) {
+            deleteObjectQuietly(objectName);
+            throw ex;
+        }
     }
 
     private SysFileVersion createRestoreHistoryVersion(SysFileVersion source, DocumentFileVO file, String username) {
@@ -793,6 +798,17 @@ public class OnlyOfficeDocumentServiceImpl implements IOnlyOfficeDocumentService
             Files.deleteIfExists(path);
         } catch (IOException ignored) {
             // ignore temp cleanup failure
+        }
+    }
+
+    private void deleteObjectQuietly(String objectName) {
+        if (!StringUtils.hasText(objectName)) {
+            return;
+        }
+        try {
+            minioUtils.deleteFile(objectName);
+        } catch (RuntimeException ignored) {
+            // object cleanup is compensating work and should not hide the original error
         }
     }
 

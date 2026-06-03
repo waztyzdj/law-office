@@ -3,6 +3,8 @@ package com.lawoffice.system.service;
 import com.lawoffice.framework.service.IBaseService;
 import com.lawoffice.framework.vo.PageVO;
 import com.lawoffice.system.entity.SysFiles;
+import com.lawoffice.system.req.DocumentBatchDeleteReq;
+import com.lawoffice.system.req.DocumentBatchMoveReq;
 import com.lawoffice.system.req.DocumentCopyReq;
 import com.lawoffice.system.req.DocumentFolderReq;
 import com.lawoffice.system.req.DocumentMoveReq;
@@ -94,6 +96,11 @@ public interface ISysFilesService extends IBaseService<SysFiles, SysFilesVO> {
     DocumentFileVO moveDocument(String username, DocumentMoveReq req);
 
     /**
+     * 批量移动本人拥有的文档或文件夹。任一文档校验失败时整体回滚。
+     */
+    List<DocumentFileVO> batchMoveDocuments(String username, DocumentBatchMoveReq req);
+
+    /**
      * 复制当前用户可下载的文档或文件夹到目标目录。
      * 文件复制会生成新的对象存储文件，避免副本之间共享物理对象。
      */
@@ -103,6 +110,11 @@ public interface ISysFilesService extends IBaseService<SysFiles, SysFilesVO> {
      * 将本人拥有的文档移入回收站。
      */
     void deleteDocument(String username, String fileId);
+
+    /**
+     * 批量将本人拥有的文档移入回收站。任一文档校验失败时整体回滚。
+     */
+    void batchDeleteDocuments(String username, DocumentBatchDeleteReq req);
 
     /**
      * 从回收站恢复本人拥有的文档。

@@ -9,20 +9,18 @@ import { IconifyIcon } from '@vben/icons';
 
 import { Button, Dropdown, Empty, Input, Menu, Spin, Tooltip } from 'ant-design-vue';
 
-const BUSINESS_VIEW_STORE_TYPE = 'business_view';
-const BUSINESS_MODULE_VIEW_STORE_TYPE = 'business_module_view';
-const BUSINESS_RECORD_VIEW_STORE_TYPE = 'business_record_view';
-const ONLYOFFICE_PREVIEW_EXTENSIONS = new Set([
-  'doc',
-  'docx',
-  'pdf',
-  'ppt',
-  'pptx',
-  'xls',
-  'xlsx',
-]);
-const ONLYOFFICE_EDIT_EXTENSIONS = new Set(['doc', 'docx', 'ppt', 'pptx', 'xls', 'xlsx']);
-const IMAGE_PREVIEW_EXTENSIONS = new Set(['bmp', 'gif', 'jpeg', 'jpg', 'png', 'webp']);
+import {
+  BUSINESS_MODULE_VIEW_STORE_TYPE,
+  BUSINESS_RECORD_VIEW_STORE_TYPE,
+  BUSINESS_VIEW_STORE_TYPE,
+  DOCUMENT_SORT_OPTIONS as sortOptions,
+  IMAGE_PREVIEW_EXTENSIONS,
+  ONLYOFFICE_EDIT_EXTENSIONS,
+  ONLYOFFICE_PREVIEW_EXTENSIONS,
+  type DocumentSortField,
+  type DocumentSortOrder,
+  type DocumentSortState,
+} from '../constants';
 
 interface InlineEditorState {
   extension?: string;
@@ -33,19 +31,7 @@ interface InlineEditorState {
 }
 
 type BatchMenuAction = 'copy' | 'cut' | 'delete' | 'download';
-type DocumentSortField = 'fileName' | 'fileSize' | 'fileType' | 'modifiedTime';
-type DocumentSortOrder = 'asc' | 'desc';
 type DocumentViewMode = 'grid' | 'list';
-
-interface DocumentSortState {
-  field: DocumentSortField;
-  order: DocumentSortOrder;
-}
-
-interface DocumentSortOption {
-  field: DocumentSortField;
-  label: string;
-}
 
 interface Props {
   canCreate?: boolean;
@@ -94,13 +80,6 @@ const emit = defineEmits<{
   sortChange: [state: DocumentSortState];
   upload: [];
 }>();
-
-const sortOptions: DocumentSortOption[] = [
-  { field: 'fileName', label: '名称' },
-  { field: 'modifiedTime', label: '修改时间' },
-  { field: 'fileType', label: '类型' },
-  { field: 'fileSize', label: '大小' },
-];
 
 const sortedItems = computed(() =>
   [...props.dataSource].sort((a, b) => {

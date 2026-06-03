@@ -7,6 +7,8 @@ import com.lawoffice.framework.enums.OperateType;
 import com.lawoffice.framework.result.BaseResult;
 import com.lawoffice.framework.vo.PageVO;
 import com.lawoffice.system.entity.SysFiles;
+import com.lawoffice.system.req.DocumentBatchDeleteReq;
+import com.lawoffice.system.req.DocumentBatchMoveReq;
 import com.lawoffice.system.req.DocumentCopyReq;
 import com.lawoffice.system.req.DocumentFolderReq;
 import com.lawoffice.system.req.DocumentMoveReq;
@@ -112,6 +114,15 @@ public class SysFilesController extends BaseController<ISysFilesService, SysFile
         return BaseResult.success(baseService.moveDocument(getUsername(request), req));
     }
 
+    @PostMapping("/document/batch-move")
+    @Operation(summary = "批量移动文档", description = "批量移动本人拥有的文档或文件夹，任一失败则整体回滚")
+    @AutoLog(value = "批量移动文档", logType = LogType.OPERATION, operateType = OperateType.SAVE)
+    public BaseResult<List<DocumentFileVO>> batchMoveDocuments(
+            @Valid @RequestBody DocumentBatchMoveReq req,
+            HttpServletRequest request) {
+        return BaseResult.success(baseService.batchMoveDocuments(getUsername(request), req));
+    }
+
     @PostMapping("/document/copy")
     @Operation(summary = "复制文档", description = "复制当前用户可下载的文档或文件夹到目标目录")
     @AutoLog(value = "复制文档", logType = LogType.OPERATION, operateType = OperateType.SAVE)
@@ -128,6 +139,16 @@ public class SysFilesController extends BaseController<ISysFilesService, SysFile
             @PathVariable String fileId,
             HttpServletRequest request) {
         baseService.deleteDocument(getUsername(request), fileId);
+        return BaseResult.success();
+    }
+
+    @PostMapping("/document/batch-delete")
+    @Operation(summary = "批量删除文档", description = "批量将本人拥有的文档或文件夹移入回收站，任一失败则整体回滚")
+    @AutoLog(value = "批量删除文档", logType = LogType.OPERATION, operateType = OperateType.DELETE)
+    public BaseResult<Void> batchDeleteDocuments(
+            @Valid @RequestBody DocumentBatchDeleteReq req,
+            HttpServletRequest request) {
+        baseService.batchDeleteDocuments(getUsername(request), req);
         return BaseResult.success();
     }
 

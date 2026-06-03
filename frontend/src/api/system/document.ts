@@ -136,6 +136,14 @@ export const moveDocument = (data: {
 }) =>
   requestClient.post<DocumentFileInfo>('/files/document/move', data);
 
+export const batchMoveDocuments = (data: {
+  ids: string[];
+  parentId?: string;
+  scope?: DocumentScope;
+  shareTargetType?: DocumentShareTargetType;
+}) =>
+  requestClient.post<DocumentFileInfo[]>('/files/document/batch-move', data);
+
 export const copyDocuments = (data: {
   ids: string[];
   parentId?: string;
@@ -146,6 +154,9 @@ export const copyDocuments = (data: {
 
 export const deleteDocument = (fileId: string) =>
   requestClient.post<void>(`/files/document/delete/${fileId}`);
+
+export const batchDeleteDocuments = (ids: string[]) =>
+  requestClient.post<void>('/files/document/batch-delete', { ids });
 
 export const restoreDocument = (fileId: string) =>
   requestClient.post<DocumentFileInfo>(`/files/document/restore/${fileId}`);

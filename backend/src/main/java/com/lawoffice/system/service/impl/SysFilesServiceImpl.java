@@ -31,6 +31,8 @@ import com.lawoffice.system.mapper.UserDepartMapper;
 import com.lawoffice.system.mapper.UserMapper;
 import com.lawoffice.system.mapper.UserRoleMapper;
 import com.lawoffice.system.mapper.UserTenantMapper;
+import com.lawoffice.system.req.DocumentBatchDeleteReq;
+import com.lawoffice.system.req.DocumentBatchMoveReq;
 import com.lawoffice.system.req.DocumentCopyReq;
 import com.lawoffice.system.req.DocumentFolderReq;
 import com.lawoffice.system.req.DocumentMoveReq;
@@ -53,6 +55,8 @@ import com.lawoffice.util.MinioUtils;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.util.StringUtils;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -184,33 +188,38 @@ public class SysFilesServiceImpl extends BaseServiceImpl<SysFilesMapper, SysFile
             throw new IllegalArgumentException("文件上传失败，请检查对象存储配置");
         }
 
-        SysFiles fileEntity = new SysFiles();
-        fileEntity.setId(newId());
-        fileEntity.setTenantId(tenantId);
-        fileEntity.setFileName(resolveFileName(file));
-        fileEntity.setUrl(objectName);
-        fileEntity.setFileType(resolveFileType(file));
-        fileEntity.setStoreType(DEFAULT_STORE_TYPE);
-        fileEntity.setFileSize(file.getSize() > 0 ? file.getSize() / 1024.0 : 0D);
-        fileEntity.setCreateBy(username);
-        fileEntity.setCreateTime(LocalDateTime.now());
-        fileEntity.setDeleteFlag(0);
-        baseMapper.insert(fileEntity);
+        try {
+            SysFiles fileEntity = new SysFiles();
+            fileEntity.setId(newId());
+            fileEntity.setTenantId(tenantId);
+            fileEntity.setFileName(resolveFileName(file));
+            fileEntity.setUrl(objectName);
+            fileEntity.setFileType(resolveFileType(file));
+            fileEntity.setStoreType(DEFAULT_STORE_TYPE);
+            fileEntity.setFileSize(file.getSize() > 0 ? file.getSize() / 1024.0 : 0D);
+            fileEntity.setCreateBy(username);
+            fileEntity.setCreateTime(LocalDateTime.now());
+            fileEntity.setDeleteFlag(0);
+            baseMapper.insert(fileEntity);
 
-        FileUploadVO vo = buildUploadVO(fileEntity);
-        if (req != null && StringUtils.hasText(req.getBizType()) && StringUtils.hasText(req.getBizId())) {
-            FileRelationReq relationReq = new FileRelationReq();
-            relationReq.setFileId(fileEntity.getId());
-            relationReq.setBizType(req.getBizType());
-            relationReq.setBizId(req.getBizId());
-            relationReq.setRelationType(DEFAULT_RELATION_TYPE);
-            relationReq.setSortOrder(0);
-            FileRelationVO relationVO = bindFile(username, relationReq);
-            vo.setRelationId(relationVO.getId());
-            vo.setBizType(relationVO.getBizType());
-            vo.setBizId(relationVO.getBizId());
+            FileUploadVO vo = buildUploadVO(fileEntity);
+            if (req != null && StringUtils.hasText(req.getBizType()) && StringUtils.hasText(req.getBizId())) {
+                FileRelationReq relationReq = new FileRelationReq();
+                relationReq.setFileId(fileEntity.getId());
+                relationReq.setBizType(req.getBizType());
+                relationReq.setBizId(req.getBizId());
+                relationReq.setRelationType(DEFAULT_RELATION_TYPE);
+                relationReq.setSortOrder(0);
+                FileRelationVO relationVO = bindFile(username, relationReq);
+                vo.setRelationId(relationVO.getId());
+                vo.setBizType(relationVO.getBizType());
+                vo.setBizId(relationVO.getBizId());
+            }
+            return vo;
+        } catch (RuntimeException ex) {
+            deleteObjectQuietly(objectName);
+            throw ex;
         }
-        return vo;
     }
 
     @Override
@@ -351,6 +360,12 @@ public class SysFilesServiceImpl extends BaseServiceImpl<SysFilesMapper, SysFile
             return pageDocumentChildrenByParent(context, pageReq, parent.getId());
         }
 
+        if (SCOPE_SHARED_BY_ME.equals(scope) && StringUtils.hasText(pageReq.getParentId())) {
+            SysFiles parent = getActiveFile(pageReq.getParentId());
+            assertSharedByMeFolderBrowsable(parent, context);
+            return pageDocumentChildrenByParent(context, pageReq, parent.getId());
+        }
+
         LambdaQueryWrapper<SysFiles> wrapper = Wrappers.lambdaQuery(SysFiles.class)
                 .eq(SysFiles::getTenantId, tenantId);
         applyDocumentScope(wrapper, context, pageReq, scope);
@@ -398,31 +413,36 @@ public class SysFilesServiceImpl extends BaseServiceImpl<SysFilesMapper, SysFile
             throw new IllegalArgumentException("文件上传失败，请检查对象存储配置");
         }
 
-        SysFiles fileEntity = new SysFiles();
-        fileEntity.setId(newId());
-        fileEntity.setTenantId(tenantId);
-        fileEntity.setFileName(resolveFileName(file));
-        fileEntity.setUrl(objectName);
-        fileEntity.setFileType(resolveFileType(file));
-        fileEntity.setStoreType(storeType);
-        fileEntity.setParentId(parentId);
-        fileEntity.setFileSize(file.getSize() > 0 ? file.getSize() / 1024.0 : 0D);
-        fileEntity.setIzFolder(FLAG_NO);
-        fileEntity.setIzRootFolder(StringUtils.hasText(parentId) ? FLAG_NO : FLAG_YES);
-        fileEntity.setIzStar(FLAG_NO);
-        fileEntity.setDownCount(0);
-        fileEntity.setReadCount(0);
-        fileEntity.setSharePerms("1");
-        fileEntity.setEnableDown(FLAG_YES);
-        fileEntity.setEnableUpdat(FLAG_NO);
-        fileEntity.setCreateBy(username);
-        fileEntity.setCreateTime(LocalDateTime.now());
-        fileEntity.setUpdateBy(username);
-        fileEntity.setUpdateTime(LocalDateTime.now());
-        fileEntity.setDeleteFlag(0);
-        baseMapper.insert(fileEntity);
-        createInitialHistoryVersion(fileEntity, file, username);
-        return buildDocumentVO(fileEntity, context);
+        try {
+            SysFiles fileEntity = new SysFiles();
+            fileEntity.setId(newId());
+            fileEntity.setTenantId(tenantId);
+            fileEntity.setFileName(resolveFileName(file));
+            fileEntity.setUrl(objectName);
+            fileEntity.setFileType(resolveFileType(file));
+            fileEntity.setStoreType(storeType);
+            fileEntity.setParentId(parentId);
+            fileEntity.setFileSize(file.getSize() > 0 ? file.getSize() / 1024.0 : 0D);
+            fileEntity.setIzFolder(FLAG_NO);
+            fileEntity.setIzRootFolder(StringUtils.hasText(parentId) ? FLAG_NO : FLAG_YES);
+            fileEntity.setIzStar(FLAG_NO);
+            fileEntity.setDownCount(0);
+            fileEntity.setReadCount(0);
+            fileEntity.setSharePerms("1");
+            fileEntity.setEnableDown(FLAG_YES);
+            fileEntity.setEnableUpdat(FLAG_NO);
+            fileEntity.setCreateBy(username);
+            fileEntity.setCreateTime(LocalDateTime.now());
+            fileEntity.setUpdateBy(username);
+            fileEntity.setUpdateTime(LocalDateTime.now());
+            fileEntity.setDeleteFlag(0);
+            baseMapper.insert(fileEntity);
+            createInitialHistoryVersion(fileEntity, file, username);
+            return buildDocumentVO(fileEntity, context);
+        } catch (RuntimeException ex) {
+            deleteObjectQuietly(objectName);
+            throw ex;
+        }
     }
 
     @Override
@@ -544,6 +564,25 @@ public class SysFilesServiceImpl extends BaseServiceImpl<SysFilesMapper, SysFile
 
     @Override
     @Transactional(rollbackFor = Exception.class)
+    public List<DocumentFileVO> batchMoveDocuments(String username, DocumentBatchMoveReq req) {
+        List<String> ids = normalizeDocumentIds(req == null ? null : req.getIds());
+        if (ids.isEmpty()) {
+            throw new IllegalArgumentException("文件ID不能为空");
+        }
+        List<DocumentFileVO> movedFiles = new ArrayList<>();
+        for (String id : ids) {
+            DocumentMoveReq moveReq = new DocumentMoveReq();
+            moveReq.setId(id);
+            moveReq.setParentId(req.getParentId());
+            moveReq.setScope(req.getScope());
+            moveReq.setShareTargetType(req.getShareTargetType());
+            movedFiles.add(moveDocument(username, moveReq));
+        }
+        return movedFiles;
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
     public List<DocumentFileVO> copyDocuments(String username, DocumentCopyReq req) {
         if (req == null || req.getIds() == null || req.getIds().isEmpty()) {
             throw new IllegalArgumentException("文件ID不能为空");
@@ -580,6 +619,18 @@ public class SysFilesServiceImpl extends BaseServiceImpl<SysFilesMapper, SysFile
         assertOwner(file, username);
         assertDocumentCanBeDeleted(file);
         softDeleteDocumentTree(file, username);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void batchDeleteDocuments(String username, DocumentBatchDeleteReq req) {
+        List<String> ids = normalizeDocumentIds(req == null ? null : req.getIds());
+        if (ids.isEmpty()) {
+            throw new IllegalArgumentException("文件ID不能为空");
+        }
+        for (String id : ids) {
+            deleteDocument(username, id);
+        }
     }
 
     @Override
@@ -831,6 +882,31 @@ public class SysFilesServiceImpl extends BaseServiceImpl<SysFilesMapper, SysFile
         return new PageVO<>(records, result.getTotal(), result.getCurrent(), result.getSize());
     }
 
+    private PageVO<DocumentFileVO> pageSharedFolderChildren(
+            UserAccessContext context,
+            DocumentPageReq pageReq,
+            SysFiles parent) {
+        LambdaQueryWrapper<SysFiles> wrapper = Wrappers.lambdaQuery(SysFiles.class)
+                .eq(SysFiles::getTenantId, context.tenantId())
+                .eq(SysFiles::getDeleteFlag, 0)
+                .eq(SysFiles::getParentId, parent.getId());
+        applyDocumentFilters(wrapper, pageReq);
+        wrapper.orderByDesc(SysFiles::getIzFolder)
+                .orderByDesc(SysFiles::getUpdateTime)
+                .orderByDesc(SysFiles::getCreateTime);
+        Page<SysFiles> page = new Page<>(pageReq.getPageNum(), pageReq.getPageSize());
+        Page<SysFiles> result = baseMapper.selectPage(page, wrapper);
+        int inheritedRank = resolvePermissionRank(parent, context);
+        boolean inheritedDownload = inheritedRank >= permissionRank(PERMISSION_DOWNLOAD)
+                && !FLAG_NO.equals(parent.getEnableDown());
+        boolean inheritedUpdate = inheritedRank >= permissionRank(PERMISSION_UPDATE)
+                && !FLAG_NO.equals(parent.getEnableUpdat());
+        List<DocumentFileVO> records = result.getRecords().stream()
+                .map(file -> buildSharedFolderChildVO(file, context, inheritedDownload, inheritedUpdate))
+                .toList();
+        return new PageVO<>(records, result.getTotal(), result.getCurrent(), result.getSize());
+    }
+
     /**
      * 回收站保持原文件夹层级：根目录只展示已删除树的顶层节点，进入已删除文件夹后再展示直接子级。
      */
@@ -887,7 +963,7 @@ public class SysFilesServiceImpl extends BaseServiceImpl<SysFilesMapper, SysFile
             if (isPersonalSharedFolder(parent, context.username())) {
                 return pagePersonalSharedFolderChildren(context, pageReq, parentId);
             }
-            return pageDocumentChildrenByParent(context, pageReq, parentId);
+            return pageSharedFolderChildren(context, pageReq, parent);
         }
 
         List<SysFiles> personalFolders = selectPersonalSharedFolders(context, null);
@@ -1638,6 +1714,34 @@ public class SysFilesServiceImpl extends BaseServiceImpl<SysFilesMapper, SysFile
                 .toList();
     }
 
+    private void assertSharedByMeFolderBrowsable(SysFiles folder, UserAccessContext context) {
+        if (folder == null
+                || !FLAG_YES.equals(folder.getIzFolder())
+                || !Objects.equals(folder.getCreateBy(), context.username())
+                || !Objects.equals(folder.getDeleteFlag(), 0)) {
+            throw new IllegalArgumentException("无权浏览该共享文件夹");
+        }
+        if (SHARED_BY_ME_STORE_TYPE.equals(folder.getStoreType()) || hasActiveAcl(folder.getId(), context.tenantId())) {
+            return;
+        }
+        String parentId = folder.getParentId();
+        int guard = 0;
+        while (StringUtils.hasText(parentId) && guard++ < 20) {
+            SysFiles parent = getFileIncludingDeleted(parentId);
+            if (parent == null
+                    || !Objects.equals(parent.getCreateBy(), context.username())
+                    || Objects.equals(parent.getDeleteFlag(), 1)) {
+                break;
+            }
+            if (SHARED_BY_ME_STORE_TYPE.equals(parent.getStoreType())
+                    || hasActiveAcl(parent.getId(), context.tenantId())) {
+                return;
+            }
+            parentId = parent.getParentId();
+        }
+        throw new IllegalArgumentException("无权浏览该共享文件夹");
+    }
+
     private DocumentFileVO buildDocumentVO(SysFiles file, UserAccessContext context) {
         DocumentFileVO vo = new DocumentFileVO();
         vo.setId(file.getId());
@@ -1659,6 +1763,40 @@ public class SysFilesServiceImpl extends BaseServiceImpl<SysFilesMapper, SysFile
         vo.setCanManage(vo.getOwnerFlag());
         vo.setCanDownload(canDownload(file, context));
         vo.setCanUpdate(canUpdate(file, context));
+        vo.setDeleteFlag(file.getDeleteFlag());
+        vo.setDeleteTime(file.getDeleteTime());
+        vo.setCreateBy(file.getCreateBy());
+        vo.setCreateTime(file.getCreateTime());
+        vo.setUpdateBy(file.getUpdateBy());
+        vo.setUpdateTime(file.getUpdateTime());
+        return vo;
+    }
+
+    private DocumentFileVO buildSharedFolderChildVO(
+            SysFiles file,
+            UserAccessContext context,
+            boolean inheritedDownload,
+            boolean inheritedUpdate) {
+        DocumentFileVO vo = new DocumentFileVO();
+        vo.setId(file.getId());
+        vo.setFileName(file.getFileName());
+        vo.setFileType(file.getFileType());
+        vo.setStoreType(file.getStoreType());
+        vo.setParentId(file.getParentId());
+        vo.setFileSize(file.getFileSize() == null ? 0L : Math.round(file.getFileSize() * 1024));
+        vo.setIzFolder(file.getIzFolder());
+        vo.setIzRootFolder(file.getIzRootFolder());
+        vo.setIzStar(file.getIzStar());
+        vo.setDownCount(file.getDownCount());
+        vo.setReadCount(file.getReadCount());
+        vo.setEnableDown(file.getEnableDown());
+        vo.setEnableUpdat(file.getEnableUpdat());
+        vo.setOwner(file.getCreateBy());
+        vo.setOwnerFlag(Objects.equals(file.getCreateBy(), context.username()));
+        vo.setSharedFlag(false);
+        vo.setCanManage(vo.getOwnerFlag());
+        vo.setCanDownload(vo.getOwnerFlag() || inheritedDownload);
+        vo.setCanUpdate(vo.getOwnerFlag() || inheritedUpdate);
         vo.setDeleteFlag(file.getDeleteFlag());
         vo.setDeleteTime(file.getDeleteTime());
         vo.setCreateBy(file.getCreateBy());
@@ -1973,8 +2111,9 @@ public class SysFilesServiceImpl extends BaseServiceImpl<SysFilesMapper, SysFile
             hardDeleteDocumentTree(child);
         }
         if (!FLAG_YES.equals(file.getIzFolder()) && StringUtils.hasText(file.getUrl())) {
-            minioUtils.deleteFile(file.getUrl());
+            deleteObjectAfterCommit(file.getUrl());
         }
+        hardDeleteDocumentVersions(file);
         fileAclMapper.delete(Wrappers.lambdaQuery(SysFileAcl.class)
                 .eq(SysFileAcl::getTenantId, file.getTenantId())
                 .eq(SysFileAcl::getFileId, file.getId()));
@@ -1982,6 +2121,38 @@ public class SysFilesServiceImpl extends BaseServiceImpl<SysFilesMapper, SysFile
                 .eq(SysFileRelation::getTenantId, file.getTenantId())
                 .eq(SysFileRelation::getFileId, file.getId()));
         baseMapper.deleteById(file.getId());
+    }
+
+    private void hardDeleteDocumentVersions(SysFiles file) {
+        List<SysFileVersion> versions = sysFileVersionMapper.selectList(Wrappers.lambdaQuery(SysFileVersion.class)
+                .eq(SysFileVersion::getTenantId, file.getTenantId())
+                .eq(SysFileVersion::getFileId, file.getId()));
+        if (versions.isEmpty()) {
+            return;
+        }
+        Set<String> objectNames = versions.stream()
+                .flatMap(version -> List.of(version.getObjectName(), version.getChangesObjectName()).stream())
+                .map(this::trimToNull)
+                .filter(StringUtils::hasText)
+                .collect(Collectors.toCollection(LinkedHashSet::new));
+        for (String objectName : objectNames) {
+            if (!isVersionObjectReferencedByOtherFile(file, objectName)) {
+                deleteObjectAfterCommit(objectName);
+            }
+        }
+        sysFileVersionMapper.delete(Wrappers.lambdaQuery(SysFileVersion.class)
+                .eq(SysFileVersion::getTenantId, file.getTenantId())
+                .eq(SysFileVersion::getFileId, file.getId()));
+    }
+
+    private boolean isVersionObjectReferencedByOtherFile(SysFiles file, String objectName) {
+        return sysFileVersionMapper.selectCount(Wrappers.lambdaQuery(SysFileVersion.class)
+                .eq(SysFileVersion::getTenantId, file.getTenantId())
+                .ne(SysFileVersion::getFileId, file.getId())
+                .and(wrapper -> wrapper
+                        .eq(SysFileVersion::getObjectName, objectName)
+                        .or()
+                        .eq(SysFileVersion::getChangesObjectName, objectName))) > 0;
     }
 
     private void validateNotMoveToDescendant(String sourceId, String targetParentId) {
@@ -2361,7 +2532,7 @@ public class SysFilesServiceImpl extends BaseServiceImpl<SysFilesMapper, SysFile
         }
         MessageDigest digest = sha256Digest();
         String contentType = safeContentType(file.getContentType());
-        String objectName;
+        String objectName = null;
         try (InputStream inputStream = file.getInputStream();
              DigestInputStream digestInputStream = new DigestInputStream(inputStream, digest)) {
             objectName = minioUtils.uploadFileAndReturnObjectName(
@@ -2369,6 +2540,7 @@ public class SysFilesServiceImpl extends BaseServiceImpl<SysFilesMapper, SysFile
                     buildVersionFileName(fileEntity.getFileName(), 1),
                     contentType);
         } catch (IOException | RuntimeException ex) {
+            deleteObjectQuietly(objectName);
             throw new IllegalArgumentException("Initial history version create failed", ex);
         }
 
@@ -2394,7 +2566,12 @@ public class SysFilesServiceImpl extends BaseServiceImpl<SysFilesMapper, SysFile
         version.setUpdateBy(username);
         version.setUpdateTime(now);
         version.setDeleteFlag(0);
-        sysFileVersionMapper.insert(version);
+        try {
+            sysFileVersionMapper.insert(version);
+        } catch (RuntimeException ex) {
+            deleteObjectQuietly(objectName);
+            throw ex;
+        }
     }
 
     private boolean supportsInitialHistoryVersion(String fileName) {
@@ -2546,6 +2723,44 @@ public class SysFilesServiceImpl extends BaseServiceImpl<SysFilesMapper, SysFile
             return null;
         }
         return value.trim();
+    }
+
+    private List<String> normalizeDocumentIds(List<String> ids) {
+        if (ids == null) {
+            return Collections.emptyList();
+        }
+        return ids.stream()
+                .map(this::trimToNull)
+                .filter(StringUtils::hasText)
+                .distinct()
+                .toList();
+    }
+
+    private void deleteObjectQuietly(String objectName) {
+        if (!StringUtils.hasText(objectName)) {
+            return;
+        }
+        try {
+            minioUtils.deleteFile(objectName);
+        } catch (RuntimeException ignored) {
+            // Compensation cleanup must not hide the original business failure.
+        }
+    }
+
+    private void deleteObjectAfterCommit(String objectName) {
+        if (!StringUtils.hasText(objectName)) {
+            return;
+        }
+        if (!TransactionSynchronizationManager.isSynchronizationActive()) {
+            deleteObjectQuietly(objectName);
+            return;
+        }
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCommit() {
+                deleteObjectQuietly(objectName);
+            }
+        });
     }
 
     private String newId() {

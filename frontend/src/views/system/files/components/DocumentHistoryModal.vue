@@ -21,8 +21,22 @@ const loading = ref(false);
 const restoringId = ref('');
 const currentFile = ref<DocumentFileInfo>();
 const versions = ref<OnlyOfficeHistoryVersion[]>([]);
-const activeFilters = ref<Record<string, any>>({});
-const activeSorter = ref<any>({});
+
+interface HistoryTableFilter {
+  apiCondition?: string;
+  condition?: string;
+  value?: unknown;
+}
+
+interface HistoryTableSorter {
+  field?: unknown;
+  order?: unknown;
+}
+
+type HistoryTableFilters = Record<string, HistoryTableFilter | null | unknown[]>;
+
+const activeFilters = ref<HistoryTableFilters>({});
+const activeSorter = ref<HistoryTableSorter>({});
 const tablePagination = reactive<TablePaginationConfig>({
   pageNum: 1,
   pageSize: 1000,
@@ -143,7 +157,8 @@ const displayedVersions = computed(() => {
     return filtered;
   }
   const direction = sorter.order === 'ascend' ? 1 : -1;
-  return [...filtered].sort((a, b) => compareValues(resolveFieldValue(a, sorter.field), resolveFieldValue(b, sorter.field)) * direction);
+  const field = String(sorter.field || '');
+  return [...filtered].sort((a, b) => compareValues(resolveFieldValue(a, field), resolveFieldValue(b, field)) * direction);
 });
 
 async function open(file: DocumentFileInfo) {
@@ -200,24 +215,37 @@ function resolveVersionTypeColor(type?: string) {
   return 'green';
 }
 
-function handleColumnEmit(event: string, pagination: any, filters: any, sorter: any) {
+function handleColumnEmit(
+  event: string,
+  pagination: unknown,
+  filters: HistoryTableFilters,
+  sorter: HistoryTableSorter,
+) {
   if (event === 'change') {
     handleTableChange(pagination, filters, sorter);
   }
 }
 
-function handleTableChange(_pagination: any, filters: any, sorter: any) {
+function handleTableChange(
+  _pagination: unknown,
+  filters?: HistoryTableFilters,
+  sorter?: HistoryTableSorter | HistoryTableSorter[],
+) {
   activeFilters.value = filters || {};
-  if (sorter?.field && sorter?.order) {
-    activeSorter.value = sorter;
-  } else if (sorter && Object.keys(sorter).length > 0) {
+  const nextSorter = Array.isArray(sorter) ? sorter[0] : sorter;
+  if (nextSorter?.field && nextSorter?.order) {
+    activeSorter.value = {
+      field: String(nextSorter.field),
+      order: String(nextSorter.order),
+    };
+  } else if (nextSorter && Object.keys(nextSorter).length > 0) {
     activeSorter.value = {};
   }
 }
 
 function matchesFilters(record: OnlyOfficeHistoryVersion) {
   return Object.entries(activeFilters.value).every(([field, filter]) => {
-    if (!filter?.value || (Array.isArray(filter.value) && filter.value.length === 0)) {
+    if (!isHistoryTableFilter(filter) || !filter.value || (Array.isArray(filter.value) && filter.value.length === 0)) {
       return true;
     }
     const value = resolveFieldValue(record, field);
@@ -226,6 +254,10 @@ function matchesFilters(record: OnlyOfficeHistoryVersion) {
     }
     return matchesCondition(value, filter.condition || filter.apiCondition || 'like', filter.value);
   });
+}
+
+function isHistoryTableFilter(filter: HistoryTableFilters[string]): filter is HistoryTableFilter {
+  return Boolean(filter && !Array.isArray(filter) && typeof filter === 'object' && 'value' in filter);
 }
 
 function matchesCondition(value: unknown, condition: string, filterValue: unknown) {

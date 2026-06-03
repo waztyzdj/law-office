@@ -31,6 +31,8 @@ import {
 } from 'ant-design-vue';
 
 import {
+  batchDeleteDocuments,
+  batchMoveDocuments,
   clearDocumentTrash,
   copyDocuments,
   createDocumentFolder,
@@ -55,53 +57,28 @@ import DocumentHistoryModal from './components/DocumentHistoryModal.vue';
 import DocumentImagePreviewModal from './components/DocumentImagePreviewModal.vue';
 import DocumentOnlyOfficePreviewModal from './components/DocumentOnlyOfficePreviewModal.vue';
 import DocumentShareDrawer from './components/DocumentShareDrawer.vue';
+import {
+  BUSINESS_MODULE_VIEW_STORE_TYPE,
+  BUSINESS_RECORD_VIEW_STORE_TYPE,
+  BUSINESS_VIEW_STORE_TYPE,
+  DOCUMENT_SORT_FIELDS,
+  DOCUMENT_SORT_OPTIONS,
+  DOCUMENT_SORT_ORDERS,
+  DOCUMENT_UPLOAD_ACCEPT,
+  IMAGE_PREVIEW_EXTENSIONS,
+  type DocumentSortField,
+  type DocumentSortOption,
+  type DocumentSortOrder,
+  type DocumentSortState,
+} from './constants';
 
 const SCOPE_ROOT_PREFIX = 'scope:';
 const TREE_NODE_KEY_SEPARATOR = '::';
 const PAGE_SIZE = 500;
-const BUSINESS_VIEW_STORE_TYPE = 'business_view';
-const BUSINESS_MODULE_VIEW_STORE_TYPE = 'business_module_view';
-const BUSINESS_RECORD_VIEW_STORE_TYPE = 'business_record_view';
 const DOCUMENT_VIEW_MODE_STORAGE_KEY = 'document_center_view_mode';
 const DOCUMENT_SORT_STORAGE_KEY = 'document_center_sort';
-const DOCUMENT_SORT_FIELDS = ['fileName', 'fileSize', 'fileType', 'modifiedTime'] as const;
-const DOCUMENT_SORT_ORDERS = ['asc', 'desc'] as const;
-const IMAGE_PREVIEW_EXTENSIONS = new Set(['bmp', 'gif', 'jpeg', 'jpg', 'png', 'webp']);
-const DOCUMENT_UPLOAD_ACCEPT = [
-  '.doc',
-  '.docx',
-  '.xls',
-  '.xlsx',
-  '.ppt',
-  '.pptx',
-  '.pdf',
-  '.txt',
-  '.csv',
-  '.rtf',
-  '.md',
-  '.wps',
-  '.et',
-  '.dps',
-  '.odt',
-  '.ods',
-  '.odp',
-  '.jpg',
-  '.jpeg',
-  '.png',
-  '.gif',
-  '.bmp',
-  '.webp',
-  '.mp4',
-  '.mov',
-  '.avi',
-  '.mkv',
-  '.flv',
-  '.wmv',
-].join(',');
 
 type SharedRootTargetType = Extract<DocumentShareTargetType, 'depart' | 'tenant'>;
-type DocumentSortField = (typeof DOCUMENT_SORT_FIELDS)[number];
-type DocumentSortOrder = (typeof DOCUMENT_SORT_ORDERS)[number];
 
 interface ScopeOption {
   children?: ScopeOption[];
@@ -133,16 +110,6 @@ interface InlineEditorState {
 type DocumentBatchAction = 'copy' | 'cut' | 'delete' | 'download';
 type DocumentViewMode = 'grid' | 'list';
 
-interface DocumentSortOption {
-  field: DocumentSortField;
-  label: string;
-}
-
-interface DocumentSortState {
-  field: DocumentSortField;
-  order: DocumentSortOrder;
-}
-
 interface DocumentNavigationLocation {
   parentStack: DocumentFileInfo[];
   rootKey: string;
@@ -163,12 +130,7 @@ const expandedTreeKeys = ref<string[]>([getScopeRootKey('my')]);
 const selectedTreeKeys = ref<string[]>([getScopeRootKey('my')]);
 const parentStack = ref<DocumentFileInfo[]>([]);
 const documentViewMode = ref<DocumentViewMode>(readDocumentViewMode());
-const documentSortOptions: DocumentSortOption[] = [
-  { field: 'fileName', label: '名称' },
-  { field: 'modifiedTime', label: '修改时间' },
-  { field: 'fileType', label: '类型' },
-  { field: 'fileSize', label: '大小' },
-];
+const documentSortOptions: DocumentSortOption[] = DOCUMENT_SORT_OPTIONS;
 const documentSortState = ref<DocumentSortState>(readDocumentSortState());
 const treeShortcutActive = ref(false);
 const currentDeparts = ref<CurrentUserOrganization['departs']>([]);
@@ -1199,9 +1161,7 @@ function handleBatchDelete(fileIds: string[]) {
     okText: '确定',
     title: '确认删除',
     async onOk() {
-      for (const id of ids) {
-        await deleteDocument(id);
-      }
+      await batchDeleteDocuments(ids);
       message.success('已移入回收站');
       await reloadAll();
     },
@@ -1346,14 +1306,12 @@ async function handleBatchMove(sourceIds: string[], targetParentId?: string) {
   }
   moving.value = true;
   try {
-    for (const id of ids) {
-      await moveDocument({
-        id,
-        parentId: targetParentId,
-        scope: scope.value,
-        shareTargetType: activeScopeOption.value?.shareTargetType,
-      });
-    }
+    await batchMoveDocuments({
+      ids,
+      parentId: targetParentId,
+      scope: scope.value,
+      shareTargetType: activeScopeOption.value?.shareTargetType,
+    });
     message.success(`已移动 ${ids.length} 项`);
     await reloadAll();
   } finally {
