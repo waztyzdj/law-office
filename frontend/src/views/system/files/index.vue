@@ -2,7 +2,6 @@
 import type {
   DocumentFileInfo,
   DocumentScope,
-  DocumentShareTargetType,
 } from '#/api/system/document';
 import type {
   CurrentUserOrganization,
@@ -58,7 +57,6 @@ import DocumentImagePreviewModal from './components/DocumentImagePreviewModal.vu
 import DocumentOnlyOfficePreviewModal from './components/DocumentOnlyOfficePreviewModal.vue';
 import DocumentShareDrawer from './components/DocumentShareDrawer.vue';
 import {
-  BUSINESS_MODULE_VIEW_STORE_TYPE,
   BUSINESS_RECORD_VIEW_STORE_TYPE,
   BUSINESS_VIEW_STORE_TYPE,
   DOCUMENT_SORT_FIELDS,
@@ -71,64 +69,33 @@ import {
   type DocumentSortOrder,
   type DocumentSortState,
 } from './constants';
+import {
+  buildDepartScopeOptions,
+  getScopeFromRootKey,
+  getScopeRootKey,
+  isScopeRootKey,
+} from './tree';
+import { useDocumentTree } from './hooks/useDocumentTree';
+import type {
+  DocumentBatchAction,
+  DocumentNavigationLocation,
+  DocumentViewMode,
+  InlineEditorState,
+  ScopeOption,
+} from './types';
 
-const SCOPE_ROOT_PREFIX = 'scope:';
-const TREE_NODE_KEY_SEPARATOR = '::';
 const PAGE_SIZE = 500;
 const DOCUMENT_VIEW_MODE_STORAGE_KEY = 'document_center_view_mode';
 const DOCUMENT_SORT_STORAGE_KEY = 'document_center_sort';
 
-type SharedRootTargetType = Extract<DocumentShareTargetType, 'depart' | 'tenant'>;
-
-interface ScopeOption {
-  children?: ScopeOption[];
-  icon: string;
-  key: string;
-  scope?: DocumentScope;
-  selectable?: boolean;
-  shareTargetId?: string;
-  shareTargetType?: SharedRootTargetType;
-  title: string;
-}
-
-interface FolderTreeNode {
-  children?: FolderTreeNode[];
-  file?: DocumentFileInfo;
-  isLeaf?: boolean;
-  key: string;
-  selectable?: boolean;
-  title: string;
-}
-
-interface InlineEditorState {
-  extension?: string;
-  fileName: string;
-  mode: 'create' | 'rename';
-  parentId?: string;
-  record?: DocumentFileInfo;
-}
-
-type DocumentBatchAction = 'copy' | 'cut' | 'delete' | 'download';
-type DocumentViewMode = 'grid' | 'list';
-
-interface DocumentNavigationLocation {
-  parentStack: DocumentFileInfo[];
-  rootKey: string;
-}
-
 const activeRootKey = ref('my');
 const loading = ref(false);
-const treeLoading = ref(false);
 const uploading = ref(false);
 const moving = ref(false);
 const savingName = ref(false);
 const keyword = ref('');
 const dataSource = ref<DocumentFileInfo[]>([]);
-const folderTree = ref<FolderTreeNode[]>([]);
-const folderTreeCache = ref<Record<string, FolderTreeNode[]>>({});
 const inlineEditor = ref<InlineEditorState>();
-const expandedTreeKeys = ref<string[]>([getScopeRootKey('my')]);
-const selectedTreeKeys = ref<string[]>([getScopeRootKey('my')]);
 const parentStack = ref<DocumentFileInfo[]>([]);
 const documentViewMode = ref<DocumentViewMode>(readDocumentViewMode());
 const documentSortOptions: DocumentSortOption[] = DOCUMENT_SORT_OPTIONS;
@@ -199,6 +166,31 @@ const scopeOptions = computed<ScopeOption[]>(() => {
   );
 
   return roots;
+});
+const {
+  ensureFolderTreePathLoaded,
+  expandedTreeKeys,
+  expandPathKeys,
+  findCachedPath,
+  findFolderByKey,
+  findScopeOption,
+  folderTree,
+  folderTreeCache,
+  getActiveSelectedTreeKey,
+  getSelectedTreeKey,
+  getTreeNodeIcon,
+  handleTreeExpand,
+  loadFolderTree,
+  loadInitialFolderTrees,
+  reloadCachedFolderTrees,
+  selectedTreeKeys,
+  treeData,
+  treeLoading,
+} = useDocumentTree({
+  activeRootKey,
+  currentParentId,
+  fetchDocuments,
+  scopeOptions,
 });
 const activeScopeOption = computed(
   () => findScopeOption(activeRootKey.value) || scopeOptions.value[0],
@@ -280,84 +272,6 @@ const inlineFileName = computed({
   get: () => inlineEditor.value?.fileName || '',
   set: (value: string) => handleInlineNameChange(value),
 });
-const treeData = computed<FolderTreeNode[]>(() =>
-  scopeOptions.value.map((item) => buildScopeTreeNode(item)),
-);
-
-function buildScopeTreeNode(option: ScopeOption): FolderTreeNode {
-  const optionChildren = option.children?.map((item) => buildScopeTreeNode(item)) || [];
-  const activeChildren = shouldRenderFolderTree(option) ? folderTreeCache.value[option.key] || [] : [];
-  const children = [...optionChildren, ...activeChildren];
-  const canLoadFolderTree = shouldRenderFolderTree(option) && Boolean(option.scope) && option.scope !== 'trash';
-  const folderTreeLoaded = hasLoadedFolderTreeRoot(option.key);
-  return {
-    children: children.length > 0 ? children : undefined,
-    isLeaf: (!canLoadFolderTree || folderTreeLoaded) && children.length === 0,
-    key: getScopeRootKey(option.key),
-    selectable: option.selectable,
-    title: option.title,
-  };
-}
-
-function buildDepartScopeOptions(
-  departs: CurrentUserOrganization['departs'],
-): ScopeOption[] {
-  const optionMap = new Map<string, ScopeOption>();
-  const parentIdMap = new Map<string, string>();
-  const roots: ScopeOption[] = [];
-
-  for (const depart of departs) {
-    if (!depart.id) {
-      continue;
-    }
-    optionMap.set(depart.id, {
-      icon: 'lucide:building-2',
-      key: `depart:${depart.id}`,
-      scope: 'shared',
-      shareTargetId: depart.id,
-      shareTargetType: 'depart',
-      title: depart.departName || depart.orgCode || '部门共享',
-    });
-    if (depart.parentId) {
-      parentIdMap.set(depart.id, depart.parentId);
-    }
-  }
-
-  for (const [departId, option] of optionMap) {
-    const parentId = parentIdMap.get(departId);
-    const parent = parentId ? optionMap.get(parentId) : undefined;
-    if (parent) {
-      parent.children = [...(parent.children || []), option];
-    } else {
-      roots.push(option);
-    }
-  }
-
-  return roots;
-}
-
-function getScopeRootKey(scopeValue: string) {
-  return `${SCOPE_ROOT_PREFIX}${scopeValue}`;
-}
-
-function shouldRenderFolderTree(option?: ScopeOption) {
-  return option?.shareTargetType !== 'depart';
-}
-
-function getFolderNodeKey(rootKey: string, fileId?: string) {
-  return fileId ? `${rootKey}${TREE_NODE_KEY_SEPARATOR}${fileId}` : getScopeRootKey(rootKey);
-}
-
-function getSelectedTreeKey(rootKey: string, fileId?: string) {
-  return shouldRenderFolderTree(findScopeOption(rootKey))
-    ? getFolderNodeKey(rootKey, fileId)
-    : getScopeRootKey(rootKey);
-}
-
-function getActiveSelectedTreeKey() {
-  return getSelectedTreeKey(activeRootKey.value, currentParentId.value);
-}
-
 function readDocumentViewMode(): DocumentViewMode {
   if (typeof window === 'undefined') {
     return 'grid';
@@ -444,67 +358,6 @@ function handleChangeDocumentSortOrder(order: DocumentSortOrder) {
 
 function isActiveDocumentSort(field: DocumentSortField, order?: DocumentSortOrder) {
   return documentSortState.value.field === field && (!order || documentSortState.value.order === order);
-}
-
-function isScopeRootKey(key: string) {
-  return key.startsWith(SCOPE_ROOT_PREFIX);
-}
-
-function getScopeFromRootKey(key: string) {
-  return key.slice(SCOPE_ROOT_PREFIX.length);
-}
-
-function getRootKeyFromFolderNodeKey(key: string) {
-  if (isScopeRootKey(key)) {
-    return getScopeFromRootKey(key);
-  }
-  const separatorIndex = key.indexOf(TREE_NODE_KEY_SEPARATOR);
-  return separatorIndex > 0 ? key.slice(0, separatorIndex) : activeRootKey.value;
-}
-
-function findScopeOption(key: string, options = scopeOptions.value): ScopeOption | undefined {
-  for (const option of options) {
-    if (option.key === key) {
-      return option;
-    }
-    const found = option.children ? findScopeOption(key, option.children) : undefined;
-    if (found) {
-      return found;
-    }
-  }
-  return undefined;
-}
-
-function collectScopeRootKeys(options = scopeOptions.value): string[] {
-  const keys: string[] = [];
-  for (const option of options) {
-    if (option.scope) {
-      keys.push(option.key);
-    }
-    if (option.children?.length) {
-      keys.push(...collectScopeRootKeys(option.children));
-    }
-  }
-  return keys;
-}
-
-function getTreeNodeIcon(key: string) {
-  if (!isScopeRootKey(key)) {
-    const record = findFolderByKey(key);
-    if (record?.storeType === BUSINESS_MODULE_VIEW_STORE_TYPE) {
-      return 'lucide:briefcase-business';
-    }
-    if (record?.storeType === BUSINESS_RECORD_VIEW_STORE_TYPE) {
-      return 'lucide:database';
-    }
-    return 'lucide:folder';
-  }
-  const scopeKey = getScopeFromRootKey(key);
-  return findScopeOption(scopeKey)?.icon || 'lucide:folder';
-}
-
-function findFolderByKey(key: string) {
-  return findCachedPath(key)?.path.at(-1);
 }
 
 function canManageFolder(record?: DocumentFileInfo) {
@@ -601,103 +454,6 @@ async function fetchDocuments(
   return records;
 }
 
-function buildFolderTreeNode(
-  record: DocumentFileInfo,
-  rootKey: string,
-  children?: FolderTreeNode[],
-): FolderTreeNode {
-  return {
-    children: children && children.length > 0 ? children : undefined,
-    file: record,
-    isLeaf: children ? children.length === 0 : record.hasChild === false,
-    key: getFolderNodeKey(rootKey, record.id),
-    title: record.fileName || '未命名文件夹',
-  };
-}
-
-async function loadFolderNodes(
-  parentId?: string,
-  option: ScopeOption | undefined = activeScopeOption.value,
-  rootKey = activeRootKey.value,
-): Promise<FolderTreeNode[]> {
-  const children = await fetchDocuments(parentId, undefined, option);
-  const records = children.filter((item) => item.izFolder === '1' && item.id);
-  return records.map((record) => buildFolderTreeNode(record, rootKey));
-}
-
-function setFolderTreeCache(rootKey: string, nodes: FolderTreeNode[]) {
-  folderTreeCache.value = {
-    ...folderTreeCache.value,
-    [rootKey]: nodes,
-  };
-  if (rootKey === activeRootKey.value) {
-    folderTree.value = nodes;
-  }
-}
-
-function updateFolderTreeNodes(
-  nodes: FolderTreeNode[],
-  targetKey: string,
-  children: FolderTreeNode[],
-): FolderTreeNode[] {
-  return nodes.map((node) => {
-    if (node.key === targetKey) {
-      return {
-        ...node,
-        children: children.length > 0 ? children : undefined,
-        isLeaf: children.length === 0,
-      };
-    }
-    if (!node.children?.length) {
-      return node;
-    }
-    return {
-      ...node,
-      children: updateFolderTreeNodes(node.children, targetKey, children),
-    };
-  });
-}
-
-function setFolderTreeNodeChildren(rootKey: string, targetKey: string, children: FolderTreeNode[]) {
-  const nextTree = updateFolderTreeNodes(folderTreeCache.value[rootKey] || [], targetKey, children);
-  setFolderTreeCache(rootKey, nextTree);
-}
-
-function hasLoadedFolderTreeRoot(rootKey: string) {
-  return Object.prototype.hasOwnProperty.call(folderTreeCache.value, rootKey);
-}
-
-async function loadFolderTree(rootKey = activeRootKey.value, updateSelection = true) {
-  const option = findScopeOption(rootKey);
-  if (!option?.scope) {
-    return;
-  }
-  if (!shouldRenderFolderTree(option)) {
-    setFolderTreeCache(rootKey, []);
-    if (updateSelection) {
-      selectedTreeKeys.value = [getScopeRootKey(rootKey)];
-    }
-    return;
-  }
-  if (option.scope === 'trash') {
-    setFolderTreeCache(rootKey, []);
-    if (updateSelection) {
-      selectedTreeKeys.value = [getScopeRootKey(rootKey)];
-    }
-    return;
-  }
-  treeLoading.value = true;
-  try {
-    const nextTree = await loadFolderNodes(undefined, option, rootKey);
-    setFolderTreeCache(rootKey, nextTree);
-    if (updateSelection) {
-      selectedTreeKeys.value = [getSelectedTreeKey(rootKey, currentParentId.value)];
-    }
-  } finally {
-    treeLoading.value = false;
-  }
-}
-
 async function loadData() {
   loading.value = true;
   try {
@@ -711,24 +467,6 @@ async function reloadAll() {
   await Promise.all([loadData(), reloadCachedFolderTrees()]);
 }
 
-async function reloadCachedFolderTrees() {
-  const rootKeys = Array.from(
-    new Set([activeRootKey.value, ...Object.keys(folderTreeCache.value)]),
-  );
-  await Promise.all(rootKeys.map((rootKey) => loadFolderTree(rootKey, false)));
-  await ensureFolderTreePathLoaded(activeRootKey.value, parentStack.value);
-  if (currentParentId.value) {
-    await loadFolderTreeNodeChildren(activeRootKey.value, currentParentId.value);
-  }
-  selectedTreeKeys.value = [getActiveSelectedTreeKey()];
-}
-
-async function loadInitialFolderTrees() {
-  const rootKeys = Array.from(new Set(collectScopeRootKeys()));
-  await Promise.all(rootKeys.map((rootKey) => loadFolderTree(rootKey, false)));
-  selectedTreeKeys.value = [getActiveSelectedTreeKey()];
-}
-
 function resetAndLoad() {
   void loadData();
 }
@@ -736,108 +474,6 @@ function resetAndLoad() {
 function handleSearch(value: string) {
   keyword.value = value;
   resetAndLoad();
-}
-
-function findPath(
-  nodes: FolderTreeNode[],
-  key: string,
-  parents: DocumentFileInfo[] = [],
-): DocumentFileInfo[] | undefined {
-  for (const node of nodes) {
-    const nextParents = node.file ? [...parents, node.file] : parents;
-    if (node.key === key) {
-      return nextParents;
-    }
-    const found = node.children ? findPath(node.children, key, nextParents) : undefined;
-    if (found) {
-      return found;
-    }
-  }
-  return undefined;
-}
-
-function findFolderTreeNode(
-  nodes: FolderTreeNode[],
-  key: string,
-): FolderTreeNode | undefined {
-  for (const node of nodes) {
-    if (node.key === key) {
-      return node;
-    }
-    const found = node.children ? findFolderTreeNode(node.children, key) : undefined;
-    if (found) {
-      return found;
-    }
-  }
-  return undefined;
-}
-
-function findCachedPath(key: string) {
-  for (const [rootKey, nodes] of Object.entries(folderTreeCache.value)) {
-    const path = findPath(nodes, key);
-    if (path) {
-      return { path, rootKey };
-    }
-  }
-  return undefined;
-}
-
-async function loadFolderTreeNodeChildren(rootKey: string, parentId: string) {
-  const option = findScopeOption(rootKey);
-  if (!option?.scope || !shouldRenderFolderTree(option) || option.scope === 'trash') {
-    return;
-  }
-  const targetKey = getFolderNodeKey(rootKey, parentId);
-  const children = await loadFolderNodes(parentId, option, rootKey);
-  setFolderTreeNodeChildren(rootKey, targetKey, children);
-}
-
-async function ensureFolderTreeNodeChildrenLoaded(key: string) {
-  const rootKey = getRootKeyFromFolderNodeKey(key);
-  const option = findScopeOption(rootKey);
-  if (!option?.scope || !shouldRenderFolderTree(option) || option.scope === 'trash') {
-    return;
-  }
-  if (isScopeRootKey(key)) {
-    if (!hasLoadedFolderTreeRoot(rootKey)) {
-      await loadFolderTree(rootKey, false);
-    }
-    return;
-  }
-  if (!hasLoadedFolderTreeRoot(rootKey)) {
-    await loadFolderTree(rootKey, false);
-  }
-  const node = findFolderTreeNode(folderTreeCache.value[rootKey] || [], key);
-  if (!node?.file?.id || node.isLeaf || Array.isArray(node.children)) {
-    return;
-  }
-  await loadFolderTreeNodeChildren(rootKey, node.file.id);
-}
-
-async function ensureFolderTreePathLoaded(rootKey: string, path: DocumentFileInfo[]) {
-  await ensureFolderTreeNodeChildrenLoaded(getScopeRootKey(rootKey));
-  for (const folder of path.slice(0, -1)) {
-    if (folder.id) {
-      await ensureFolderTreeNodeChildrenLoaded(getFolderNodeKey(rootKey, folder.id));
-    }
-  }
-}
-
-async function handleTreeExpand(keys: unknown[]) {
-  expandedTreeKeys.value = keys.map((key) => String(key));
-  const loadKeys = expandedTreeKeys.value.filter((key) => (
-    isScopeRootKey(key) || getRootKeyFromFolderNodeKey(key)
-  ));
-  await Promise.all(loadKeys.map((key) => ensureFolderTreeNodeChildrenLoaded(key)));
-}
-
-function expandPathKeys(path: DocumentFileInfo[]) {
-  const keys = path
-    .map((item) => getFolderNodeKey(activeRootKey.value, item.id))
-    .filter(Boolean) as string[];
-  expandedTreeKeys.value = Array.from(
-    new Set([getScopeRootKey(activeRootKey.value), ...expandedTreeKeys.value, ...keys]),
-  );
 }
 
 function getCurrentNavigationLocation(): DocumentNavigationLocation {

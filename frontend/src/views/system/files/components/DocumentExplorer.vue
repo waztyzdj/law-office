@@ -10,28 +10,33 @@ import { IconifyIcon } from '@vben/icons';
 import { Button, Dropdown, Empty, Input, Menu, Spin, Tooltip } from 'ant-design-vue';
 
 import {
-  BUSINESS_MODULE_VIEW_STORE_TYPE,
-  BUSINESS_RECORD_VIEW_STORE_TYPE,
-  BUSINESS_VIEW_STORE_TYPE,
   DOCUMENT_SORT_OPTIONS as sortOptions,
-  IMAGE_PREVIEW_EXTENSIONS,
-  ONLYOFFICE_EDIT_EXTENSIONS,
-  ONLYOFFICE_PREVIEW_EXTENSIONS,
   type DocumentSortField,
   type DocumentSortOrder,
   type DocumentSortState,
 } from '../constants';
-
-interface InlineEditorState {
-  extension?: string;
-  fileName: string;
-  mode: 'create' | 'rename';
-  parentId?: string;
-  record?: DocumentFileInfo;
-}
-
-type BatchMenuAction = 'copy' | 'cut' | 'delete' | 'download';
-type DocumentViewMode = 'grid' | 'list';
+import type {
+  DocumentBatchAction,
+  DocumentViewMode,
+  InlineEditorState,
+} from '../types';
+import {
+  canCreateFolderInItem as canCreateFolderInDocument,
+  canDropOnFolder as canDropOnDocumentFolder,
+  canEditContentItem as canEditDocumentContent,
+  canEditItem as canEditDocumentItem,
+  canMove as canMoveDocument,
+  canPreviewItem as canPreviewDocumentItem,
+  canViewHistoryItem as canViewDocumentHistory,
+  compareDocuments,
+  documentListColumns,
+  fileIcon,
+  fileTypeText,
+  formatDateTime,
+  formatSize,
+  isImageFile,
+  isVirtualBusinessItem,
+} from './documentExplorerUtils';
 
 interface Props {
   canCreate?: boolean;
@@ -68,7 +73,7 @@ const props = withDefaults(defineProps<Props>(), {
 
 const emit = defineEmits<{
   action: [event: string, record: DocumentFileInfo];
-  batchAction: [event: BatchMenuAction, records: DocumentFileInfo[]];
+  batchAction: [event: DocumentBatchAction, records: DocumentFileInfo[]];
   batchMove: [sourceIds: string[], targetParentId?: string];
   createFolder: [];
   createFolderIn: [record: DocumentFileInfo];
@@ -90,6 +95,10 @@ const sortedItems = computed(() =>
     return compareDocuments(a, b, props.sortState);
   }),
 );
+const actionContext = computed(() => ({
+  personalizeShared: props.personalizeShared,
+  scope: props.scope,
+}));
 
 const canCreateInScope = computed(() => props.canCreate);
 const canUploadInScope = computed(() => props.canUpload);
@@ -206,130 +215,6 @@ function sortDirectionIcon(field: DocumentSortField) {
   return props.sortState.order === 'asc' ? 'lucide:arrow-up' : 'lucide:arrow-down';
 }
 
-function sortValue(record: DocumentFileInfo, field: DocumentSortField) {
-  if (field === 'fileSize') {
-    return record.fileSize || 0;
-  }
-  if (field === 'fileType') {
-    return fileTypeText(record);
-  }
-  if (field === 'modifiedTime') {
-    const time = record.updateTime || record.createTime || '';
-    return time ? new Date(time).getTime() || 0 : 0;
-  }
-  return record.fileName || '';
-}
-
-function compareDocuments(
-  left: DocumentFileInfo,
-  right: DocumentFileInfo,
-  sort: DocumentSortState,
-) {
-  const leftValue = sortValue(left, sort.field);
-  const rightValue = sortValue(right, sort.field);
-  const direction = sort.order === 'asc' ? 1 : -1;
-  let result = 0;
-  if (typeof leftValue === 'number' && typeof rightValue === 'number') {
-    result = leftValue - rightValue;
-  } else {
-    result = String(leftValue).localeCompare(String(rightValue), 'zh-CN', {
-      numeric: true,
-      sensitivity: 'base',
-    });
-  }
-  if (result === 0 && sort.field !== 'fileName') {
-    result = String(left.fileName || '').localeCompare(String(right.fileName || ''), 'zh-CN', {
-      numeric: true,
-      sensitivity: 'base',
-    });
-  }
-  return result * direction;
-}
-
-function formatSize(size?: number) {
-  if (!size || size <= 0) {
-    return '';
-  }
-  if (size >= 1024 * 1024) {
-    return `${(size / 1024 / 1024).toFixed(1)} MB`;
-  }
-  if (size >= 1024) {
-    return `${(size / 1024).toFixed(1)} KB`;
-  }
-  return `${Math.round(size)} B`;
-}
-
-function formatDateTime(value?: string) {
-  if (!value) {
-    return '-';
-  }
-  return value.replace('T', ' ').slice(0, 16);
-}
-
-function fileIcon(record: DocumentFileInfo) {
-  if (record.storeType === BUSINESS_MODULE_VIEW_STORE_TYPE) {
-    return 'lucide:briefcase-business';
-  }
-  if (record.storeType === BUSINESS_RECORD_VIEW_STORE_TYPE) {
-    return 'lucide:database';
-  }
-  if (record.izFolder === '1') {
-    return 'lucide:folder';
-  }
-  const extension = getFileExtension(record);
-  if (['doc', 'docx'].includes(extension)) {
-    return 'vscode-icons:file-type-word';
-  }
-  if (['xls', 'xlsx'].includes(extension)) {
-    return 'vscode-icons:file-type-excel';
-  }
-  if (['ppt', 'pptx'].includes(extension)) {
-    return 'vscode-icons:file-type-powerpoint';
-  }
-  if (extension === 'pdf') {
-    return 'vscode-icons:file-type-pdf2';
-  }
-  const type = String(record.fileType || '').toLowerCase();
-  if (type === 'image') {
-    return 'lucide:file-image';
-  }
-  if (type === 'pdf') {
-    return 'vscode-icons:file-type-pdf2';
-  }
-  if (type === 'excel') {
-    return 'vscode-icons:file-type-excel';
-  }
-  if (type === 'ppt') {
-    return 'vscode-icons:file-type-powerpoint';
-  }
-  if (type === 'doc') {
-    return 'vscode-icons:file-type-word';
-  }
-  if (type === 'archive') {
-    return 'lucide:file-archive';
-  }
-  if (type === 'video') {
-    return 'lucide:file-video';
-  }
-  return 'lucide:file';
-}
-
-function isImageFile(record: DocumentFileInfo) {
-  if (record.izFolder === '1') {
-    return false;
-  }
-  const extension = getFileExtension(record);
-  if (extension === 'svg') {
-    return false;
-  }
-  const type = String(record.fileType || '').toLowerCase();
-  return (
-    type === 'image' ||
-    type.startsWith('image/') ||
-    IMAGE_PREVIEW_EXTENSIONS.has(extension)
-  );
-}
-
 function imageThumbnailUrl(record: DocumentFileInfo) {
   const key = itemKey(record);
   return key ? imageThumbnailUrls.value[key] : undefined;
@@ -381,110 +266,32 @@ async function loadImageThumbnails() {
   }
 }
 
-function fileTypeText(record: DocumentFileInfo) {
-  if (record.izFolder === '1') {
-    return '文件夹';
-  }
-  const typeText: Record<string, string> = {
-    archive: '压缩包',
-    doc: 'Word',
-    excel: 'Excel',
-    image: '图片',
-    pdf: 'PDF',
-    ppt: 'PPT',
-    video: '视频',
-  };
-  return typeText[String(record.fileType)] || record.fileType || '文件';
-}
-
 function canMove(record: DocumentFileInfo) {
-  if (props.scope === 'business') {
-    return record.izFolder === '1'
-      ? canEditItem(record)
-      : Boolean(record.id);
-  }
-  return (
-    props.scope !== 'trash' &&
-    Boolean(record.id) &&
-    (Boolean(record.ownerFlag) || props.personalizeShared)
-  );
+  return canMoveDocument(record, actionContext.value);
 }
 
 function canEditItem(record: DocumentFileInfo) {
-  if (props.scope === 'business') {
-    return (
-      Boolean(record.ownerFlag) &&
-      record.izFolder === '1' &&
-      record.storeType === BUSINESS_VIEW_STORE_TYPE
-    );
-  }
-  return props.scope !== 'trash' && Boolean(record.ownerFlag);
+  return canEditDocumentItem(record, actionContext.value);
 }
 
 function canCreateFolderInItem(record: DocumentFileInfo) {
-  if (record.izFolder !== '1' || !record.id) {
-    return false;
-  }
-  if (props.scope === 'business') {
-    return (
-      record.storeType === BUSINESS_RECORD_VIEW_STORE_TYPE ||
-      (Boolean(record.ownerFlag) && record.storeType === BUSINESS_VIEW_STORE_TYPE)
-    );
-  }
-  return canEditItem(record);
-}
-
-function getFileExtension(record: DocumentFileInfo) {
-  const fileName = record.fileName || '';
-  const dotIndex = fileName.lastIndexOf('.');
-  return dotIndex >= 0 ? fileName.slice(dotIndex + 1).toLowerCase() : '';
+  return canCreateFolderInDocument(record, actionContext.value);
 }
 
 function canPreviewItem(record: DocumentFileInfo) {
-  const extension = getFileExtension(record);
-  return (
-    props.scope !== 'trash' &&
-    record.izFolder !== '1' &&
-    Boolean(record.id) &&
-    (ONLYOFFICE_PREVIEW_EXTENSIONS.has(extension) || isImageFile(record))
-  );
+  return canPreviewDocumentItem(record, actionContext.value);
 }
 
 function canEditContentItem(record: DocumentFileInfo) {
-  const extension = getFileExtension(record);
-  return (
-    props.scope !== 'trash' &&
-    record.izFolder !== '1' &&
-    Boolean(record.id) &&
-    Boolean(record.canUpdate) &&
-    ONLYOFFICE_EDIT_EXTENSIONS.has(extension)
-  );
+  return canEditDocumentContent(record, actionContext.value);
 }
 
 function canViewHistoryItem(record: DocumentFileInfo) {
-  const extension = getFileExtension(record);
-  return (
-    props.scope !== 'trash' &&
-    record.izFolder !== '1' &&
-    Boolean(record.id) &&
-    ONLYOFFICE_EDIT_EXTENSIONS.has(extension)
-  );
+  return canViewDocumentHistory(record, actionContext.value);
 }
 
 function canDropOnFolder(target: DocumentFileInfo) {
-  if (props.scope === 'trash' || target.izFolder !== '1' || !target.id) {
-    return false;
-  }
-  if (props.personalizeShared) {
-    return Boolean(target.ownerFlag) && target.storeType === 'shared_view';
-  }
-  if (props.scope === 'business') {
-    return (
-      target.storeType === BUSINESS_RECORD_VIEW_STORE_TYPE ||
-      (Boolean(target.ownerFlag) && target.storeType === BUSINESS_VIEW_STORE_TYPE)
-    );
-  }
-  return Boolean(target.ownerFlag);
+  return canDropOnDocumentFolder(target, actionContext.value);
 }
 
 function handleOpen(record: DocumentFileInfo) {
@@ -711,13 +518,6 @@ function getContextCuttableRecords(record: DocumentFileInfo) {
   return getContextRecords(record).filter((item) => canMove(item));
 }
 
-function isVirtualBusinessItem(record: DocumentFileInfo) {
-  return (
-    record.storeType === BUSINESS_MODULE_VIEW_STORE_TYPE ||
-    record.storeType === BUSINESS_RECORD_VIEW_STORE_TYPE
-  );
-}
-
 function getContextCopyableRecords(record: DocumentFileInfo) {
   return getContextRecords(record).filter(
     (item) => item.id && props.scope !== 'trash' && !isVirtualBusinessItem(item),
@@ -728,7 +528,7 @@ function isSingleContext(record: DocumentFileInfo) {
   return getContextRecords(record).length === 1;
 }
 
-function emitContextBatchAction(event: BatchMenuAction, record: DocumentFileInfo) {
+function emitContextBatchAction(event: DocumentBatchAction, record: DocumentFileInfo) {
   const records =
     event === 'download'
       ? getContextDownloadRecords(record)
@@ -1252,51 +1052,18 @@ onBeforeUnmount(() => {
           <div v-else-if="hasGridContent" class="document-list">
             <div class="document-list__header">
               <button
-                class="document-list__cell document-list__cell--name document-list__sort"
+                v-for="column in documentListColumns"
+                :key="column.field"
+                class="document-list__cell document-list__sort"
+                :class="column.className"
                 type="button"
-                @click="setSort('fileName')"
+                @click="setSort(column.field)"
               >
-                <span>名称</span>
+                <span>{{ column.label }}</span>
                 <IconifyIcon
                   class="document-list__sort-icon"
-                  :class="{ 'document-list__sort-icon--active': isActiveSort('fileName') }"
-                  :icon="sortDirectionIcon('fileName')"
-                />
-              </button>
-              <button
-                class="document-list__cell document-list__cell--type document-list__sort"
-                type="button"
-                @click="setSort('fileType')"
-              >
-                <span>类型</span>
-                <IconifyIcon
-                  class="document-list__sort-icon"
-                  :class="{ 'document-list__sort-icon--active': isActiveSort('fileType') }"
-                  :icon="sortDirectionIcon('fileType')"
-                />
-              </button>
-              <button
-                class="document-list__cell document-list__cell--size document-list__sort"
-                type="button"
-                @click="setSort('fileSize')"
-              >
-                <span>大小</span>
-                <IconifyIcon
-                  class="document-list__sort-icon"
-                  :class="{ 'document-list__sort-icon--active': isActiveSort('fileSize') }"
-                  :icon="sortDirectionIcon('fileSize')"
-                />
-              </button>
-              <button
-                class="document-list__cell document-list__cell--time document-list__sort"
-                type="button"
-                @click="setSort('modifiedTime')"
-              >
-                <span>修改时间</span>
-                <IconifyIcon
-                  class="document-list__sort-icon"
-                  :class="{ 'document-list__sort-icon--active': isActiveSort('modifiedTime') }"
-                  :icon="sortDirectionIcon('modifiedTime')"
+                  :class="{ 'document-list__sort-icon--active': isActiveSort(column.field) }"
+                  :icon="sortDirectionIcon(column.field)"
                 />
               </button>
               <div class="document-list__cell document-list__cell--actions"></div>

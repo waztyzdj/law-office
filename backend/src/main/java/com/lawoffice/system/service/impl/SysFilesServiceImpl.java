@@ -1748,33 +1748,11 @@ public class SysFilesServiceImpl extends BaseServiceImpl<SysFilesMapper, SysFile
     }
 
     private DocumentFileVO buildDocumentVO(SysFiles file, UserAccessContext context) {
-        DocumentFileVO vo = new DocumentFileVO();
-        vo.setId(file.getId());
-        vo.setFileName(file.getFileName());
-        vo.setFileType(file.getFileType());
-        vo.setStoreType(file.getStoreType());
-        vo.setParentId(file.getParentId());
-        vo.setFileSize(file.getFileSize() == null ? 0L : Math.round(file.getFileSize() * 1024));
-        vo.setIzFolder(file.getIzFolder());
-        vo.setIzRootFolder(file.getIzRootFolder());
-        vo.setIzStar(file.getIzStar());
-        vo.setDownCount(file.getDownCount());
-        vo.setReadCount(file.getReadCount());
-        vo.setEnableDown(file.getEnableDown());
-        vo.setEnableUpdat(file.getEnableUpdat());
-        vo.setOwner(file.getCreateBy());
-        vo.setOwnerFlag(Objects.equals(file.getCreateBy(), context.username()));
+        DocumentFileVO vo = buildBaseDocumentVO(file, context);
         vo.setSharedFlag(hasActiveAcl(file.getId(), context.tenantId()));
-        vo.setHasChild(false);
         vo.setCanManage(vo.getOwnerFlag());
         vo.setCanDownload(canDownload(file, context));
         vo.setCanUpdate(canUpdate(file, context));
-        vo.setDeleteFlag(file.getDeleteFlag());
-        vo.setDeleteTime(file.getDeleteTime());
-        vo.setCreateBy(file.getCreateBy());
-        vo.setCreateTime(file.getCreateTime());
-        vo.setUpdateBy(file.getUpdateBy());
-        vo.setUpdateTime(file.getUpdateTime());
         return vo;
     }
 
@@ -1783,6 +1761,15 @@ public class SysFilesServiceImpl extends BaseServiceImpl<SysFilesMapper, SysFile
             UserAccessContext context,
             boolean inheritedDownload,
             boolean inheritedUpdate) {
+        DocumentFileVO vo = buildBaseDocumentVO(file, context);
+        vo.setSharedFlag(false);
+        vo.setCanManage(vo.getOwnerFlag());
+        vo.setCanDownload(vo.getOwnerFlag() || inheritedDownload);
+        vo.setCanUpdate(vo.getOwnerFlag() || inheritedUpdate);
+        return vo;
+    }
+
+    private DocumentFileVO buildBaseDocumentVO(SysFiles file, UserAccessContext context) {
         DocumentFileVO vo = new DocumentFileVO();
         vo.setId(file.getId());
         vo.setFileName(file.getFileName());
@@ -1799,11 +1786,7 @@ public class SysFilesServiceImpl extends BaseServiceImpl<SysFilesMapper, SysFile
         vo.setEnableUpdat(file.getEnableUpdat());
         vo.setOwner(file.getCreateBy());
         vo.setOwnerFlag(Objects.equals(file.getCreateBy(), context.username()));
-        vo.setSharedFlag(false);
         vo.setHasChild(false);
-        vo.setCanManage(vo.getOwnerFlag());
-        vo.setCanDownload(vo.getOwnerFlag() || inheritedDownload);
-        vo.setCanUpdate(vo.getOwnerFlag() || inheritedUpdate);
         vo.setDeleteFlag(file.getDeleteFlag());
         vo.setDeleteTime(file.getDeleteTime());
         vo.setCreateBy(file.getCreateBy());
