@@ -63,6 +63,9 @@ const BUSINESS_VIEW_STORE_TYPE = 'business_view';
 const BUSINESS_MODULE_VIEW_STORE_TYPE = 'business_module_view';
 const BUSINESS_RECORD_VIEW_STORE_TYPE = 'business_record_view';
 const DOCUMENT_VIEW_MODE_STORAGE_KEY = 'document_center_view_mode';
+const DOCUMENT_SORT_STORAGE_KEY = 'document_center_sort';
+const DOCUMENT_SORT_FIELDS = ['fileName', 'fileSize', 'fileType', 'modifiedTime'] as const;
+const DOCUMENT_SORT_ORDERS = ['asc', 'desc'] as const;
 const IMAGE_PREVIEW_EXTENSIONS = new Set(['bmp', 'gif', 'jpeg', 'jpg', 'png', 'webp']);
 const DOCUMENT_UPLOAD_ACCEPT = [
   '.doc',
@@ -97,6 +100,8 @@ const DOCUMENT_UPLOAD_ACCEPT = [
 ].join(',');
 
 type SharedRootTargetType = Extract<DocumentShareTargetType, 'depart' | 'tenant'>;
+type DocumentSortField = (typeof DOCUMENT_SORT_FIELDS)[number];
+type DocumentSortOrder = (typeof DOCUMENT_SORT_ORDERS)[number];
 
 interface ScopeOption {
   children?: ScopeOption[];
@@ -128,6 +133,16 @@ interface InlineEditorState {
 type DocumentBatchAction = 'copy' | 'cut' | 'delete' | 'download';
 type DocumentViewMode = 'grid' | 'list';
 
+interface DocumentSortOption {
+  field: DocumentSortField;
+  label: string;
+}
+
+interface DocumentSortState {
+  field: DocumentSortField;
+  order: DocumentSortOrder;
+}
+
 interface DocumentNavigationLocation {
   parentStack: DocumentFileInfo[];
   rootKey: string;
@@ -148,6 +163,13 @@ const expandedTreeKeys = ref<string[]>([getScopeRootKey('my')]);
 const selectedTreeKeys = ref<string[]>([getScopeRootKey('my')]);
 const parentStack = ref<DocumentFileInfo[]>([]);
 const documentViewMode = ref<DocumentViewMode>(readDocumentViewMode());
+const documentSortOptions: DocumentSortOption[] = [
+  { field: 'fileName', label: '名称' },
+  { field: 'modifiedTime', label: '修改时间' },
+  { field: 'fileType', label: '类型' },
+  { field: 'fileSize', label: '大小' },
+];
+const documentSortState = ref<DocumentSortState>(readDocumentSortState());
 const treeShortcutActive = ref(false);
 const currentDeparts = ref<CurrentUserOrganization['departs']>([]);
 const currentTenant = ref<CurrentUserTenant>();
@@ -165,6 +187,11 @@ let treeRenameTimer: number | undefined;
 
 const currentParentId = computed(() => parentStack.value.at(-1)?.id);
 const currentFolder = computed(() => parentStack.value.at(-1));
+const currentDocumentSortLabel = computed(
+  () =>
+    documentSortOptions.find((option) => option.field === documentSortState.value.field)?.label ||
+    '名称',
+);
 const scopeOptions = computed<ScopeOption[]>(() => {
   const departChildren = buildDepartScopeOptions(currentDeparts.value);
 
@@ -376,6 +403,33 @@ function readDocumentViewMode(): DocumentViewMode {
   }
 }
 
+function readDocumentSortState(): DocumentSortState {
+  const defaultState: DocumentSortState = {
+    field: 'fileName',
+    order: 'asc',
+  };
+  if (typeof window === 'undefined') {
+    return defaultState;
+  }
+  try {
+    const cached = window.localStorage.getItem(DOCUMENT_SORT_STORAGE_KEY);
+    if (!cached) {
+      return defaultState;
+    }
+    const parsed = JSON.parse(cached) as Partial<DocumentSortState>;
+    return {
+      field: DOCUMENT_SORT_FIELDS.includes(parsed.field as DocumentSortField)
+        ? (parsed.field as DocumentSortField)
+        : defaultState.field,
+      order: DOCUMENT_SORT_ORDERS.includes(parsed.order as DocumentSortOrder)
+        ? (parsed.order as DocumentSortOrder)
+        : defaultState.order,
+    };
+  } catch {
+    return defaultState;
+  }
+}
+
 function handleChangeDocumentViewMode(mode: DocumentViewMode) {
   if (mode !== 'list' && mode !== 'grid') {
     return;
@@ -389,6 +443,40 @@ function handleChangeDocumentViewMode(mode: DocumentViewMode) {
   } catch {
     // 本地缓存失败不影响文档浏览。
   }
+}
+
+function handleChangeDocumentSort(state: DocumentSortState) {
+  const nextState: DocumentSortState = {
+    field: DOCUMENT_SORT_FIELDS.includes(state.field) ? state.field : 'fileName',
+    order: DOCUMENT_SORT_ORDERS.includes(state.order) ? state.order : 'asc',
+  };
+  documentSortState.value = nextState;
+  if (typeof window === 'undefined') {
+    return;
+  }
+  try {
+    window.localStorage.setItem(DOCUMENT_SORT_STORAGE_KEY, JSON.stringify(nextState));
+  } catch {
+    // 本地缓存失败不影响文档浏览。
+  }
+}
+
+function handleChangeDocumentSortField(field: DocumentSortField) {
+  handleChangeDocumentSort({
+    field,
+    order: documentSortState.value.order,
+  });
+}
+
+function handleChangeDocumentSortOrder(order: DocumentSortOrder) {
+  handleChangeDocumentSort({
+    field: documentSortState.value.field,
+    order,
+  });
+}
+
+function isActiveDocumentSort(field: DocumentSortField, order?: DocumentSortOrder) {
+  return documentSortState.value.field === field && (!order || documentSortState.value.order === order);
 }
 
 function isScopeRootKey(key: string) {
@@ -1764,6 +1852,50 @@ onBeforeUnmount(() => {
             <Tag v-if="scope === 'trash'" color="red">回收站</Tag>
           </div>
           <div class="document-header__actions">
+            <Dropdown trigger="click">
+              <Button class="document-sort-button" size="small" type="text">
+                <template #icon>
+                  <IconifyIcon icon="lucide:arrow-up-down" />
+                </template>
+                {{ currentDocumentSortLabel }}{{ documentSortState.order === 'asc' ? '升序' : '降序' }}
+              </Button>
+              <template #overlay>
+                <Menu>
+                  <Menu.Item
+                    v-for="option in documentSortOptions"
+                    :key="`toolbar-${option.field}`"
+                    @click="handleChangeDocumentSortField(option.field)"
+                  >
+                    <IconifyIcon
+                      v-if="isActiveDocumentSort(option.field)"
+                      class="document-menu-icon"
+                      icon="lucide:check"
+                    />
+                    <span v-else class="document-menu-icon document-menu-icon--placeholder" />
+                    {{ option.label }}
+                  </Menu.Item>
+                  <Menu.Divider />
+                  <Menu.Item key="toolbar-sort-asc" @click="handleChangeDocumentSortOrder('asc')">
+                    <IconifyIcon
+                      v-if="documentSortState.order === 'asc'"
+                      class="document-menu-icon"
+                      icon="lucide:check"
+                    />
+                    <span v-else class="document-menu-icon document-menu-icon--placeholder" />
+                    升序
+                  </Menu.Item>
+                  <Menu.Item key="toolbar-sort-desc" @click="handleChangeDocumentSortOrder('desc')">
+                    <IconifyIcon
+                      v-if="documentSortState.order === 'desc'"
+                      class="document-menu-icon"
+                      icon="lucide:check"
+                    />
+                    <span v-else class="document-menu-icon document-menu-icon--placeholder" />
+                    降序
+                  </Menu.Item>
+                </Menu>
+              </template>
+            </Dropdown>
             <div class="document-view-switch">
               <Radio.Group
                 v-model:value="documentViewModeModel"
@@ -1832,6 +1964,7 @@ onBeforeUnmount(() => {
           :cutting-ids="cuttingDocumentIds"
           :personalize-shared="isSharedInboxScope"
           :scope="scope"
+          :sort-state="documentSortState"
           :view-mode="documentViewMode"
           @action="handleAction"
           @batch-action="handleBatchAction"
@@ -1843,6 +1976,7 @@ onBeforeUnmount(() => {
           @inline-submit="submitInlineName"
           @move="handleMove"
           @paste="handlePaste"
+          @sort-change="handleChangeDocumentSort"
           @upload="handleUploadClick"
         />
       </Card>
@@ -1877,6 +2011,10 @@ onBeforeUnmount(() => {
 
 .document-menu-icon--active {
   color: hsl(var(--primary));
+}
+
+.document-menu-icon--placeholder {
+  flex: 0 0 auto;
 }
 
 .document-center {
@@ -2019,6 +2157,10 @@ onBeforeUnmount(() => {
   flex: 0 0 auto;
   align-items: center;
   gap: 8px;
+}
+
+.document-sort-button {
+  color: hsl(var(--muted-foreground));
 }
 
 .document-view-switch {

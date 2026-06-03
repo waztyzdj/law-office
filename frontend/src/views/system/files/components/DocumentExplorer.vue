@@ -33,7 +33,19 @@ interface InlineEditorState {
 }
 
 type BatchMenuAction = 'copy' | 'cut' | 'delete' | 'download';
+type DocumentSortField = 'fileName' | 'fileSize' | 'fileType' | 'modifiedTime';
+type DocumentSortOrder = 'asc' | 'desc';
 type DocumentViewMode = 'grid' | 'list';
+
+interface DocumentSortState {
+  field: DocumentSortField;
+  order: DocumentSortOrder;
+}
+
+interface DocumentSortOption {
+  field: DocumentSortField;
+  label: string;
+}
 
 interface Props {
   canCreate?: boolean;
@@ -48,6 +60,7 @@ interface Props {
   personalizeShared?: boolean;
   savingName?: boolean;
   scope: DocumentScope;
+  sortState: DocumentSortState;
   viewMode?: DocumentViewMode;
 }
 
@@ -78,8 +91,16 @@ const emit = defineEmits<{
   inlineSubmit: [];
   move: [sourceId: string, targetParentId?: string];
   paste: [];
+  sortChange: [state: DocumentSortState];
   upload: [];
 }>();
+
+const sortOptions: DocumentSortOption[] = [
+  { field: 'fileName', label: '名称' },
+  { field: 'modifiedTime', label: '修改时间' },
+  { field: 'fileType', label: '类型' },
+  { field: 'fileSize', label: '大小' },
+];
 
 const sortedItems = computed(() =>
   [...props.dataSource].sort((a, b) => {
@@ -87,7 +108,7 @@ const sortedItems = computed(() =>
     if (folderWeight !== 0) {
       return folderWeight;
     }
-    return String(a.fileName || '').localeCompare(String(b.fileName || ''), 'zh-CN');
+    return compareDocuments(a, b, props.sortState);
   }),
 );
 
@@ -173,6 +194,78 @@ watch(
   },
   { flush: 'post' },
 );
+
+function setSort(field: DocumentSortField, order?: DocumentSortOrder) {
+  const nextOrder =
+    order ||
+    (props.sortState.field === field && props.sortState.order === 'asc' ? 'desc' : 'asc');
+  emit('sortChange', { field, order: nextOrder });
+}
+
+function setSortField(field: DocumentSortField) {
+  emit('sortChange', {
+    field,
+    order: props.sortState.order,
+  });
+}
+
+function setSortOrder(order: DocumentSortOrder) {
+  emit('sortChange', {
+    field: props.sortState.field,
+    order,
+  });
+}
+
+function isActiveSort(field: DocumentSortField, order?: DocumentSortOrder) {
+  return props.sortState.field === field && (!order || props.sortState.order === order);
+}
+
+function sortDirectionIcon(field: DocumentSortField) {
+  if (!isActiveSort(field)) {
+    return 'lucide:chevrons-up-down';
+  }
+  return props.sortState.order === 'asc' ? 'lucide:arrow-up' : 'lucide:arrow-down';
+}
+
+function sortValue(record: DocumentFileInfo, field: DocumentSortField) {
+  if (field === 'fileSize') {
+    return record.fileSize || 0;
+  }
+  if (field === 'fileType') {
+    return fileTypeText(record);
+  }
+  if (field === 'modifiedTime') {
+    const time = record.updateTime || record.createTime || '';
+    return time ? new Date(time).getTime() || 0 : 0;
+  }
+  return record.fileName || '';
+}
+
+function compareDocuments(
+  left: DocumentFileInfo,
+  right: DocumentFileInfo,
+  sort: DocumentSortState,
+) {
+  const leftValue = sortValue(left, sort.field);
+  const rightValue = sortValue(right, sort.field);
+  const direction = sort.order === 'asc' ? 1 : -1;
+  let result = 0;
+  if (typeof leftValue === 'number' && typeof rightValue === 'number') {
+    result = leftValue - rightValue;
+  } else {
+    result = String(leftValue).localeCompare(String(rightValue), 'zh-CN', {
+      numeric: true,
+      sensitivity: 'base',
+    });
+  }
+  if (result === 0 && sort.field !== 'fileName') {
+    result = String(left.fileName || '').localeCompare(String(right.fileName || ''), 'zh-CN', {
+      numeric: true,
+      sensitivity: 'base',
+    });
+  }
+  return result * direction;
+}
 
 function formatSize(size?: number) {
   if (!size || size <= 0) {
@@ -891,10 +984,7 @@ onBeforeUnmount(() => {
 
 <template>
   <div class="document-explorer">
-    <Dropdown
-      :disabled="!canCreateInScope && !canUploadInScope && !canPaste && !canRenameCurrentFolder"
-      :trigger="['contextmenu']"
-    >
+    <Dropdown :trigger="['contextmenu']">
       <div
         ref="explorerBodyRef"
         class="document-explorer__body"
@@ -1182,10 +1272,54 @@ onBeforeUnmount(() => {
           </div>
           <div v-else-if="hasGridContent" class="document-list">
             <div class="document-list__header">
-              <div class="document-list__cell document-list__cell--name">名称</div>
-              <div class="document-list__cell document-list__cell--type">类型</div>
-              <div class="document-list__cell document-list__cell--size">大小</div>
-              <div class="document-list__cell document-list__cell--time">修改时间</div>
+              <button
+                class="document-list__cell document-list__cell--name document-list__sort"
+                type="button"
+                @click="setSort('fileName')"
+              >
+                <span>名称</span>
+                <IconifyIcon
+                  class="document-list__sort-icon"
+                  :class="{ 'document-list__sort-icon--active': isActiveSort('fileName') }"
+                  :icon="sortDirectionIcon('fileName')"
+                />
+              </button>
+              <button
+                class="document-list__cell document-list__cell--type document-list__sort"
+                type="button"
+                @click="setSort('fileType')"
+              >
+                <span>类型</span>
+                <IconifyIcon
+                  class="document-list__sort-icon"
+                  :class="{ 'document-list__sort-icon--active': isActiveSort('fileType') }"
+                  :icon="sortDirectionIcon('fileType')"
+                />
+              </button>
+              <button
+                class="document-list__cell document-list__cell--size document-list__sort"
+                type="button"
+                @click="setSort('fileSize')"
+              >
+                <span>大小</span>
+                <IconifyIcon
+                  class="document-list__sort-icon"
+                  :class="{ 'document-list__sort-icon--active': isActiveSort('fileSize') }"
+                  :icon="sortDirectionIcon('fileSize')"
+                />
+              </button>
+              <button
+                class="document-list__cell document-list__cell--time document-list__sort"
+                type="button"
+                @click="setSort('modifiedTime')"
+              >
+                <span>修改时间</span>
+                <IconifyIcon
+                  class="document-list__sort-icon"
+                  :class="{ 'document-list__sort-icon--active': isActiveSort('modifiedTime') }"
+                  :icon="sortDirectionIcon('modifiedTime')"
+                />
+              </button>
               <div class="document-list__cell document-list__cell--actions"></div>
             </div>
             <div
@@ -1482,6 +1616,45 @@ onBeforeUnmount(() => {
       </div>
       <template #overlay>
         <Menu>
+          <Menu.SubMenu key="sort-context">
+            <template #title>
+              <IconifyIcon class="document-menu-icon" icon="lucide:arrow-up-down" />
+              排序方式
+            </template>
+            <Menu.Item
+              v-for="option in sortOptions"
+              :key="`context-${option.field}`"
+              @click="setSortField(option.field)"
+            >
+              <IconifyIcon
+                v-if="isActiveSort(option.field)"
+                class="document-menu-icon"
+                icon="lucide:check"
+              />
+              <span v-else class="document-menu-icon document-menu-icon--placeholder" />
+              {{ option.label }}
+            </Menu.Item>
+            <Menu.Divider />
+            <Menu.Item key="context-sort-asc" @click="setSortOrder('asc')">
+              <IconifyIcon
+                v-if="props.sortState.order === 'asc'"
+                class="document-menu-icon"
+                icon="lucide:check"
+              />
+              <span v-else class="document-menu-icon document-menu-icon--placeholder" />
+              升序
+            </Menu.Item>
+            <Menu.Item key="context-sort-desc" @click="setSortOrder('desc')">
+              <IconifyIcon
+                v-if="props.sortState.order === 'desc'"
+                class="document-menu-icon"
+                icon="lucide:check"
+              />
+              <span v-else class="document-menu-icon document-menu-icon--placeholder" />
+              降序
+            </Menu.Item>
+          </Menu.SubMenu>
+          <Menu.Divider />
           <Menu.Item v-if="canPaste" @click="$emit('paste')">
             <IconifyIcon class="document-menu-icon" icon="lucide:clipboard-paste" />
             粘贴
@@ -1525,6 +1698,10 @@ onBeforeUnmount(() => {
 
 .document-menu-icon--starred :deep(svg) {
   fill: currentColor;
+}
+
+.document-menu-icon--placeholder {
+  flex: 0 0 auto;
 }
 
 .document-explorer {
@@ -1585,6 +1762,36 @@ onBeforeUnmount(() => {
   font-weight: 500;
 }
 
+.document-list__sort {
+  display: inline-flex;
+  height: 100%;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  cursor: pointer;
+  border: 0;
+  background: transparent;
+  font: inherit;
+  text-align: center;
+}
+
+.document-list__sort:hover,
+.document-list__sort:focus-visible {
+  background: hsl(var(--muted) / 70%);
+  color: hsl(var(--foreground));
+  outline: none;
+}
+
+.document-list__sort-icon {
+  width: 14px;
+  height: 14px;
+  color: hsl(var(--muted-foreground));
+}
+
+.document-list__sort-icon--active {
+  color: hsl(var(--primary));
+}
+
 .document-list-row {
   min-height: 44px;
   cursor: default;
@@ -1639,6 +1846,11 @@ onBeforeUnmount(() => {
   align-items: center;
   gap: 8px;
   color: hsl(var(--foreground));
+}
+
+.document-list__header .document-list__cell {
+  justify-content: center;
+  color: hsl(var(--muted-foreground));
 }
 
 .document-list__cell--actions {
