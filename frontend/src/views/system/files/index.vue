@@ -2035,7 +2035,10 @@ onBeforeUnmount(() => {
 
 .document-tree-card,
 .document-content-card {
+  display: flex;
+  overflow: hidden;
   min-height: 0;
+  flex-direction: column;
 }
 
 .document-tree-search {
@@ -2113,7 +2116,9 @@ onBeforeUnmount(() => {
 
 .document-content-card :deep(.ant-card-body) {
   display: flex;
-  min-height: 100%;
+  overflow: hidden;
+  min-height: 0;
+  flex: 1;
   flex-direction: column;
 }
 

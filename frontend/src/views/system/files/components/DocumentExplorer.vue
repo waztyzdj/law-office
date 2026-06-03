@@ -1706,6 +1706,7 @@ onBeforeUnmount(() => {
 
 .document-explorer {
   display: flex;
+  overflow: hidden;
   min-height: 0;
   flex: 1;
   flex-direction: column;
@@ -1713,8 +1714,15 @@ onBeforeUnmount(() => {
 
 .document-explorer__body {
   position: relative;
+  overflow: hidden;
   flex: 1;
-  min-height: 220px;
+  min-height: 0;
+}
+
+.document-explorer__body :deep(.ant-spin-nested-loading),
+.document-explorer__body :deep(.ant-spin-container) {
+  height: 100%;
+  min-height: 0;
 }
 
 .document-explorer__body--selecting {
@@ -1731,6 +1739,9 @@ onBeforeUnmount(() => {
 
 .document-grid {
   display: grid;
+  overflow: auto;
+  height: 100%;
+  align-content: start;
   grid-template-columns: repeat(auto-fill, minmax(124px, 1fr));
   gap: 12px;
   padding: 2px;
@@ -1738,6 +1749,8 @@ onBeforeUnmount(() => {
 
 .document-list {
   display: flex;
+  height: 100%;
+  min-height: 0;
   flex-direction: column;
   border: 1px solid hsl(var(--border));
   border-radius: 8px;
@@ -1754,6 +1767,9 @@ onBeforeUnmount(() => {
 }
 
 .document-list__header {
+  position: sticky;
+  top: 0;
+  z-index: 1;
   min-height: 36px;
   border-bottom: 1px solid hsl(var(--border));
   background: hsl(var(--muted) / 45%);
