@@ -27,6 +27,7 @@ export interface DocumentFileInfo {
   fileName?: string;
   fileSize?: number;
   fileType?: string;
+  hasChild?: boolean;
   id?: string;
   izFolder?: string;
   izRootFolder?: string;

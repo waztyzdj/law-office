@@ -379,6 +379,7 @@ public class SysFilesServiceImpl extends BaseServiceImpl<SysFilesMapper, SysFile
         List<DocumentFileVO> records = result.getRecords().stream()
                 .map(file -> buildDocumentVO(file, context))
                 .toList();
+        fillFolderChildFlags(records, context);
         return new PageVO<>(records, result.getTotal(), result.getCurrent(), result.getSize());
     }
 
@@ -879,6 +880,7 @@ public class SysFilesServiceImpl extends BaseServiceImpl<SysFilesMapper, SysFile
         List<DocumentFileVO> records = result.getRecords().stream()
                 .map(file -> buildDocumentVO(file, context))
                 .toList();
+        fillFolderChildFlags(records, context);
         return new PageVO<>(records, result.getTotal(), result.getCurrent(), result.getSize());
     }
 
@@ -904,6 +906,7 @@ public class SysFilesServiceImpl extends BaseServiceImpl<SysFilesMapper, SysFile
         List<DocumentFileVO> records = result.getRecords().stream()
                 .map(file -> buildSharedFolderChildVO(file, context, inheritedDownload, inheritedUpdate))
                 .toList();
+        fillFolderChildFlags(records, context);
         return new PageVO<>(records, result.getTotal(), result.getCurrent(), result.getSize());
     }
 
@@ -932,6 +935,7 @@ public class SysFilesServiceImpl extends BaseServiceImpl<SysFilesMapper, SysFile
             List<DocumentFileVO> records = result.getRecords().stream()
                     .map(file -> buildDocumentVO(file, context))
                     .toList();
+            fillFolderChildFlags(records, context);
             return new PageVO<>(records, result.getTotal(), result.getCurrent(), result.getSize());
         }
 
@@ -1141,6 +1145,7 @@ public class SysFilesServiceImpl extends BaseServiceImpl<SysFilesMapper, SysFile
         List<DocumentFileVO> records = combined.subList(fromIndex, toIndex).stream()
                 .map(file -> buildDocumentVO(file, context))
                 .toList();
+        fillFolderChildFlags(records, context);
         return new PageVO<>(records, total, current, size);
     }
 
@@ -1760,6 +1765,7 @@ public class SysFilesServiceImpl extends BaseServiceImpl<SysFilesMapper, SysFile
         vo.setOwner(file.getCreateBy());
         vo.setOwnerFlag(Objects.equals(file.getCreateBy(), context.username()));
         vo.setSharedFlag(hasActiveAcl(file.getId(), context.tenantId()));
+        vo.setHasChild(false);
         vo.setCanManage(vo.getOwnerFlag());
         vo.setCanDownload(canDownload(file, context));
         vo.setCanUpdate(canUpdate(file, context));
@@ -1794,6 +1800,7 @@ public class SysFilesServiceImpl extends BaseServiceImpl<SysFilesMapper, SysFile
         vo.setOwner(file.getCreateBy());
         vo.setOwnerFlag(Objects.equals(file.getCreateBy(), context.username()));
         vo.setSharedFlag(false);
+        vo.setHasChild(false);
         vo.setCanManage(vo.getOwnerFlag());
         vo.setCanDownload(vo.getOwnerFlag() || inheritedDownload);
         vo.setCanUpdate(vo.getOwnerFlag() || inheritedUpdate);
@@ -1804,6 +1811,60 @@ public class SysFilesServiceImpl extends BaseServiceImpl<SysFilesMapper, SysFile
         vo.setUpdateBy(file.getUpdateBy());
         vo.setUpdateTime(file.getUpdateTime());
         return vo;
+    }
+
+    private void fillFolderChildFlags(List<DocumentFileVO> records, UserAccessContext context) {
+        List<DocumentFileVO> folders = records.stream()
+                .filter(record -> FLAG_YES.equals(record.getIzFolder()))
+                .filter(record -> StringUtils.hasText(record.getId()))
+                .toList();
+        if (folders.isEmpty()) {
+            return;
+        }
+
+        Set<String> folderIds = folders.stream()
+                .map(DocumentFileVO::getId)
+                .collect(Collectors.toSet());
+        Set<String> parentIdsWithChildren = baseMapper.selectList(Wrappers.lambdaQuery(SysFiles.class)
+                        .select(SysFiles::getParentId)
+                        .eq(SysFiles::getTenantId, context.tenantId())
+                        .eq(SysFiles::getDeleteFlag, 0)
+                        .eq(SysFiles::getIzFolder, FLAG_YES)
+                        .in(SysFiles::getParentId, folderIds))
+                .stream()
+                .map(SysFiles::getParentId)
+                .filter(StringUtils::hasText)
+                .collect(Collectors.toSet());
+
+        List<SysFileRelation> businessRelations = Collections.emptyList();
+        if (folders.stream().anyMatch(this::isBusinessVirtualFolder)) {
+            businessRelations = findAccessibleBusinessRelations(context);
+        }
+        for (DocumentFileVO folder : folders) {
+            folder.setHasChild(parentIdsWithChildren.contains(folder.getId())
+                    || hasBusinessVirtualFolderChildren(folder, businessRelations));
+        }
+    }
+
+    private boolean isBusinessVirtualFolder(DocumentFileVO folder) {
+        return BUSINESS_MODULE_VIEW_STORE_TYPE.equals(folder.getStoreType())
+                || BUSINESS_RECORD_VIEW_STORE_TYPE.equals(folder.getStoreType());
+    }
+
+    private boolean hasBusinessVirtualFolderChildren(
+            DocumentFileVO folder,
+            List<SysFileRelation> businessRelations) {
+        String folderId = folder.getId();
+        if (BUSINESS_MODULE_VIEW_STORE_TYPE.equals(folder.getStoreType())) {
+            String bizType = parseBusinessModuleBizType(folderId);
+            return businessRelations.stream()
+                    .anyMatch(relation -> Objects.equals(relation.getBizType(), bizType)
+                            && StringUtils.hasText(relation.getBizId()));
+        }
+        if (BUSINESS_RECORD_VIEW_STORE_TYPE.equals(folder.getStoreType())) {
+            return false;
+        }
+        return false;
     }
 
     private DocumentShareVO buildDocumentShareVO(SysFileAcl acl) {

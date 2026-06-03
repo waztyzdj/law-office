@@ -41,6 +41,8 @@ public class DocumentFileVO extends BaseVO {
 
     private Boolean sharedFlag;
 
+    private Boolean hasChild;
+
     private Boolean canManage;
 
     private Boolean canDownload;

@@ -94,6 +94,7 @@ interface ScopeOption {
 interface FolderTreeNode {
   children?: FolderTreeNode[];
   file?: DocumentFileInfo;
+  isLeaf?: boolean;
   key: string;
   selectable?: boolean;
   title: string;
@@ -286,8 +287,12 @@ const treeData = computed<FolderTreeNode[]>(() =>
 function buildScopeTreeNode(option: ScopeOption): FolderTreeNode {
   const optionChildren = option.children?.map((item) => buildScopeTreeNode(item)) || [];
   const activeChildren = shouldRenderFolderTree(option) ? folderTreeCache.value[option.key] || [] : [];
+  const children = [...optionChildren, ...activeChildren];
+  const canLoadFolderTree = shouldRenderFolderTree(option) && Boolean(option.scope) && option.scope !== 'trash';
+  const folderTreeLoaded = hasLoadedFolderTreeRoot(option.key);
   return {
-    children: [...optionChildren, ...activeChildren],
+    children: children.length > 0 ? children : undefined,
+    isLeaf: (!canLoadFolderTree || folderTreeLoaded) && children.length === 0,
     key: getScopeRootKey(option.key),
     selectable: option.selectable,
     title: option.title,
@@ -449,6 +454,14 @@ function getScopeFromRootKey(key: string) {
   return key.slice(SCOPE_ROOT_PREFIX.length);
 }
 
+function getRootKeyFromFolderNodeKey(key: string) {
+  if (isScopeRootKey(key)) {
+    return getScopeFromRootKey(key);
+  }
+  const separatorIndex = key.indexOf(TREE_NODE_KEY_SEPARATOR);
+  return separatorIndex > 0 ? key.slice(0, separatorIndex) : activeRootKey.value;
+}
+
 function findScopeOption(key: string, options = scopeOptions.value): ScopeOption | undefined {
   for (const option of options) {
     if (option.key === key) {
@@ -588,22 +601,70 @@ async function fetchDocuments(
   return records;
 }
 
-async function buildFolderTree(
+function buildFolderTreeNode(
+  record: DocumentFileInfo,
+  rootKey: string,
+  children?: FolderTreeNode[],
+): FolderTreeNode {
+  return {
+    children: children && children.length > 0 ? children : undefined,
+    file: record,
+    isLeaf: children ? children.length === 0 : record.hasChild === false,
+    key: getFolderNodeKey(rootKey, record.id),
+    title: record.fileName || '未命名文件夹',
+  };
+}
+
+async function loadFolderNodes(
   parentId?: string,
   option: ScopeOption | undefined = activeScopeOption.value,
   rootKey = activeRootKey.value,
 ): Promise<FolderTreeNode[]> {
   const children = await fetchDocuments(parentId, undefined, option);
   const records = children.filter((item) => item.izFolder === '1' && item.id);
-  const nodes = await Promise.all(
-    records.map(async (record) => ({
-      children: record.izFolder === '1' ? await buildFolderTree(record.id, option, rootKey) : undefined,
-      file: record,
-      key: getFolderNodeKey(rootKey, record.id),
-      title: record.fileName || (record.izFolder === '1' ? '未命名文件夹' : '未命名文件'),
-    })),
-  );
-  return nodes;
+  return records.map((record) => buildFolderTreeNode(record, rootKey));
+}
+
+function setFolderTreeCache(rootKey: string, nodes: FolderTreeNode[]) {
+  folderTreeCache.value = {
+    ...folderTreeCache.value,
+    [rootKey]: nodes,
+  };
+  if (rootKey === activeRootKey.value) {
+    folderTree.value = nodes;
+  }
+}
+
+function updateFolderTreeNodes(
+  nodes: FolderTreeNode[],
+  targetKey: string,
+  children: FolderTreeNode[],
+): FolderTreeNode[] {
+  return nodes.map((node) => {
+    if (node.key === targetKey) {
+      return {
+        ...node,
+        children: children.length > 0 ? children : undefined,
+        isLeaf: children.length === 0,
+      };
+    }
+    if (!node.children?.length) {
+      return node;
+    }
+    return {
+      ...node,
+      children: updateFolderTreeNodes(node.children, targetKey, children),
+    };
+  });
+}
+
+function setFolderTreeNodeChildren(rootKey: string, targetKey: string, children: FolderTreeNode[]) {
+  const nextTree = updateFolderTreeNodes(folderTreeCache.value[rootKey] || [], targetKey, children);
+  setFolderTreeCache(rootKey, nextTree);
+}
+
+function hasLoadedFolderTreeRoot(rootKey: string) {
+  return Object.prototype.hasOwnProperty.call(folderTreeCache.value, rootKey);
 }
 
 async function loadFolderTree(rootKey = activeRootKey.value, updateSelection = true) {
@@ -612,26 +673,14 @@ async function loadFolderTree(rootKey = activeRootKey.value, updateSelection = t
     return;
   }
   if (!shouldRenderFolderTree(option)) {
-    folderTreeCache.value = {
-      ...folderTreeCache.value,
-      [rootKey]: [],
-    };
-    if (rootKey === activeRootKey.value) {
-      folderTree.value = [];
-    }
+    setFolderTreeCache(rootKey, []);
     if (updateSelection) {
       selectedTreeKeys.value = [getScopeRootKey(rootKey)];
     }
     return;
   }
   if (option.scope === 'trash') {
-    folderTreeCache.value = {
-      ...folderTreeCache.value,
-      [rootKey]: [],
-    };
-    if (rootKey === activeRootKey.value) {
-      folderTree.value = [];
-    }
+    setFolderTreeCache(rootKey, []);
     if (updateSelection) {
       selectedTreeKeys.value = [getScopeRootKey(rootKey)];
     }
@@ -639,14 +688,8 @@ async function loadFolderTree(rootKey = activeRootKey.value, updateSelection = t
   }
   treeLoading.value = true;
   try {
-    const nextTree = await buildFolderTree(undefined, option, rootKey);
-    folderTreeCache.value = {
-      ...folderTreeCache.value,
-      [rootKey]: nextTree,
-    };
-    if (rootKey === activeRootKey.value) {
-      folderTree.value = nextTree;
-    }
+    const nextTree = await loadFolderNodes(undefined, option, rootKey);
+    setFolderTreeCache(rootKey, nextTree);
     if (updateSelection) {
       selectedTreeKeys.value = [getSelectedTreeKey(rootKey, currentParentId.value)];
     }
@@ -673,6 +716,10 @@ async function reloadCachedFolderTrees() {
     new Set([activeRootKey.value, ...Object.keys(folderTreeCache.value)]),
   );
   await Promise.all(rootKeys.map((rootKey) => loadFolderTree(rootKey, false)));
+  await ensureFolderTreePathLoaded(activeRootKey.value, parentStack.value);
+  if (currentParentId.value) {
+    await loadFolderTreeNodeChildren(activeRootKey.value, currentParentId.value);
+  }
   selectedTreeKeys.value = [getActiveSelectedTreeKey()];
 }
 
@@ -709,6 +756,22 @@ function findPath(
   return undefined;
 }
 
+function findFolderTreeNode(
+  nodes: FolderTreeNode[],
+  key: string,
+): FolderTreeNode | undefined {
+  for (const node of nodes) {
+    if (node.key === key) {
+      return node;
+    }
+    const found = node.children ? findFolderTreeNode(node.children, key) : undefined;
+    if (found) {
+      return found;
+    }
+  }
+  return undefined;
+}
+
 function findCachedPath(key: string) {
   for (const [rootKey, nodes] of Object.entries(folderTreeCache.value)) {
     const path = findPath(nodes, key);
@@ -717,6 +780,55 @@ function findCachedPath(key: string) {
     }
   }
   return undefined;
+}
+
+async function loadFolderTreeNodeChildren(rootKey: string, parentId: string) {
+  const option = findScopeOption(rootKey);
+  if (!option?.scope || !shouldRenderFolderTree(option) || option.scope === 'trash') {
+    return;
+  }
+  const targetKey = getFolderNodeKey(rootKey, parentId);
+  const children = await loadFolderNodes(parentId, option, rootKey);
+  setFolderTreeNodeChildren(rootKey, targetKey, children);
+}
+
+async function ensureFolderTreeNodeChildrenLoaded(key: string) {
+  const rootKey = getRootKeyFromFolderNodeKey(key);
+  const option = findScopeOption(rootKey);
+  if (!option?.scope || !shouldRenderFolderTree(option) || option.scope === 'trash') {
+    return;
+  }
+  if (isScopeRootKey(key)) {
+    if (!hasLoadedFolderTreeRoot(rootKey)) {
+      await loadFolderTree(rootKey, false);
+    }
+    return;
+  }
+  if (!hasLoadedFolderTreeRoot(rootKey)) {
+    await loadFolderTree(rootKey, false);
+  }
+  const node = findFolderTreeNode(folderTreeCache.value[rootKey] || [], key);
+  if (!node?.file?.id || node.isLeaf || Array.isArray(node.children)) {
+    return;
+  }
+  await loadFolderTreeNodeChildren(rootKey, node.file.id);
+}
+
+async function ensureFolderTreePathLoaded(rootKey: string, path: DocumentFileInfo[]) {
+  await ensureFolderTreeNodeChildrenLoaded(getScopeRootKey(rootKey));
+  for (const folder of path.slice(0, -1)) {
+    if (folder.id) {
+      await ensureFolderTreeNodeChildrenLoaded(getFolderNodeKey(rootKey, folder.id));
+    }
+  }
+}
+
+async function handleTreeExpand(keys: unknown[]) {
+  expandedTreeKeys.value = keys.map((key) => String(key));
+  const loadKeys = expandedTreeKeys.value.filter((key) => (
+    isScopeRootKey(key) || getRootKeyFromFolderNodeKey(key)
+  ));
+  await Promise.all(loadKeys.map((key) => ensureFolderTreeNodeChildrenLoaded(key)));
 }
 
 function expandPathKeys(path: DocumentFileInfo[]) {
@@ -756,7 +868,6 @@ function pushNavigationHistory() {
 async function applyNavigationLocation(location: DocumentNavigationLocation) {
   cancelInlineEditor();
   activeRootKey.value = location.rootKey;
-  folderTree.value = folderTreeCache.value[location.rootKey] || [];
   parentStack.value = [...location.parentStack];
   selectedTreeKeys.value = [getSelectedTreeKey(location.rootKey, currentParentId.value)];
   expandedTreeKeys.value = Array.from(
@@ -764,6 +875,8 @@ async function applyNavigationLocation(location: DocumentNavigationLocation) {
   );
   expandPathKeys(parentStack.value);
   await Promise.all([loadData(), loadFolderTree(location.rootKey, false)]);
+  await ensureFolderTreePathLoaded(location.rootKey, parentStack.value);
+  selectedTreeKeys.value = [getSelectedTreeKey(location.rootKey, currentParentId.value)];
 }
 
 async function handleGoBack() {
@@ -856,7 +969,7 @@ async function handleSelectTree(keys: unknown[], info?: { node?: { key?: string 
   resetAndLoad();
 }
 
-function handleOpenFolder(record: DocumentFileInfo) {
+async function handleOpenFolder(record: DocumentFileInfo) {
   if (!record.id || record.izFolder !== '1') {
     return;
   }
@@ -865,7 +978,7 @@ function handleOpenFolder(record: DocumentFileInfo) {
   parentStack.value = [...parentStack.value, record];
   selectedTreeKeys.value = [getActiveSelectedTreeKey()];
   expandPathKeys(parentStack.value);
-  resetAndLoad();
+  await Promise.all([loadData(), ensureFolderTreePathLoaded(activeRootKey.value, parentStack.value)]);
 }
 
 function handleGoRoot() {
@@ -928,7 +1041,7 @@ async function handleCreateFolderIn(record?: DocumentFileInfo) {
   parentStack.value = [...parentStack.value, record];
   selectedTreeKeys.value = [getActiveSelectedTreeKey()];
   expandPathKeys(parentStack.value);
-  await loadData();
+  await Promise.all([loadData(), ensureFolderTreePathLoaded(activeRootKey.value, parentStack.value)]);
   handleCreateFolder(record.id);
 }
 
@@ -1557,7 +1670,7 @@ function handleTreeDragOver(event: DragEvent, targetKey: string) {
 
 function handleAction(event: string, record: DocumentFileInfo) {
   if (event === 'open') {
-    handleOpenFolder(record);
+    void handleOpenFolder(record);
     return;
   }
   if (event === 'preview') {
@@ -1657,6 +1770,7 @@ onBeforeUnmount(() => {
             block-node
             :selected-keys="selectedTreeKeys"
             :tree-data="treeData"
+            @expand="handleTreeExpand"
             @select="handleSelectTree"
           >
             <template #title="{ key, title }">
