@@ -1,6 +1,6 @@
 # ONLYOFFICE Docs 部署说明
 
-本文记录文档中心接入 ONLYOFFICE Docs 的部署流程。当前支持 PDF、Word、Excel、PPT 在线预览，支持 Word、Excel、PPT 在线协同编辑；历史版本接口已预留，版本控制下一阶段实现。
+本文记录文档中心接入 ONLYOFFICE Docs 的部署流程。当前支持 PDF、Word、Excel、PPT 在线预览，支持 Word、Excel、PPT 在线协同编辑，并支持在线编辑历史版本查看与恢复。
 
 ## 1. 部署目标
 
@@ -184,7 +184,7 @@ GET /files/document/onlyoffice/config/{fileId}?mode=edit
 POST /files/document/onlyoffice/callback/{token}
 ```
 
-回调地址必须能被 Document Server 访问。后端收到 `status=2` 或 `status=6` 时，会重新校验用户编辑权限，然后下载回调里的文件并覆盖原对象存储内容。
+回调地址必须能被 Document Server 访问。文档中心上传支持历史预览的文件后，会先写入 `upload` 类型初始历史快照；后端收到 `status=6` 时，会重新校验用户编辑权限，然后下载回调里的文件并覆盖原对象存储内容，不生成历史版本；收到 `status=2` 时，会覆盖当前文件并按 SHA-256 去重写入 `sys_file_version` 历史快照。
 
 前端每次打开预览或编辑都会重新加载 `api.js` 并附加缓存参数，避免浏览器继续使用旧的 ONLYOFFICE 静态资源 hash。
 
@@ -234,20 +234,22 @@ docker exec onlyoffice-document-server bash -lc "tail -120 /var/log/onlyoffice/d
 4. `docker compose up -d` 启动 ONLYOFFICE。
 5. 执行 `.\init-fonts.ps1 -Compose` 初始化字体。
 6. 执行 `.\disable-default-plugins.ps1 -Compose` 禁用默认插件和 AI 入口。
-7. 配置后端 `ONLYOFFICE_*` 参数，尤其是 `DOCUMENT_SERVER_URL`、`SERVER_BASE_URL`、`JWT_SECRET`、`CALLBACK_TOKEN_MINUTES`。
-8. 如果字体包或字体别名发生变化，递增 `ONLYOFFICE_RENDER_VERSION`。
-9. 重启后端。
-10. 按“验证步骤”跑一遍真实文件预览和编辑保存。
+7. 执行新版建表脚本或迁移 SQL，确认数据库包含 `sys_file_version` 表。
+8. 配置后端 `ONLYOFFICE_*` 参数，尤其是 `DOCUMENT_SERVER_URL`、`SERVER_BASE_URL`、`JWT_SECRET`、`CALLBACK_TOKEN_MINUTES`。
+9. 如果字体包或字体别名发生变化，递增 `ONLYOFFICE_RENDER_VERSION`。
+10. 重启后端。
+11. 按“验证步骤”跑一遍真实文件预览、编辑保存、历史版本预览和历史版本恢复。
 
 ## 11. 安全边界
 
 - `/files/document/onlyoffice/config/{fileId}` 需要当前登录 JWT。
 - 后端生成 ONLYOFFICE 配置前会校验文档中心读取或更新权限。
 - `/files/document/onlyoffice/download/{token}` 不使用浏览器 JWT，只接受后端生成的短期 token。
+- `/files/document/onlyoffice/history/download/{token}` 不使用浏览器 JWT，只接受后端生成的短期历史版本回源 token。
 - `/files/document/onlyoffice/callback/{token}` 不使用浏览器 JWT，只接受后端生成的编辑回调 token，并按 ONLYOFFICE 约定返回 `{"error":0}` 或 `{"error":1}`。
 - 回源 token 包含文件 ID、租户 ID 和过期时间；回调 token 额外包含编辑用户，用于保存时重新校验更新权限。
 - 后端不暴露 MinIO 直链。
 - 当前部署脚本会禁用 ONLYOFFICE 默认插件列表，因此工具栏不显示“插件”和“AI”页签。
 - `mode=edit` 只对 Word、Excel、PPT 开放，并由后端按文档中心 `canUpdate` 权限最终裁决；PDF 仍只读预览。
 - 编辑模式的 `document.key` 按文件当前最终保存版本生成。`status=6` 强制保存不刷新版本时间，确保编辑中的用户加入同一协同会话；`status=2` 最终保存刷新版本时间，确保下一次编辑进入新版本。
-- 历史版本接口当前仅预留，下一阶段再保存 ONLYOFFICE 回调中的版本数据和变更文件。
+- 历史版本写入 `sys_file_version`，历史对象保存为 MinIO 不可变对象；上传初始快照使用 `version_type=upload`，在线编辑最终保存使用 `final`，恢复生成使用 `restore`；历史版本预览为只读配置，不返回 `callbackUrl`，恢复历史版本需要当前文件编辑权限。

@@ -124,6 +124,30 @@ public class MinioUtils {
      *
      * @param objectName 对象名称
      */
+    public String uploadFileAndReturnObjectName(InputStream inputStream, String fileName, String contentType) {
+        try {
+            ensureBucketExists();
+
+            String bucketName = minioConfig.getBucketName();
+            String objectName = generateObjectName(fileName);
+
+            minioClient.putObject(
+                    PutObjectArgs.builder()
+                            .bucket(bucketName)
+                            .object(objectName)
+                            .stream(inputStream, -1, 10485760)
+                            .contentType(contentType)
+                            .build()
+            );
+
+            log.info("鏂囦欢涓婁紶鎴愬姛: {}", objectName);
+            return objectName;
+        } catch (Exception e) {
+            log.error("鏂囦欢涓婁紶澶辫触", e);
+            throw new RuntimeException("鏂囦欢涓婁紶澶辫触: " + e.getMessage());
+        }
+    }
+
     public void replaceFile(String objectName, InputStream inputStream, String contentType) {
         try {
             ensureBucketExists();

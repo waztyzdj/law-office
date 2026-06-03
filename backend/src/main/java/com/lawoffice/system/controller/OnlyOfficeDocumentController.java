@@ -4,6 +4,8 @@ import com.lawoffice.framework.config.TenantContextHolder;
 import com.lawoffice.framework.result.BaseResult;
 import com.lawoffice.system.dto.OnlyOfficeCallbackReq;
 import com.lawoffice.system.dto.OnlyOfficeDownloadContext;
+import com.lawoffice.system.dto.OnlyOfficeHistoryDownloadContext;
+import com.lawoffice.system.dto.OnlyOfficeHistoryFileContent;
 import com.lawoffice.system.service.IOnlyOfficeDocumentService;
 import com.lawoffice.system.service.ISysFilesService;
 import com.lawoffice.system.vo.FileUploadVO;
@@ -88,12 +90,53 @@ public class OnlyOfficeDocumentController {
     }
 
     @GetMapping("/history/{fileId}")
-    @Operation(summary = "ONLYOFFICE 历史版本预留接口", description = "当前仅预留接口，版本控制下一阶段实现")
+    @Operation(summary = "ONLYOFFICE 历史版本列表", description = "查询文件在线编辑历史版本")
     public BaseResult<List<OnlyOfficeHistoryVersionVO>> listHistory(
             @PathVariable String fileId,
             HttpServletRequest request) {
         String username = (String) request.getAttribute("username");
         return BaseResult.success(onlyOfficeDocumentService.listHistory(username, fileId));
+    }
+
+    @GetMapping("/history/config/{versionId}")
+    @Operation(summary = "ONLYOFFICE 历史版本预览配置", description = "生成历史版本只读预览配置")
+    public BaseResult<OnlyOfficePreviewVO> getHistoryPreviewConfig(
+            @PathVariable String versionId,
+            HttpServletRequest request) {
+        String username = (String) request.getAttribute("username");
+        String userId = (String) request.getAttribute("userId");
+        return BaseResult.success(onlyOfficeDocumentService.buildHistoryPreviewConfig(username, userId, versionId));
+    }
+
+    @GetMapping("/history/download/{token}")
+    @Operation(summary = "ONLYOFFICE 历史版本回源", description = "Document Server 使用短期令牌拉取历史版本内容")
+    public void downloadHistoryForOnlyOffice(
+            @PathVariable String token,
+            HttpServletResponse response) throws IOException {
+        OnlyOfficeHistoryDownloadContext context = onlyOfficeDocumentService.parseHistoryDownloadToken(token);
+        try {
+            TenantContextHolder.setCurrentTenantId(context.tenantId());
+            OnlyOfficeHistoryFileContent content = onlyOfficeDocumentService.openHistoryFileContent(context.versionId());
+            String fileName = HttpDownloadUtils.resolveDownloadFileName(content.fileName());
+            response.setCharacterEncoding(StandardCharsets.UTF_8.name());
+            response.setContentType(resolveContentType(content.fileType()));
+            response.setHeader("Content-Disposition", HttpDownloadUtils.buildInlineContentDisposition(fileName));
+            response.setHeader("Access-Control-Expose-Headers", "Content-Disposition");
+            try (InputStream inputStream = content.inputStream()) {
+                inputStream.transferTo(response.getOutputStream());
+            }
+        } finally {
+            TenantContextHolder.clear();
+        }
+    }
+
+    @PostMapping("/history/{versionId}/restore")
+    @Operation(summary = "ONLYOFFICE 恢复历史版本", description = "将历史版本恢复为当前文件")
+    public BaseResult<OnlyOfficeHistoryVersionVO> restoreHistoryVersion(
+            @PathVariable String versionId,
+            HttpServletRequest request) {
+        String username = (String) request.getAttribute("username");
+        return BaseResult.success(onlyOfficeDocumentService.restoreHistoryVersion(username, versionId));
     }
 
     private String resolveContentType(String fileType) {

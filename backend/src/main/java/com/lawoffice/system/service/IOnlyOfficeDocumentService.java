@@ -2,6 +2,8 @@ package com.lawoffice.system.service;
 
 import com.lawoffice.system.dto.OnlyOfficeDownloadContext;
 import com.lawoffice.system.dto.OnlyOfficeCallbackReq;
+import com.lawoffice.system.dto.OnlyOfficeHistoryDownloadContext;
+import com.lawoffice.system.dto.OnlyOfficeHistoryFileContent;
 import com.lawoffice.system.vo.OnlyOfficeHistoryVersionVO;
 import com.lawoffice.system.vo.OnlyOfficePreviewVO;
 
@@ -37,11 +39,46 @@ public interface IOnlyOfficeDocumentService {
     void handleCallback(String token, OnlyOfficeCallbackReq req);
 
     /**
-     * Reserved history-version list endpoint. Real version persistence is implemented later.
+     * List immutable document history versions after checking read permission.
      *
      * @param username current username
      * @param fileId document file id
      * @return currently empty history version list
      */
     List<OnlyOfficeHistoryVersionVO> listHistory(String username, String fileId);
+
+    /**
+     * Build a view-only ONLYOFFICE config for one immutable history version.
+     *
+     * @param username current username
+     * @param userId current user id
+     * @param versionId history version id
+     * @return editor bootstrap payload in view mode
+     */
+    OnlyOfficePreviewVO buildHistoryPreviewConfig(String username, String userId, String versionId);
+
+    /**
+     * Parse a short-lived history-version download token.
+     *
+     * @param token signed history download token
+     * @return version and tenant context encoded in the token
+     */
+    OnlyOfficeHistoryDownloadContext parseHistoryDownloadToken(String token);
+
+    /**
+     * Open immutable history version content for ONLYOFFICE download.
+     *
+     * @param versionId history version id
+     * @return stream and metadata; caller must close the stream
+     */
+    OnlyOfficeHistoryFileContent openHistoryFileContent(String versionId);
+
+    /**
+     * Restore one history version to the current file after checking edit permission.
+     *
+     * @param username current username
+     * @param versionId history version id
+     * @return created restore history record
+     */
+    OnlyOfficeHistoryVersionVO restoreHistoryVersion(String username, String versionId);
 }

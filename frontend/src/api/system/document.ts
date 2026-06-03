@@ -74,9 +74,14 @@ export interface OnlyOfficePreviewConfig {
 export interface OnlyOfficeHistoryVersion {
   editTime?: string;
   editor?: string;
+  editorName?: string;
   fileId?: string;
+  fileSize?: number;
+  id?: string;
   remark?: string;
   version?: string;
+  versionNo?: number;
+  versionType?: 'final' | 'restore' | 'upload' | string;
 }
 
 export const pageDocuments = (params: DocumentPageReq) =>
@@ -190,4 +195,14 @@ export const getOnlyOfficePreviewConfig = (
 export const listOnlyOfficeHistory = (fileId: string) =>
   requestClient.get<OnlyOfficeHistoryVersion[]>(
     `/files/document/onlyoffice/history/${fileId}`,
+  );
+
+export const getOnlyOfficeHistoryPreviewConfig = (versionId: string) =>
+  requestClient.get<OnlyOfficePreviewConfig>(
+    `/files/document/onlyoffice/history/config/${versionId}`,
+  );
+
+export const restoreOnlyOfficeHistoryVersion = (versionId: string) =>
+  requestClient.post<OnlyOfficeHistoryVersion>(
+    `/files/document/onlyoffice/history/${versionId}/restore`,
   );

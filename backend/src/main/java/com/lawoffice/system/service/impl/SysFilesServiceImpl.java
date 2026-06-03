@@ -13,6 +13,7 @@ import com.lawoffice.system.entity.Role;
 import com.lawoffice.system.entity.SysDepart;
 import com.lawoffice.system.entity.SysFileAcl;
 import com.lawoffice.system.entity.SysFileRelation;
+import com.lawoffice.system.entity.SysFileVersion;
 import com.lawoffice.system.entity.SysFiles;
 import com.lawoffice.system.entity.Tenant;
 import com.lawoffice.system.entity.User;
@@ -23,6 +24,7 @@ import com.lawoffice.system.mapper.RoleMapper;
 import com.lawoffice.system.mapper.SysDepartMapper;
 import com.lawoffice.system.mapper.SysFileAclMapper;
 import com.lawoffice.system.mapper.SysFileRelationMapper;
+import com.lawoffice.system.mapper.SysFileVersionMapper;
 import com.lawoffice.system.mapper.SysFilesMapper;
 import com.lawoffice.system.mapper.TenantMapper;
 import com.lawoffice.system.mapper.UserDepartMapper;
@@ -54,12 +56,17 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.io.IOException;
 import java.io.InputStream;
+import java.security.DigestInputStream;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashSet;
+import java.util.HexFormat;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -107,6 +114,7 @@ public class SysFilesServiceImpl extends BaseServiceImpl<SysFilesMapper, SysFile
     private static final String PERMISSION_DOWNLOAD = "download";
     private static final String PERMISSION_UPDATE = "update";
     private static final String PERMISSION_MANAGE = "manage";
+    private static final String VERSION_TYPE_UPLOAD = "upload";
     private static final long MAX_FILE_SIZE = 50 * 1024 * 1024L;
     private static final int MAX_FILE_NAME_LENGTH = 255;
     private static final int MAX_CONTENT_TYPE_LENGTH = 128;
@@ -122,6 +130,9 @@ public class SysFilesServiceImpl extends BaseServiceImpl<SysFilesMapper, SysFile
             "avi", "bmp", "csv", "doc", "docx", "dps", "et", "flv", "gif", "jpeg", "jpg",
             "md", "mkv", "mov", "mp4", "odp", "ods", "odt", "pdf", "png", "ppt", "pptx",
             "rtf", "txt", "webp", "wmv", "wps", "xls", "xlsx"
+    );
+    private static final Set<String> INITIAL_HISTORY_EXTENSIONS = Set.of(
+            "doc", "docx", "pdf", "ppt", "pptx", "xls", "xlsx"
     );
     private static final Set<String> BLOCKED_UPLOAD_CONTENT_TYPES = Set.of(
             "application/bat",
@@ -157,6 +168,7 @@ public class SysFilesServiceImpl extends BaseServiceImpl<SysFilesMapper, SysFile
     private final TenantMapper tenantMapper;
     private final SysDepartMapper sysDepartMapper;
     private final RoleMapper roleMapper;
+    private final SysFileVersionMapper sysFileVersionMapper;
     private final List<IBusinessDocumentProvider> businessDocumentProviders;
     private final MinioUtils minioUtils;
 
@@ -409,6 +421,7 @@ public class SysFilesServiceImpl extends BaseServiceImpl<SysFilesMapper, SysFile
         fileEntity.setUpdateTime(LocalDateTime.now());
         fileEntity.setDeleteFlag(0);
         baseMapper.insert(fileEntity);
+        createInitialHistoryVersion(fileEntity, file, username);
         return buildDocumentVO(fileEntity, context);
     }
 
@@ -2340,6 +2353,94 @@ public class SysFilesServiceImpl extends BaseServiceImpl<SysFilesMapper, SysFile
             throw new IllegalArgumentException("文件关联不存在或已删除");
         }
         return relation;
+    }
+
+    private void createInitialHistoryVersion(SysFiles fileEntity, MultipartFile file, String username) {
+        if (!supportsInitialHistoryVersion(fileEntity.getFileName())) {
+            return;
+        }
+        MessageDigest digest = sha256Digest();
+        String contentType = safeContentType(file.getContentType());
+        String objectName;
+        try (InputStream inputStream = file.getInputStream();
+             DigestInputStream digestInputStream = new DigestInputStream(inputStream, digest)) {
+            objectName = minioUtils.uploadFileAndReturnObjectName(
+                    digestInputStream,
+                    buildVersionFileName(fileEntity.getFileName(), 1),
+                    contentType);
+        } catch (IOException | RuntimeException ex) {
+            throw new IllegalArgumentException("Initial history version create failed", ex);
+        }
+
+        LocalDateTime now = LocalDateTime.now();
+        User user = findUserByUsername(username);
+        SysFileVersion version = new SysFileVersion();
+        version.setId(newId());
+        version.setTenantId(fileEntity.getTenantId());
+        version.setFileId(fileEntity.getId());
+        version.setVersionNo(1);
+        version.setVersionType(VERSION_TYPE_UPLOAD);
+        version.setObjectName(objectName);
+        version.setFileName(fileEntity.getFileName());
+        version.setFileType(fileEntity.getFileType());
+        version.setContentType(contentType);
+        version.setFileSize(file.getSize());
+        version.setChecksum(HexFormat.of().formatHex(digest.digest()));
+        version.setEditorId(user == null ? null : user.getId());
+        version.setEditorName(resolveUserDisplayName(user, username));
+        version.setRemark("Upload initial version");
+        version.setCreateBy(username);
+        version.setCreateTime(now);
+        version.setUpdateBy(username);
+        version.setUpdateTime(now);
+        version.setDeleteFlag(0);
+        sysFileVersionMapper.insert(version);
+    }
+
+    private boolean supportsInitialHistoryVersion(String fileName) {
+        return INITIAL_HISTORY_EXTENSIONS.contains(resolveExtension(fileName));
+    }
+
+    private String safeContentType(String contentType) {
+        return StringUtils.hasText(contentType)
+                ? contentType.split(";", 2)[0].trim()
+                : "application/octet-stream";
+    }
+
+    private String buildVersionFileName(String fileName, int versionNo) {
+        if (!StringUtils.hasText(fileName)) {
+            return "document-v" + versionNo;
+        }
+        int dotIndex = fileName.lastIndexOf('.');
+        if (dotIndex <= 0) {
+            return fileName + "-v" + versionNo;
+        }
+        return fileName.substring(0, dotIndex) + "-v" + versionNo + fileName.substring(dotIndex);
+    }
+
+    private MessageDigest sha256Digest() {
+        try {
+            return MessageDigest.getInstance("SHA-256");
+        } catch (NoSuchAlgorithmException ex) {
+            throw new IllegalStateException("SHA-256 digest is unavailable", ex);
+        }
+    }
+
+    private User findUserByUsername(String username) {
+        if (!StringUtils.hasText(username)) {
+            return null;
+        }
+        return userMapper.selectOne(Wrappers.lambdaQuery(User.class)
+                .eq(User::getUsername, username)
+                .eq(User::getDeleteFlag, 0)
+                .last("LIMIT 1"));
+    }
+
+    private String resolveUserDisplayName(User user, String username) {
+        if (user != null && StringUtils.hasText(user.getRealname())) {
+            return user.getRealname();
+        }
+        return username;
     }
 
     private void validateUploadFile(MultipartFile file) {

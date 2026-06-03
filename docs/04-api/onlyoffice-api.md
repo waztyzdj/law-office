@@ -1,6 +1,6 @@
 # ONLYOFFICE 在线预览与编辑接口
 
-本文记录文档中心接入 ONLYOFFICE Docs 的接口。当前支持 PDF、Word、Excel、PPT 在线预览，支持 Word、Excel、PPT 在线协同编辑；历史版本接口已预留，版本控制下一阶段实现。
+本文记录文档中心接入 ONLYOFFICE Docs 的接口。当前支持 PDF、Word、Excel、PPT 在线预览，支持 Word、Excel、PPT 在线协同编辑，并支持在线编辑历史版本查看与恢复。
 
 ## 生成编辑器配置
 
@@ -54,16 +54,46 @@
 - 响应：必须返回 ONLYOFFICE 约定 JSON，例如 `{"error":0}`
 
 处理规则：
-- `status=2`：文档可保存，后端下载回调 `url` 并覆盖原对象存储内容。
-- `status=6`：强制保存，覆盖文件内容但不刷新版本时间，保证后续进入的用户仍加入当前协同会话。
+- 文档中心上传支持 ONLYOFFICE 历史预览的文件后，会先生成 `upload` 类型 V1 初始快照；后续在线编辑保存从最新历史版本继续递增。
+- `status=2`：文档可保存，后端下载回调 `url` 并覆盖原对象存储内容；按 SHA-256 与最新历史版本去重，有变化时写入 `sys_file_version` 的 `final` 快照。
+- `status=6`：强制保存，覆盖文件内容但不刷新版本时间，也不生成历史版本，保证后续进入的用户仍加入当前协同会话。
 - 其他状态当前直接返回成功，不修改文件。
 - 保存前会重新校验当前用户是否仍有文档更新权限，防止打开后权限被撤销仍能写回。
 - 回调下载地址必须与配置的 Document Server 地址同源，避免回调 token 被用于访问任意 URL。
 
-## 历史版本预留
+## 历史版本列表
 
 - 方法：`GET`
 - 路径：`/files/document/onlyoffice/history/{fileId}`
 - 认证：需要当前登录 JWT
-- 当前行为：校验读取权限后返回空数组。
-- 后续计划：落表保存 ONLYOFFICE 回调中的 `history`、`changesUrl`、版本号、编辑人和编辑时间，再扩展版本详情与恢复接口。
+- 说明：校验读取权限后返回该文件的历史版本，按版本号倒序。
+
+响应字段：
+- `id`：历史版本 ID。
+- `fileId`：文件 ID。
+- `versionNo` / `version`：版本号，例如 `1` / `V1`。
+- `versionType`：`upload`、`final` 或 `restore`。
+- `editorName`：编辑人姓名。
+- `editTime`：保存时间。
+- `fileSize`：版本文件大小，单位 byte。
+- `remark`：版本备注。
+
+## 历史版本预览
+
+- 方法：`GET`
+- 路径：`/files/document/onlyoffice/history/config/{versionId}`
+- 认证：需要当前登录 JWT
+- 说明：校验当前文件读取权限后返回 ONLYOFFICE 只读预览配置。历史版本不会返回 `callbackUrl`，`document.permissions.edit=false`，不允许编辑历史版本本身。
+
+历史版本回源：
+- 方法：`GET`
+- 路径：`/files/document/onlyoffice/history/download/{token}`
+- 认证：不使用浏览器 JWT，仅接受后端生成的短期历史版本回源 token。
+- 调用方：ONLYOFFICE Document Server。
+
+## 历史版本恢复
+
+- 方法：`POST`
+- 路径：`/files/document/onlyoffice/history/{versionId}/restore`
+- 认证：需要当前登录 JWT
+- 说明：校验当前文件编辑权限后，把历史版本内容覆盖到当前文件，并新增一条 `restore` 类型历史版本记录。

@@ -51,6 +51,7 @@ import {
 } from '#/api/system/user';
 
 import DocumentExplorer from './components/DocumentExplorer.vue';
+import DocumentHistoryModal from './components/DocumentHistoryModal.vue';
 import DocumentImagePreviewModal from './components/DocumentImagePreviewModal.vue';
 import DocumentOnlyOfficePreviewModal from './components/DocumentOnlyOfficePreviewModal.vue';
 import DocumentShareDrawer from './components/DocumentShareDrawer.vue';
@@ -152,6 +153,7 @@ const currentDeparts = ref<CurrentUserOrganization['departs']>([]);
 const currentTenant = ref<CurrentUserTenant>();
 const fileInputRef = ref<HTMLInputElement>();
 const shareDrawerRef = ref<InstanceType<typeof DocumentShareDrawer>>();
+const historyModalRef = ref<InstanceType<typeof DocumentHistoryModal>>();
 const imagePreviewModalRef = ref<InstanceType<typeof DocumentImagePreviewModal>>();
 const previewModalRef = ref<InstanceType<typeof DocumentOnlyOfficePreviewModal>>();
 const documentClipboard = ref<{
@@ -1524,6 +1526,10 @@ function handleAction(event: string, record: DocumentFileInfo) {
     previewModalRef.value?.open(record, 'edit');
     return;
   }
+  if (event === 'history') {
+    historyModalRef.value?.open(record);
+    return;
+  }
   if (event === 'download') {
     void handleDownload(record);
     return;
@@ -1649,7 +1655,11 @@ onBeforeUnmount(() => {
                       v-if="canManageTreeFolder(String(key))"
                       @click="handleShareTreeFolder(findFolderByKey(String(key)))"
                     >
-                      <IconifyIcon class="document-menu-icon" icon="lucide:share-2" />
+                      <IconifyIcon
+                        class="document-menu-icon"
+                        :class="{ 'document-menu-icon--active': findFolderByKey(String(key))?.sharedFlag }"
+                        icon="lucide:share-2"
+                      />
                       {{ findFolderByKey(String(key))?.sharedFlag ? '查看共享' : '共享' }}
                     </Menu.Item>
                     <Menu.Item
@@ -1847,6 +1857,11 @@ onBeforeUnmount(() => {
       @change="handleFilesSelected"
     />
     <DocumentShareDrawer ref="shareDrawerRef" @success="reloadAll" />
+    <DocumentHistoryModal
+      ref="historyModalRef"
+      @preview="(version) => previewModalRef?.openHistoryVersion(version)"
+      @restored="reloadAll"
+    />
     <DocumentImagePreviewModal ref="imagePreviewModalRef" />
     <DocumentOnlyOfficePreviewModal ref="previewModalRef" />
   </div>
@@ -1858,6 +1873,10 @@ onBeforeUnmount(() => {
   width: 16px;
   margin-right: 8px;
   vertical-align: -2px;
+}
+
+.document-menu-icon--active {
+  color: hsl(var(--primary));
 }
 
 .document-center {

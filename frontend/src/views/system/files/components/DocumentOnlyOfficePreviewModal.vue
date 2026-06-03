@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import type {
   DocumentFileInfo,
+  OnlyOfficeHistoryVersion,
   OnlyOfficePreviewConfig,
   OnlyOfficePreviewMode,
 } from '#/api/system/document';
@@ -11,7 +12,10 @@ import { loadScript } from '@vben/utils';
 
 import { Empty, Modal, Spin, message } from 'ant-design-vue';
 
-import { getOnlyOfficePreviewConfig } from '#/api/system/document';
+import {
+  getOnlyOfficeHistoryPreviewConfig,
+  getOnlyOfficePreviewConfig,
+} from '#/api/system/document';
 
 const EDITOR_CONTAINER_ID = 'document-onlyoffice-preview-editor';
 const ONLYOFFICE_API_SCRIPT_RE =
@@ -39,10 +43,11 @@ const loading = ref(false);
 const errorText = ref('');
 const currentRecord = ref<DocumentFileInfo>();
 const currentMode = ref<OnlyOfficePreviewMode>('view');
+const historyTitle = ref('');
 const editor = shallowRef<OnlyOfficeEditor>();
 let previewLoadVersion = 0;
 
-const modalTitle = computed(() => currentRecord.value?.fileName || (currentMode.value === 'edit' ? '文档编辑' : '文档预览'));
+const modalTitle = computed(() => historyTitle.value || currentRecord.value?.fileName || (currentMode.value === 'edit' ? '文档编辑' : '文档预览'));
 
 function destroyEditor() {
   try {
@@ -94,6 +99,7 @@ async function open(record: DocumentFileInfo, mode: OnlyOfficePreviewMode = 'vie
   }
   currentRecord.value = record;
   currentMode.value = mode;
+  historyTitle.value = '';
   errorText.value = '';
   openState.value = true;
   loading.value = true;
@@ -119,16 +125,53 @@ async function open(record: DocumentFileInfo, mode: OnlyOfficePreviewMode = 'vie
   }
 }
 
+async function openHistoryVersion(versionRecord: OnlyOfficeHistoryVersion) {
+  if (!versionRecord.id) {
+    return;
+  }
+  currentRecord.value = {
+    fileName: versionRecord.version ? `历史版本 ${versionRecord.version}` : '历史版本',
+    id: versionRecord.fileId,
+  };
+  currentMode.value = 'view';
+  historyTitle.value = versionRecord.version ? `历史版本 ${versionRecord.version}` : '历史版本';
+  errorText.value = '';
+  openState.value = true;
+  loading.value = true;
+  const version = ++previewLoadVersion;
+  try {
+    const preview = await getOnlyOfficeHistoryPreviewConfig(versionRecord.id);
+    if (version !== previewLoadVersion) {
+      return;
+    }
+    await mountEditor(preview, version);
+  } catch (error) {
+    if (version !== previewLoadVersion) {
+      return;
+    }
+    destroyEditor();
+    const text = error instanceof Error ? error.message : '历史版本预览加载失败';
+    errorText.value = text;
+    message.error(text);
+  } finally {
+    if (version === previewLoadVersion) {
+      loading.value = false;
+    }
+  }
+}
+
 function handleAfterClose() {
   previewLoadVersion += 1;
   destroyEditor();
   errorText.value = '';
   currentRecord.value = undefined;
   currentMode.value = 'view';
+  historyTitle.value = '';
 }
 
 defineExpose({
   open,
+  openHistoryVersion,
 });
 
 onBeforeUnmount(() => {

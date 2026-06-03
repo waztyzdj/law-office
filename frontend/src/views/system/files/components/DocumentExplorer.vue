@@ -389,6 +389,16 @@ function canEditContentItem(record: DocumentFileInfo) {
   );
 }
 
+function canViewHistoryItem(record: DocumentFileInfo) {
+  const extension = getFileExtension(record);
+  return (
+    props.scope !== 'trash' &&
+    record.izFolder !== '1' &&
+    Boolean(record.id) &&
+    ONLYOFFICE_EDIT_EXTENSIONS.has(extension)
+  );
+}
+
 function canDropOnFolder(target: DocumentFileInfo) {
   if (props.scope === 'trash' || target.izFolder !== '1' || !target.id) {
     return false;
@@ -1016,6 +1026,13 @@ onBeforeUnmount(() => {
                         在线编辑
                       </Menu.Item>
                       <Menu.Item
+                        v-if="canViewHistoryItem(item)"
+                        @click="emitAction('history', item)"
+                      >
+                        <IconifyIcon class="document-menu-icon" icon="lucide:history" />
+                        历史版本
+                      </Menu.Item>
+                      <Menu.Item
                         v-if="canCreateFolderInItem(item)"
                         @click="$emit('createFolderIn', item)"
                       >
@@ -1039,14 +1056,22 @@ onBeforeUnmount(() => {
                       </Menu.Item>
                       <Menu.Item
                         v-if="canEditItem(item)"
-                        @click="emitAction(item.sharedFlag ? 'cancelShare' : 'share', item)"
+                        @click="emitAction('share', item)"
                       >
                         <IconifyIcon
                           class="document-menu-icon"
                           :class="{ 'document-menu-icon--active': item.sharedFlag }"
                           icon="lucide:share-2"
                         />
-                        {{ item.sharedFlag ? '取消共享' : '共享' }}
+                        {{ item.sharedFlag ? '查看共享' : '共享' }}
+                      </Menu.Item>
+                      <Menu.Item
+                        v-if="canEditItem(item) && item.sharedFlag"
+                        danger
+                        @click="emitAction('cancelShare', item)"
+                      >
+                        <IconifyIcon class="document-menu-icon" icon="lucide:share-x" />
+                        取消共享
                       </Menu.Item>
                       <Menu.Item v-if="canEditItem(item)" @click="emitAction('rename', item)">
                         <IconifyIcon class="document-menu-icon" icon="lucide:pencil" />
@@ -1109,6 +1134,32 @@ onBeforeUnmount(() => {
                   >
                     <IconifyIcon class="document-menu-icon" icon="lucide:file-pen-line" />
                     在线编辑
+                  </Menu.Item>
+                  <Menu.Item
+                    v-if="isSingleContext(item) && canViewHistoryItem(item)"
+                    @click="emitAction('history', item)"
+                  >
+                    <IconifyIcon class="document-menu-icon" icon="lucide:history" />
+                    历史版本
+                  </Menu.Item>
+                  <Menu.Item
+                    v-if="isSingleContext(item) && canEditItem(item)"
+                    @click="emitAction('share', item)"
+                  >
+                    <IconifyIcon
+                      class="document-menu-icon"
+                      :class="{ 'document-menu-icon--active': item.sharedFlag }"
+                      icon="lucide:share-2"
+                    />
+                    {{ item.sharedFlag ? '查看共享' : '共享' }}
+                  </Menu.Item>
+                  <Menu.Item
+                    v-if="isSingleContext(item) && canEditItem(item) && item.sharedFlag"
+                    danger
+                    @click="emitAction('cancelShare', item)"
+                  >
+                    <IconifyIcon class="document-menu-icon" icon="lucide:share-x" />
+                    取消共享
                   </Menu.Item>
                   <Menu.Item
                     v-if="isSingleContext(item) && canEditItem(item)"
@@ -1266,6 +1317,13 @@ onBeforeUnmount(() => {
                           在线编辑
                         </Menu.Item>
                         <Menu.Item
+                          v-if="canViewHistoryItem(item)"
+                          @click="emitAction('history', item)"
+                        >
+                          <IconifyIcon class="document-menu-icon" icon="lucide:history" />
+                          历史版本
+                        </Menu.Item>
+                        <Menu.Item
                           v-if="canCreateFolderInItem(item)"
                           @click="$emit('createFolderIn', item)"
                         >
@@ -1289,14 +1347,22 @@ onBeforeUnmount(() => {
                         </Menu.Item>
                         <Menu.Item
                           v-if="canEditItem(item)"
-                          @click="emitAction(item.sharedFlag ? 'cancelShare' : 'share', item)"
+                          @click="emitAction('share', item)"
                         >
                           <IconifyIcon
                             class="document-menu-icon"
                             :class="{ 'document-menu-icon--active': item.sharedFlag }"
                             icon="lucide:share-2"
                           />
-                          {{ item.sharedFlag ? '取消共享' : '共享' }}
+                          {{ item.sharedFlag ? '查看共享' : '共享' }}
+                        </Menu.Item>
+                        <Menu.Item
+                          v-if="canEditItem(item) && item.sharedFlag"
+                          danger
+                          @click="emitAction('cancelShare', item)"
+                        >
+                          <IconifyIcon class="document-menu-icon" icon="lucide:share-x" />
+                          取消共享
                         </Menu.Item>
                         <Menu.Item v-if="canEditItem(item)" @click="emitAction('rename', item)">
                           <IconifyIcon class="document-menu-icon" icon="lucide:pencil" />
@@ -1360,6 +1426,32 @@ onBeforeUnmount(() => {
                   >
                     <IconifyIcon class="document-menu-icon" icon="lucide:file-pen-line" />
                     在线编辑
+                  </Menu.Item>
+                  <Menu.Item
+                    v-if="isSingleContext(item) && canViewHistoryItem(item)"
+                    @click="emitAction('history', item)"
+                  >
+                    <IconifyIcon class="document-menu-icon" icon="lucide:history" />
+                    历史版本
+                  </Menu.Item>
+                  <Menu.Item
+                    v-if="isSingleContext(item) && canEditItem(item)"
+                    @click="emitAction('share', item)"
+                  >
+                    <IconifyIcon
+                      class="document-menu-icon"
+                      :class="{ 'document-menu-icon--active': item.sharedFlag }"
+                      icon="lucide:share-2"
+                    />
+                    {{ item.sharedFlag ? '查看共享' : '共享' }}
+                  </Menu.Item>
+                  <Menu.Item
+                    v-if="isSingleContext(item) && canEditItem(item) && item.sharedFlag"
+                    danger
+                    @click="emitAction('cancelShare', item)"
+                  >
+                    <IconifyIcon class="document-menu-icon" icon="lucide:share-x" />
+                    取消共享
                   </Menu.Item>
                   <Menu.Item
                     v-if="isSingleContext(item) && canEditItem(item)"

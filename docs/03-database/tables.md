@@ -106,6 +106,22 @@
 - `enable_down`
 - `enable_updat`
 
+## `sys_file_version`
+
+文件历史版本表，用于保存 ONLYOFFICE 在线编辑产生的不可变历史快照。
+
+重点字段：
+
+- `file_id`：文件 ID。
+- `version_no`：同一文件内递增版本号。
+- `version_type`：版本类型，`upload` 表示上传初始版本，`final` 表示 ONLYOFFICE 最终保存，`restore` 表示从历史版本恢复生成。
+- `object_name`：历史版本在 MinIO 中的不可变对象名。
+- `changes_object_name`：ONLYOFFICE 变更包对象名，预留原生历史回放。
+- `checksum`：内容 SHA-256 校验值，用于跳过未变化的最终保存。
+- `history_json`：ONLYOFFICE 回调中的 `history` 原文，预留后续历史回放。
+- `editor_id` / `editor_name`：编辑用户 ID 和姓名。
+- `tenant_id`：租户 ID。
+
 ## `sys_file_acl`
 
 文件访问授权表，用于文档中心共享给当前租户、当前租户内用户、部门或角色。
