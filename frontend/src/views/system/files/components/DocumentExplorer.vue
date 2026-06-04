@@ -21,6 +21,7 @@ import type {
   DocumentViewMode,
   InlineEditorState,
 } from '../types';
+import { useDocumentDragDrop } from '../hooks/useDocumentDragDrop';
 import { useDocumentSelection } from '../hooks/useDocumentSelection';
 import {
   canDropOnFolder as canDropOnDocumentFolder,
@@ -267,76 +268,6 @@ function handleOpen(record: DocumentFileInfo) {
   }
 }
 
-function handleDragStart(event: DragEvent, record: DocumentFileInfo) {
-  if (!record.id || !canMove(record) || props.moving) {
-    event.preventDefault();
-    return;
-  }
-  if (!selectedIds.value.has(itemKey(record))) {
-    selectOnly(record);
-  }
-  const sourceIds = selectedIds.value.has(itemKey(record)) && selectedMovableIds.value.length > 0
-    ? selectedMovableIds.value
-    : [record.id];
-  event.dataTransfer?.setData('application/x-document-id', sourceIds[0] || record.id);
-  event.dataTransfer?.setData('application/x-document-ids', JSON.stringify(sourceIds));
-  event.dataTransfer?.setData('text/plain', record.fileName || '');
-  if (event.dataTransfer) {
-    event.dataTransfer.effectAllowed = 'move';
-  }
-}
-
-function isDocumentDrag(event: DragEvent) {
-  const types = Array.from(event.dataTransfer?.types || []);
-  return types.includes('application/x-document-id') || types.includes('application/x-document-ids');
-}
-
-function getDragSourceIds(event: DragEvent) {
-  const rawIds = event.dataTransfer?.getData('application/x-document-ids');
-  if (rawIds) {
-    try {
-      const parsed = JSON.parse(rawIds);
-      if (Array.isArray(parsed)) {
-        return parsed.filter((id): id is string => typeof id === 'string' && id.length > 0);
-      }
-    } catch {
-      // Fallback to the single-item payload below.
-    }
-  }
-  const sourceId = event.dataTransfer?.getData('application/x-document-id');
-  return sourceId ? [sourceId] : [];
-}
-
-function handleFolderDragOver(event: DragEvent, target: DocumentFileInfo) {
-  if (!canDropOnFolder(target)) {
-    return;
-  }
-  if (!isDocumentDrag(event)) {
-    return;
-  }
-  event.preventDefault();
-  if (event.dataTransfer) {
-    event.dataTransfer.dropEffect = 'move';
-  }
-}
-
-function handleDropOnFolder(event: DragEvent, target: DocumentFileInfo) {
-  event.preventDefault();
-  const sourceIds = getDragSourceIds(event).filter((sourceId) => sourceId !== target.id);
-  if (sourceIds.length === 0 || !canDropOnFolder(target) || props.moving) {
-    return;
-  }
-  if (sourceIds.length === 1) {
-    const sourceId = sourceIds[0];
-    if (!sourceId) {
-      return;
-    }
-    emit('move', sourceId, target.id);
-    return;
-  }
-  emit('batchMove', sourceIds, target.id);
-}
-
 function emitAction(event: string, record: DocumentFileInfo) {
   emit('action', event, record);
 }
@@ -382,11 +313,25 @@ const {
   isSingleContext,
   cleanupSelectionListeners,
   selectOnly,
-  selectedIds,
   selectedMovableIds,
   selecting,
   selectionBoxStyle,
 } = documentSelection;
+
+const {
+  handleDragStart,
+  handleDropOnFolder,
+  handleFolderDragOver,
+} = useDocumentDragDrop({
+  canDropOnFolder,
+  canMove,
+  emitBatchMove: (sourceIds, targetParentId) => emit('batchMove', sourceIds, targetParentId),
+  emitMove: (sourceId, targetParentId) => emit('move', sourceId, targetParentId),
+  isSelected,
+  moving: toRef(props, 'moving'),
+  selectOnly,
+  selectedMovableIds,
+});
 
 function setExplorerBodyRef(element: unknown) {
   documentSelection.explorerBodyRef.value = element instanceof HTMLElement ? element : undefined;
