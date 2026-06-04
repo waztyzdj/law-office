@@ -7,6 +7,7 @@ import { IconifyIcon } from '@vben/icons';
 
 import { Button, Dropdown, Empty, Input, Menu, Spin, Tooltip } from 'ant-design-vue';
 
+import DocumentInlineRenameEditor from './DocumentInlineRenameEditor.vue';
 import DocumentItemActionMenu from './DocumentItemActionMenu.vue';
 import {
   DOCUMENT_SORT_OPTIONS as sortOptions,
@@ -59,6 +60,10 @@ interface FocusableInput {
   input?: HTMLInputElement;
 }
 
+interface RenameEditorExpose {
+  focus: () => void;
+}
+
 const props = withDefaults(defineProps<Props>(), {
   canCreate: false,
   canPaste: false,
@@ -109,7 +114,7 @@ const creatingHere = computed(
 );
 const hasGridContent = computed(() => sortedItems.value.length > 0 || creatingHere.value);
 const createNameInputRef = ref<FocusableInput | null>(null);
-const renameNameInputRef = ref<FocusableInput | null>(null);
+const renameNameInputRef = ref<RenameEditorExpose | null>(null);
 const cuttingIdSet = computed(() => new Set(props.cuttingIds));
 
 async function focusCreateNameInput() {
@@ -405,31 +410,17 @@ onBeforeUnmount(() => {
                     class="document-tile__icon"
                     :class="{ 'document-tile__icon--folder': item.izFolder === '1' }"
                   />
-                  <div
+                  <DocumentInlineRenameEditor
                     v-if="isRenaming(item)"
-                    class="document-tile__rename-editor"
-                    @click.stop
-                  >
-                    <Input.TextArea
-                      ref="renameNameInputRef"
-                      :value="inlineEditor?.fileName"
-                      autofocus
-                      class="document-tile__rename-textarea"
-                      :disabled="savingName"
-                      :maxlength="255"
-                      :rows="3"
-                      @blur="$emit('inlineSubmit')"
-                      @keydown="handleInlineKeydown"
-                      @keydown.enter.stop.prevent="$emit('inlineSubmit')"
-                      @update:value="handleNameInput"
-                    />
-                    <span
-                      v-if="inlineEditor?.extension"
-                      class="document-tile__rename-extension"
-                    >
-                      {{ inlineEditor.extension }}
-                    </span>
-                  </div>
+                    ref="renameNameInputRef"
+                    :disabled="savingName"
+                    :rows="3"
+                    :value="inlineEditor?.fileName"
+                    variant="grid"
+                    @cancel="$emit('inlineCancel')"
+                    @submit="$emit('inlineSubmit')"
+                    @update:value="handleNameInput"
+                  />
                   <Tooltip v-else :title="item.fileName">
                     <div class="document-tile__name">{{ item.fileName || '-' }}</div>
                   </Tooltip>
@@ -564,31 +555,17 @@ onBeforeUnmount(() => {
                     class="document-list-row__icon"
                     :class="{ 'document-list-row__icon--folder': item.izFolder === '1' }"
                   />
-                  <div
+                  <DocumentInlineRenameEditor
                     v-if="isRenaming(item)"
-                    class="document-list-row__rename-editor"
-                    @click.stop
-                  >
-                    <Input.TextArea
-                      ref="renameNameInputRef"
-                      :value="inlineEditor?.fileName"
-                      autofocus
-                      class="document-list-row__rename-textarea"
-                      :disabled="savingName"
-                      :maxlength="255"
-                      :rows="1"
-                      @blur="$emit('inlineSubmit')"
-                      @keydown="handleInlineKeydown"
-                      @keydown.enter.stop.prevent="$emit('inlineSubmit')"
-                      @update:value="handleNameInput"
-                    />
-                    <span
-                      v-if="inlineEditor?.extension"
-                      class="document-list-row__rename-extension"
-                    >
-                      {{ inlineEditor.extension }}
-                    </span>
-                  </div>
+                    ref="renameNameInputRef"
+                    :disabled="savingName"
+                    :rows="1"
+                    :value="inlineEditor?.fileName"
+                    variant="list"
+                    @cancel="$emit('inlineCancel')"
+                    @submit="$emit('inlineSubmit')"
+                    @update:value="handleNameInput"
+                  />
                   <Tooltip v-else :title="item.fileName">
                     <span class="document-list-row__name">{{ item.fileName || '-' }}</span>
                   </Tooltip>
@@ -942,53 +919,6 @@ onBeforeUnmount(() => {
   max-width: 280px;
 }
 
-.document-list-row__rename-editor {
-  display: flex;
-  width: min(420px, 100%);
-  min-width: 0;
-  align-items: stretch;
-  border: 1px solid hsl(var(--primary) / 70%);
-  border-radius: 6px;
-  background: hsl(var(--background));
-  box-shadow: 0 0 0 2px hsl(var(--primary) / 12%);
-}
-
-.document-list-row__rename-textarea {
-  flex: 1 1 auto;
-  min-width: 0;
-}
-
-.document-list-row__rename-textarea :deep(textarea.ant-input) {
-  height: 28px;
-  min-height: 28px;
-  max-height: 28px;
-  resize: none;
-  border: 0;
-  box-shadow: none;
-  color: hsl(var(--foreground));
-  font-size: 13px;
-  line-height: 20px;
-  overflow: hidden;
-  overflow-wrap: normal;
-  white-space: nowrap;
-}
-
-.document-list-row__rename-textarea :deep(textarea.ant-input:focus) {
-  box-shadow: none;
-}
-
-.document-list-row__rename-extension {
-  display: flex;
-  flex: 0 0 auto;
-  align-items: center;
-  border-left: 1px solid hsl(var(--border));
-  padding: 0 6px;
-  color: hsl(var(--muted-foreground));
-  font-size: 12px;
-  line-height: 20px;
-  white-space: nowrap;
-}
-
 .document-list-row__more {
   width: 26px;
   height: 26px;
@@ -1092,52 +1022,6 @@ onBeforeUnmount(() => {
 
 .document-tile__name-input :deep(.ant-input) {
   text-align: center;
-}
-
-.document-tile__rename-editor {
-  display: flex;
-  width: 100%;
-  min-width: 0;
-  align-items: stretch;
-  border: 1px solid hsl(var(--primary) / 70%);
-  border-radius: 6px;
-  background: hsl(var(--background));
-  box-shadow: 0 0 0 2px hsl(var(--primary) / 12%);
-  text-align: left;
-}
-
-.document-tile__rename-textarea {
-  flex: 1 1 auto;
-  min-width: 0;
-}
-
-.document-tile__rename-textarea :deep(textarea.ant-input) {
-  height: 60px;
-  min-height: 60px;
-  max-height: 60px;
-  resize: none;
-  border: 0;
-  box-shadow: none;
-  color: hsl(var(--foreground));
-  font-size: 13px;
-  line-height: 20px;
-  overflow-wrap: anywhere;
-}
-
-.document-tile__rename-textarea :deep(textarea.ant-input:focus) {
-  box-shadow: none;
-}
-
-.document-tile__rename-extension {
-  display: flex;
-  flex: 0 0 auto;
-  align-items: center;
-  border-left: 1px solid hsl(var(--border));
-  padding: 0 6px;
-  color: hsl(var(--muted-foreground));
-  font-size: 12px;
-  line-height: 20px;
-  white-space: nowrap;
 }
 
 .document-tile__meta {
