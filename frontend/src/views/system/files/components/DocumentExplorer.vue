@@ -7,6 +7,7 @@ import { IconifyIcon } from '@vben/icons';
 
 import { Button, Dropdown, Empty, Input, Menu, Spin, Tooltip } from 'ant-design-vue';
 
+import DocumentGridView from './DocumentGridView.vue';
 import DocumentInlineRenameEditor from './DocumentInlineRenameEditor.vue';
 import DocumentItemActionMenu from './DocumentItemActionMenu.vue';
 import DocumentListSortHeader from './DocumentListSortHeader.vue';
@@ -116,15 +117,27 @@ const creatingHere = computed(
 const hasGridContent = computed(() => sortedItems.value.length > 0 || creatingHere.value);
 const createNameInputRef = ref<FocusableInput | null>(null);
 const renameNameInputRef = ref<RenameEditorExpose | null>(null);
+const gridViewRef = ref<{
+  focusCreateNameInput: () => Promise<void>;
+  focusRenameNameInput: () => Promise<void>;
+} | null>(null);
 const cuttingIdSet = computed(() => new Set(props.cuttingIds));
 
 async function focusCreateNameInput() {
+  if (props.viewMode === 'grid') {
+    await gridViewRef.value?.focusCreateNameInput();
+    return;
+  }
   await nextTick();
   createNameInputRef.value?.focus();
   createNameInputRef.value?.input?.select();
 }
 
 async function focusRenameNameInput() {
+  if (props.viewMode === 'grid') {
+    await gridViewRef.value?.focusRenameNameInput();
+    return;
+  }
   await nextTick();
   renameNameInputRef.value?.focus();
 }
@@ -339,132 +352,42 @@ onBeforeUnmount(() => {
         @mousedown="handleSelectionMouseDown"
       >
         <Spin :spinning="loading || moving">
-          <div v-if="hasGridContent && viewMode === 'grid'" class="document-grid">
-            <div
-              v-if="creatingHere"
-              class="document-explorer-item document-tile document-tile--folder document-tile--editing"
-            >
-              <div class="document-tile__main">
-                <IconifyIcon
-                  icon="lucide:folder"
-                  class="document-tile__icon document-tile__icon--folder"
-                />
-                <Input
-                  ref="createNameInputRef"
-                  :value="inlineEditor?.fileName"
-                  autofocus
-                  class="document-tile__name-input"
-                  :disabled="savingName"
-                  :maxlength="255"
-                  @blur="$emit('inlineSubmit')"
-                  @click.stop
-                  @keydown="handleInlineKeydown"
-                  @press-enter="$emit('inlineSubmit')"
-                  @update:value="handleNameInput"
-                />
-                <div class="document-tile__meta">
-                  <span>文件夹</span>
-                </div>
-              </div>
-            </div>
-            <Dropdown
-              v-for="item in sortedItems"
-              :key="item.id"
-              :trigger="['contextmenu']"
-            >
-              <div
-                class="document-explorer-item document-tile"
-                :data-document-id="itemKey(item)"
-                :class="{
-                  'document-tile--folder': item.izFolder === '1',
-                  'document-tile--draggable': canMove(item),
-                  'document-tile--selected': isSelected(item),
-                  'document-tile--cutting': isCutting(item),
-                }"
-                :draggable="canMove(item)"
-                tabindex="0"
-                @click.stop="handleItemClick($event, item)"
-                @contextmenu.stop="handleContextSelect(item)"
-                @dblclick.stop="handleTileOpen(item)"
-                @dragstart="handleDragStart($event, item)"
-                @dragover="handleFolderDragOver($event, item)"
-                @drop="handleDropOnFolder($event, item)"
-                @keydown.enter="handleOpen(item)"
-              >
-                <div class="document-tile__main">
-                  <img
-                    v-if="imageThumbnailUrl(item)"
-                    :alt="item.fileName || '图片预览'"
-                    class="document-tile__thumbnail"
-                    :src="imageThumbnailUrl(item)"
-                  />
-                  <IconifyIcon
-                    v-else
-                    :icon="fileIcon(item)"
-                    class="document-tile__icon"
-                    :class="{ 'document-tile__icon--folder': item.izFolder === '1' }"
-                  />
-                  <DocumentInlineRenameEditor
-                    v-if="isRenaming(item)"
-                    ref="renameNameInputRef"
-                    :disabled="savingName"
-                    :rows="3"
-                    :value="inlineEditor?.fileName"
-                    variant="grid"
-                    @cancel="$emit('inlineCancel')"
-                    @submit="$emit('inlineSubmit')"
-                    @update:value="handleNameInput"
-                  />
-                  <Tooltip v-else :title="item.fileName">
-                    <div class="document-tile__name">{{ item.fileName || '-' }}</div>
-                  </Tooltip>
-                  <div class="document-tile__meta">
-                    <span>{{ fileTypeText(item) }}</span>
-                    <span v-if="formatSize(item.fileSize)">{{ formatSize(item.fileSize) }}</span>
-                  </div>
-                </div>
-                <Dropdown trigger="click">
-                  <Button class="document-tile__more" size="small" type="text" @click.stop>
-                    <IconifyIcon icon="lucide:more-vertical" />
-                  </Button>
-                  <template #overlay>
-                    <DocumentItemActionMenu
-                      :can-edit="canEditItem(item)"
-                      :can-edit-content="canEditContentItem(item)"
-                      :can-preview="canPreviewItem(item)"
-                      :can-view-history="canViewHistoryItem(item)"
-                      :context-copyable-count="getContextCopyableRecords(item).length"
-                      :context-cuttable-count="getContextCuttableRecords(item).length"
-                      :context-deletable-count="getContextDeletableRecords(item).length"
-                      :context-downloadable-count="getContextDownloadRecords(item).length"
-                      :record="item"
-                      :scope="scope"
-                      @action="emitAction"
-                      @batch-action="emitContextBatchAction($event, item)"
-                    />
-                  </template>
-                </Dropdown>
-              </div>
-
-              <template #overlay>
-                <DocumentItemActionMenu
-                  :can-edit="isSingleContext(item) && canEditItem(item)"
-                  :can-edit-content="isSingleContext(item) && canEditContentItem(item)"
-                  :can-preview="isSingleContext(item) && canPreviewItem(item)"
-                  :can-view-history="isSingleContext(item) && canViewHistoryItem(item)"
-                  :context-copyable-count="getContextCopyableRecords(item).length"
-                  :context-cuttable-count="getContextCuttableRecords(item).length"
-                  :context-deletable-count="getContextDeletableRecords(item).length"
-                  :context-downloadable-count="getContextDownloadRecords(item).length"
-                  :record="item"
-                  :scope="scope"
-                  :single-context="isSingleContext(item)"
-                  @action="emitAction"
-                  @batch-action="emitContextBatchAction($event, item)"
-                />
-              </template>
-            </Dropdown>
-          </div>
+          <DocumentGridView
+            v-if="hasGridContent && viewMode === 'grid'"
+            ref="gridViewRef"
+            :can-edit-content-item="canEditContentItem"
+            :can-edit-item="canEditItem"
+            :can-move="canMove"
+            :can-preview-item="canPreviewItem"
+            :can-view-history-item="canViewHistoryItem"
+            :creating-here="creatingHere"
+            :get-context-copyable-records="getContextCopyableRecords"
+            :get-context-cuttable-records="getContextCuttableRecords"
+            :get-context-deletable-records="getContextDeletableRecords"
+            :get-context-download-records="getContextDownloadRecords"
+            :image-thumbnail-url="imageThumbnailUrl"
+            :inline-editor="inlineEditor"
+            :is-cutting="isCutting"
+            :is-renaming="isRenaming"
+            :is-selected="isSelected"
+            :is-single-context="isSingleContext"
+            :item-key="itemKey"
+            :items="sortedItems"
+            :saving-name="savingName"
+            :scope="scope"
+            @action="emitAction"
+            @context-batch-action="emitContextBatchAction"
+            @context-select="handleContextSelect"
+            @drop-on-folder="handleDropOnFolder"
+            @folder-drag-over="handleFolderDragOver"
+            @inline-cancel="$emit('inlineCancel')"
+            @inline-change="handleNameInput"
+            @inline-submit="$emit('inlineSubmit')"
+            @item-click="handleItemClick"
+            @item-drag-start="handleDragStart"
+            @item-open="handleOpen"
+            @item-tile-open="handleTileOpen"
+          />
           <div v-else-if="hasGridContent" class="document-list">
             <DocumentListSortHeader :sort-state="sortState" @sort="setSort" />
             <div
@@ -712,16 +635,6 @@ onBeforeUnmount(() => {
   user-select: none;
 }
 
-.document-grid {
-  display: grid;
-  overflow: auto;
-  height: 100%;
-  align-content: start;
-  grid-template-columns: repeat(auto-fill, minmax(124px, 1fr));
-  gap: 12px;
-  padding: 2px;
-}
-
 .document-list {
   display: flex;
   height: 100%;
@@ -843,128 +756,7 @@ onBeforeUnmount(() => {
   color: hsl(var(--muted-foreground));
 }
 
-.document-tile {
-  position: relative;
-  display: flex;
-  min-height: 138px;
-  cursor: default;
-  flex-direction: column;
-  justify-content: space-between;
-  border: 1px solid hsl(var(--border));
-  border-radius: 8px;
-  background: hsl(var(--background));
-  padding: 12px 10px 10px;
-  transition:
-    border-color 0.16s ease,
-    box-shadow 0.16s ease,
-    transform 0.16s ease;
-}
-
-.document-tile:hover,
-.document-tile:focus-visible {
-  border-color: hsl(var(--primary) / 45%);
-  box-shadow: 0 8px 20px hsl(var(--foreground) / 8%);
-  outline: none;
-}
-
-.document-tile--selected {
-  border-color: hsl(var(--primary) / 65%);
-  background: hsl(var(--primary) / 6%);
-  box-shadow: 0 8px 20px hsl(var(--foreground) / 8%);
-}
-
-.document-tile--cutting {
-  opacity: 0.48;
-  filter: grayscale(35%);
-}
-
-.document-tile--draggable {
-  cursor: default;
-}
-
-.document-tile--draggable:active {
-  cursor: default;
-}
-
-.document-tile--editing {
-  border-color: hsl(var(--primary) / 45%);
-  box-shadow: 0 8px 20px hsl(var(--foreground) / 8%);
-}
-
-.document-tile__main {
-  min-width: 0;
-  text-align: center;
-}
-
-.document-tile__icon {
-  margin: 2px auto 10px;
-  width: 42px;
-  height: 42px;
-  color: hsl(var(--muted-foreground));
-}
-
-.document-tile__thumbnail {
-  display: block;
-  width: 56px;
-  height: 56px;
-  margin: 0 auto 8px;
-  border: 1px solid hsl(var(--border));
-  border-radius: 6px;
-  background: hsl(var(--muted) / 40%);
-  object-fit: cover;
-}
-
-.document-tile__icon--folder {
-  color: #f5b93f;
-}
-
-.document-tile__name {
-  display: -webkit-box;
-  min-height: 40px;
-  overflow: hidden;
-  color: hsl(var(--foreground));
-  font-weight: 500;
-  font-size: 13px;
-  line-height: 20px;
-  text-overflow: ellipsis;
-  overflow-wrap: anywhere;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
-}
-
-.document-tile__name-input {
-  width: min(220px, 100%);
-  text-align: center;
-}
-
-.document-tile__name-input :deep(.ant-input) {
-  text-align: center;
-}
-
-.document-tile__meta {
-  display: flex;
-  min-height: 18px;
-  justify-content: center;
-  gap: 6px;
-  overflow: hidden;
-  color: hsl(var(--muted-foreground));
-  font-size: 12px;
-  white-space: nowrap;
-}
-
-.document-tile__more {
-  position: absolute;
-  top: 6px;
-  right: 6px;
-}
-
 .document-empty {
   padding: 56px 0;
-}
-
-@media (max-width: 768px) {
-  .document-grid {
-    grid-template-columns: repeat(auto-fill, minmax(108px, 1fr));
-  }
 }
 </style>
