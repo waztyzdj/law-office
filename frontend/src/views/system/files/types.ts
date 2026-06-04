@@ -81,6 +81,10 @@ export interface DocumentContentViewEmits {
   itemTileOpen: [record: DocumentFileInfo];
 }
 
+export type DocumentContentViewListeners = {
+  [Key in keyof DocumentContentViewEmits]: (...args: DocumentContentViewEmits[Key]) => void;
+};
+
 export interface DocumentListViewProps extends DocumentContentViewProps {
   sortState: DocumentSortState;
 }

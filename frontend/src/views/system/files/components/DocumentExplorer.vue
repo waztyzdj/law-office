@@ -18,6 +18,8 @@ import {
 } from '../constants';
 import type {
   DocumentBatchAction,
+  DocumentContentViewListeners,
+  DocumentContentViewProps,
   DocumentViewMode,
   InlineEditorState,
 } from '../types';
@@ -306,6 +308,44 @@ function handleNameInput(value: string) {
   emit('inlineChange', value);
 }
 
+const contentViewProps = computed<DocumentContentViewProps>(() => ({
+  canEditContentItem,
+  canEditItem,
+  canMove,
+  canPreviewItem,
+  canViewHistoryItem,
+  creatingHere: creatingHere.value,
+  getContextCopyableRecords,
+  getContextCuttableRecords,
+  getContextDeletableRecords,
+  getContextDownloadRecords,
+  imageThumbnailUrl,
+  inlineEditor: props.inlineEditor,
+  isCutting,
+  isRenaming,
+  isSelected,
+  isSingleContext,
+  itemKey,
+  items: sortedItems.value,
+  savingName: props.savingName,
+  scope: props.scope,
+}));
+
+const contentViewListeners: DocumentContentViewListeners = {
+  action: emitAction,
+  contextBatchAction: emitContextBatchAction,
+  contextSelect: handleContextSelect,
+  dropOnFolder: handleDropOnFolder,
+  folderDragOver: handleFolderDragOver,
+  inlineCancel: () => emit('inlineCancel'),
+  inlineChange: handleNameInput,
+  inlineSubmit: () => emit('inlineSubmit'),
+  itemClick: handleItemClick,
+  itemDragStart: handleDragStart,
+  itemOpen: handleOpen,
+  itemTileOpen: handleTileOpen,
+};
+
 onMounted(() => {
   window.addEventListener('keydown', handleShortcutKeydown);
 });
@@ -331,75 +371,15 @@ onBeforeUnmount(() => {
           <DocumentGridView
             v-if="hasGridContent && viewMode === 'grid'"
             ref="gridViewRef"
-            :can-edit-content-item="canEditContentItem"
-            :can-edit-item="canEditItem"
-            :can-move="canMove"
-            :can-preview-item="canPreviewItem"
-            :can-view-history-item="canViewHistoryItem"
-            :creating-here="creatingHere"
-            :get-context-copyable-records="getContextCopyableRecords"
-            :get-context-cuttable-records="getContextCuttableRecords"
-            :get-context-deletable-records="getContextDeletableRecords"
-            :get-context-download-records="getContextDownloadRecords"
-            :image-thumbnail-url="imageThumbnailUrl"
-            :inline-editor="inlineEditor"
-            :is-cutting="isCutting"
-            :is-renaming="isRenaming"
-            :is-selected="isSelected"
-            :is-single-context="isSingleContext"
-            :item-key="itemKey"
-            :items="sortedItems"
-            :saving-name="savingName"
-            :scope="scope"
-            @action="emitAction"
-            @context-batch-action="emitContextBatchAction"
-            @context-select="handleContextSelect"
-            @drop-on-folder="handleDropOnFolder"
-            @folder-drag-over="handleFolderDragOver"
-            @inline-cancel="$emit('inlineCancel')"
-            @inline-change="handleNameInput"
-            @inline-submit="$emit('inlineSubmit')"
-            @item-click="handleItemClick"
-            @item-drag-start="handleDragStart"
-            @item-open="handleOpen"
-            @item-tile-open="handleTileOpen"
+            v-bind="contentViewProps"
+            v-on="contentViewListeners"
           />
           <DocumentListView
             v-else-if="hasGridContent"
             ref="listViewRef"
-            :can-edit-content-item="canEditContentItem"
-            :can-edit-item="canEditItem"
-            :can-move="canMove"
-            :can-preview-item="canPreviewItem"
-            :can-view-history-item="canViewHistoryItem"
-            :creating-here="creatingHere"
-            :get-context-copyable-records="getContextCopyableRecords"
-            :get-context-cuttable-records="getContextCuttableRecords"
-            :get-context-deletable-records="getContextDeletableRecords"
-            :get-context-download-records="getContextDownloadRecords"
-            :image-thumbnail-url="imageThumbnailUrl"
-            :inline-editor="inlineEditor"
-            :is-cutting="isCutting"
-            :is-renaming="isRenaming"
-            :is-selected="isSelected"
-            :is-single-context="isSingleContext"
-            :item-key="itemKey"
-            :items="sortedItems"
-            :saving-name="savingName"
-            :scope="scope"
             :sort-state="sortState"
-            @action="emitAction"
-            @context-batch-action="emitContextBatchAction"
-            @context-select="handleContextSelect"
-            @drop-on-folder="handleDropOnFolder"
-            @folder-drag-over="handleFolderDragOver"
-            @inline-cancel="$emit('inlineCancel')"
-            @inline-change="handleNameInput"
-            @inline-submit="$emit('inlineSubmit')"
-            @item-click="handleItemClick"
-            @item-drag-start="handleDragStart"
-            @item-open="handleOpen"
-            @item-tile-open="handleTileOpen"
+            v-bind="contentViewProps"
+            v-on="contentViewListeners"
             @sort="setSort"
           />
           <Empty v-else class="document-empty" description="当前文件夹暂无内容" />
