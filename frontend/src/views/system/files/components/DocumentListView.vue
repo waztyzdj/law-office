@@ -7,11 +7,11 @@ import type {
 
 import { IconifyIcon } from '@vben/icons';
 
-import { Button, Dropdown, Input, Tooltip } from 'ant-design-vue';
+import { Button, Input, Tooltip } from 'ant-design-vue';
 
 import { useDocumentInlineEditorFocus } from '../hooks/useDocumentInlineEditorFocus';
 import DocumentInlineRenameEditor from './DocumentInlineRenameEditor.vue';
-import DocumentItemActionMenu from './DocumentItemActionMenu.vue';
+import DocumentItemActionDropdown from './DocumentItemActionDropdown.vue';
 import DocumentListSortHeader from './DocumentListSortHeader.vue';
 import {
   fileIcon,
@@ -73,10 +73,23 @@ defineExpose<DocumentContentViewExpose>({
       <div class="document-list__cell document-list__cell--time">-</div>
       <div class="document-list__cell document-list__cell--actions"></div>
     </div>
-    <Dropdown
+    <DocumentItemActionDropdown
       v-for="item in items"
       :key="item.id"
-      :trigger="['contextmenu']"
+      mode="context"
+      :can-edit-content-item="canEditContentItem"
+      :can-edit-item="canEditItem"
+      :can-preview-item="canPreviewItem"
+      :can-view-history-item="canViewHistoryItem"
+      :get-context-copyable-records="getContextCopyableRecords"
+      :get-context-cuttable-records="getContextCuttableRecords"
+      :get-context-deletable-records="getContextDeletableRecords"
+      :get-context-download-records="getContextDownloadRecords"
+      :is-single-context="isSingleContext"
+      :record="item"
+      :scope="scope"
+      @action="$emit('action', $event, item)"
+      @batch-action="$emit('contextBatchAction', $event, item)"
     >
       <div
         class="document-explorer-item document-list-row"
@@ -135,48 +148,28 @@ defineExpose<DocumentContentViewExpose>({
           {{ formatDateTime(item.updateTime || item.createTime) }}
         </div>
         <div class="document-list__cell document-list__cell--actions">
-          <Dropdown trigger="click">
+          <DocumentItemActionDropdown
+            :can-edit-content-item="canEditContentItem"
+            :can-edit-item="canEditItem"
+            :can-preview-item="canPreviewItem"
+            :can-view-history-item="canViewHistoryItem"
+            :get-context-copyable-records="getContextCopyableRecords"
+            :get-context-cuttable-records="getContextCuttableRecords"
+            :get-context-deletable-records="getContextDeletableRecords"
+            :get-context-download-records="getContextDownloadRecords"
+            :is-single-context="isSingleContext"
+            :record="item"
+            :scope="scope"
+            @action="$emit('action', $event, item)"
+            @batch-action="$emit('contextBatchAction', $event, item)"
+          >
             <Button class="document-list-row__more" size="small" type="text" @click.stop>
               <IconifyIcon icon="lucide:more-vertical" />
             </Button>
-            <template #overlay>
-              <DocumentItemActionMenu
-                :can-edit="canEditItem(item)"
-                :can-edit-content="canEditContentItem(item)"
-                :can-preview="canPreviewItem(item)"
-                :can-view-history="canViewHistoryItem(item)"
-                :context-copyable-count="getContextCopyableRecords(item).length"
-                :context-cuttable-count="getContextCuttableRecords(item).length"
-                :context-deletable-count="getContextDeletableRecords(item).length"
-                :context-downloadable-count="getContextDownloadRecords(item).length"
-                :record="item"
-                :scope="scope"
-                @action="$emit('action', $event, item)"
-                @batch-action="$emit('contextBatchAction', $event, item)"
-              />
-            </template>
-          </Dropdown>
+          </DocumentItemActionDropdown>
         </div>
       </div>
-
-      <template #overlay>
-        <DocumentItemActionMenu
-          :can-edit="isSingleContext(item) && canEditItem(item)"
-          :can-edit-content="isSingleContext(item) && canEditContentItem(item)"
-          :can-preview="isSingleContext(item) && canPreviewItem(item)"
-          :can-view-history="isSingleContext(item) && canViewHistoryItem(item)"
-          :context-copyable-count="getContextCopyableRecords(item).length"
-          :context-cuttable-count="getContextCuttableRecords(item).length"
-          :context-deletable-count="getContextDeletableRecords(item).length"
-          :context-downloadable-count="getContextDownloadRecords(item).length"
-          :record="item"
-          :scope="scope"
-          :single-context="isSingleContext(item)"
-          @action="$emit('action', $event, item)"
-          @batch-action="$emit('contextBatchAction', $event, item)"
-        />
-      </template>
-    </Dropdown>
+    </DocumentItemActionDropdown>
   </div>
 </template>
 
