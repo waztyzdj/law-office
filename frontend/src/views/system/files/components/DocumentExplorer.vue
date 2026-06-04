@@ -3,7 +3,7 @@ import type { DocumentFileInfo, DocumentScope } from '#/api/system/document';
 
 import { downloadDocumentThumbnail } from '#/api/system/document';
 
-import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, toRef, watch } from 'vue';
 
 import { IconifyIcon } from '@vben/icons';
 
@@ -21,6 +21,7 @@ import type {
   DocumentViewMode,
   InlineEditorState,
 } from '../types';
+import { useDocumentSelection } from '../hooks/useDocumentSelection';
 import {
   canDropOnFolder as canDropOnDocumentFolder,
   canEditContentItem as canEditDocumentContent,
@@ -35,7 +36,6 @@ import {
   formatDateTime,
   formatSize,
   isImageFile,
-  isVirtualBusinessItem,
 } from './documentExplorerUtils';
 
 interface Props {
@@ -111,43 +111,9 @@ const creatingHere = computed(
 const hasGridContent = computed(() => sortedItems.value.length > 0 || creatingHere.value);
 const createNameInputRef = ref<FocusableInput | null>(null);
 const renameNameInputRef = ref<FocusableInput | null>(null);
-const explorerBodyRef = ref<HTMLElement>();
-const selectedIds = ref<Set<string>>(new Set());
-// Shift 连续选择需要一个稳定锚点，保持与桌面文件管理器一致。
-const selectionAnchorKey = ref<string>();
-const selecting = ref(false);
-const selectionMoved = ref(false);
-const suppressNextBodyClick = ref(false);
-const selectionBox = ref({
-  currentX: 0,
-  currentY: 0,
-  startX: 0,
-  startY: 0,
-});
 const imageThumbnailUrls = ref<Record<string, string>>({});
 let imageThumbnailLoadVersion = 0;
-const selectionBoxStyle = computed(() => {
-  const left = Math.min(selectionBox.value.startX, selectionBox.value.currentX);
-  const top = Math.min(selectionBox.value.startY, selectionBox.value.currentY);
-  const width = Math.abs(selectionBox.value.currentX - selectionBox.value.startX);
-  const height = Math.abs(selectionBox.value.currentY - selectionBox.value.startY);
-  return {
-    height: `${height}px`,
-    left: `${left}px`,
-    top: `${top}px`,
-    width: `${width}px`,
-  };
-});
-const selectedRecords = computed(() =>
-  sortedItems.value.filter((item) => selectedIds.value.has(itemKey(item))),
-);
 const cuttingIdSet = computed(() => new Set(props.cuttingIds));
-const selectedMovableIds = computed(() =>
-  selectedRecords.value
-    .filter((item) => item.id && canMove(item))
-    .map((item) => item.id || ''),
-);
-let renameTimer: number | undefined;
 
 async function focusCreateNameInput() {
   await nextTick();
@@ -264,7 +230,7 @@ async function loadImageThumbnails() {
 }
 
 function canMove(record: DocumentFileInfo) {
-  return canMoveDocument(record, actionContext.value);
+  return Boolean(canMoveDocument(record, actionContext.value));
 }
 
 function canEditItem(record: DocumentFileInfo) {
@@ -307,7 +273,7 @@ function handleDragStart(event: DragEvent, record: DocumentFileInfo) {
     return;
   }
   if (!selectedIds.value.has(itemKey(record))) {
-    selectedIds.value = new Set([itemKey(record)]);
+    selectOnly(record);
   }
   const sourceIds = selectedIds.value.has(itemKey(record)) && selectedMovableIds.value.length > 0
     ? selectedMovableIds.value
@@ -375,49 +341,8 @@ function emitAction(event: string, record: DocumentFileInfo) {
   emit('action', event, record);
 }
 
-function clearRenameTimer() {
-  if (renameTimer) {
-    window.clearTimeout(renameTimer);
-    renameTimer = undefined;
-  }
-}
-
 function itemKey(record: DocumentFileInfo) {
   return record.id || record.fileName || '';
-}
-
-function selectRangeTo(record: DocumentFileInfo, append: boolean) {
-  const key = itemKey(record);
-  const keys = sortedItems.value.map((item) => itemKey(item));
-  const targetIndex = keys.indexOf(key);
-  const anchorKey = selectionAnchorKey.value || Array.from(selectedIds.value).at(-1) || key;
-  const anchorIndex = keys.indexOf(anchorKey);
-  if (targetIndex < 0 || anchorIndex < 0) {
-    selectedIds.value = new Set([key]);
-    selectionAnchorKey.value = key;
-    return;
-  }
-  const startIndex = Math.min(anchorIndex, targetIndex);
-  const endIndex = Math.max(anchorIndex, targetIndex);
-  const nextSelected = append ? new Set(selectedIds.value) : new Set<string>();
-  for (const rangeKey of keys.slice(startIndex, endIndex + 1)) {
-    if (rangeKey) {
-      nextSelected.add(rangeKey);
-    }
-  }
-  selectedIds.value = nextSelected;
-}
-
-function toggleSelected(record: DocumentFileInfo) {
-  const key = itemKey(record);
-  const nextSelected = new Set(selectedIds.value);
-  if (nextSelected.has(key)) {
-    nextSelected.delete(key);
-  } else if (key) {
-    nextSelected.add(key);
-  }
-  selectedIds.value = nextSelected;
-  selectionAnchorKey.value = key;
 }
 
 function confirmInlineEdit() {
@@ -426,41 +351,45 @@ function confirmInlineEdit() {
   }
 }
 
-function handleTileClick(event: MouseEvent, record: DocumentFileInfo) {
-  if (props.inlineEditor && !isRenaming(record)) {
-    confirmInlineEdit();
-  }
-  const key = itemKey(record);
-  if (event.shiftKey) {
-    clearRenameTimer();
-    selectRangeTo(record, event.ctrlKey || event.metaKey);
-    return;
-  }
-  if (event.ctrlKey || event.metaKey) {
-    clearRenameTimer();
-    toggleSelected(record);
-    return;
-  }
-  const alreadySelected = selectedIds.value.size === 1 && selectedIds.value.has(key);
-  clearRenameTimer();
-  selectedIds.value = new Set([key]);
-  selectionAnchorKey.value = key;
-  if (!alreadySelected || !canEditItem(record) || isRenaming(record)) {
-    return;
-  }
-  renameTimer = window.setTimeout(() => {
-    emitAction('rename', record);
-    renameTimer = undefined;
-  }, 220);
-}
+const documentSelection = useDocumentSelection({
+  canEditItem,
+  canMove,
+  canPaste: toRef(props, 'canPaste'),
+  confirmInlineEdit,
+  emitBatchAction: (event, records) => emit('batchAction', event, records),
+  emitPaste: () => emit('paste'),
+  inlineEditor: toRef(props, 'inlineEditor'),
+  isRenaming,
+  loading: toRef(props, 'loading'),
+  moving: toRef(props, 'moving'),
+  openRename: (record) => emitAction('rename', record),
+  scope: toRef(props, 'scope'),
+  sortedItems,
+});
+const {
+  clearRenameTimer,
+  emitContextBatchAction,
+  getContextCopyableRecords,
+  getContextCuttableRecords,
+  getContextDeletableRecords,
+  getContextDownloadRecords,
+  handleBodyClick,
+  handleContextSelect,
+  handleItemClick,
+  handleSelectionMouseDown,
+  handleShortcutKeydown,
+  isSelected,
+  isSingleContext,
+  cleanupSelectionListeners,
+  selectOnly,
+  selectedIds,
+  selectedMovableIds,
+  selecting,
+  selectionBoxStyle,
+} = documentSelection;
 
-function handleContextSelect(record: DocumentFileInfo) {
-  clearRenameTimer();
-  if (selectedIds.value.size > 1 && selectedIds.value.has(itemKey(record))) {
-    return;
-  }
-  selectedIds.value = new Set([itemKey(record)]);
-  selectionAnchorKey.value = itemKey(record);
+function setExplorerBodyRef(element: unknown) {
+  documentSelection.explorerBodyRef.value = element instanceof HTMLElement ? element : undefined;
 }
 
 function handleTileOpen(record: DocumentFileInfo) {
@@ -468,245 +397,8 @@ function handleTileOpen(record: DocumentFileInfo) {
   handleOpen(record);
 }
 
-function clearSelection() {
-  clearRenameTimer();
-  selectedIds.value = new Set();
-  selectionAnchorKey.value = undefined;
-}
-
-function handleBodyClick() {
-  confirmInlineEdit();
-  if (suppressNextBodyClick.value) {
-    suppressNextBodyClick.value = false;
-    return;
-  }
-  clearSelection();
-}
-
-function isSelected(record: DocumentFileInfo) {
-  return selectedIds.value.has(itemKey(record));
-}
-
 function isCutting(record: DocumentFileInfo) {
   return Boolean(record.id && cuttingIdSet.value.has(record.id));
-}
-
-function getContextRecords(record: DocumentFileInfo) {
-  return selectedIds.value.has(itemKey(record)) && selectedRecords.value.length > 0
-    ? selectedRecords.value
-    : [record];
-}
-
-function getContextDownloadRecords(record: DocumentFileInfo) {
-  return getContextRecords(record).filter((item) => item.canDownload && item.izFolder !== '1');
-}
-
-function getContextDeletableRecords(record: DocumentFileInfo) {
-  return getContextRecords(record).filter(
-    (item) => canEditItem(item) && props.scope !== 'trash' && props.scope !== 'business',
-  );
-}
-
-function getContextCuttableRecords(record: DocumentFileInfo) {
-  return getContextRecords(record).filter((item) => canMove(item));
-}
-
-function getContextCopyableRecords(record: DocumentFileInfo) {
-  return getContextRecords(record).filter(
-    (item) => item.id && props.scope !== 'trash' && !isVirtualBusinessItem(item),
-  );
-}
-
-function isSingleContext(record: DocumentFileInfo) {
-  return getContextRecords(record).length === 1;
-}
-
-function emitContextBatchAction(event: DocumentBatchAction, record: DocumentFileInfo) {
-  const records =
-    event === 'download'
-      ? getContextDownloadRecords(record)
-      : event === 'delete'
-        ? getContextDeletableRecords(record)
-        : event === 'cut'
-          ? getContextCuttableRecords(record)
-          : getContextCopyableRecords(record);
-  emit('batchAction', event, records);
-}
-
-function isEditableShortcutTarget(target: EventTarget | null) {
-  if (!(target instanceof HTMLElement)) {
-    return false;
-  }
-  const tagName = target.tagName.toLowerCase();
-  return (
-    target.isContentEditable ||
-    tagName === 'input' ||
-    tagName === 'textarea' ||
-    tagName === 'select' ||
-    Boolean(target.closest('[contenteditable="true"], .ant-input, .ant-select'))
-  );
-}
-
-function handleShortcutKeydown(event: KeyboardEvent) {
-  if (props.loading || props.moving || isEditableShortcutTarget(event.target)) {
-    return;
-  }
-  const key = event.key.toLowerCase();
-  if (key === 'delete' || (event.metaKey && key === 'backspace')) {
-    const records = selectedRecords.value.filter(
-      (item) => canEditItem(item) && props.scope !== 'trash' && props.scope !== 'business',
-    );
-    if (records.length === 0) {
-      return;
-    }
-    event.preventDefault();
-    emit('batchAction', 'delete', records);
-    return;
-  }
-  const shortcutPressed = event.ctrlKey || event.metaKey;
-  if (!shortcutPressed || event.altKey) {
-    return;
-  }
-  if (key === 'x') {
-    const records = selectedRecords.value.filter((item) => canMove(item));
-    if (records.length === 0) {
-      return;
-    }
-    event.preventDefault();
-    emit('batchAction', 'cut', records);
-    return;
-  }
-  if (key === 'c') {
-    const records = selectedRecords.value.filter(
-      (item) => item.id && props.scope !== 'trash' && !isVirtualBusinessItem(item),
-    );
-    if (records.length === 0) {
-      return;
-    }
-    event.preventDefault();
-    emit('batchAction', 'copy', records);
-    return;
-  }
-  if (key === 'a') {
-    const keys = sortedItems.value.map((item) => itemKey(item)).filter(Boolean);
-    if (keys.length === 0) {
-      return;
-    }
-    event.preventDefault();
-    selectedIds.value = new Set(keys);
-    selectionAnchorKey.value = keys.at(-1);
-    return;
-  }
-  if (key === 'v' && props.canPaste) {
-    event.preventDefault();
-    emit('paste');
-  }
-}
-
-function toBodyPoint(event: MouseEvent) {
-  const body = explorerBodyRef.value;
-  if (!body) {
-    return { x: 0, y: 0 };
-  }
-  const rect = body.getBoundingClientRect();
-  return {
-    x: event.clientX - rect.left + body.scrollLeft,
-    y: event.clientY - rect.top + body.scrollTop,
-  };
-}
-
-function isSelectionIgnoredTarget(target: EventTarget | null) {
-  if (!(target instanceof Element)) {
-    return true;
-  }
-  return Boolean(
-    target.closest(
-      '.document-explorer-item, button, input, textarea, .ant-dropdown, .ant-dropdown-menu',
-    ),
-  );
-}
-
-function handleSelectionMouseDown(event: MouseEvent) {
-  if (event.button !== 0 || props.loading || props.moving || isSelectionIgnoredTarget(event.target)) {
-    return;
-  }
-  if (props.inlineEditor) {
-    event.preventDefault();
-    confirmInlineEdit();
-    clearSelection();
-    return;
-  }
-  event.preventDefault();
-  clearRenameTimer();
-  const point = toBodyPoint(event);
-  selectionBox.value = {
-    currentX: point.x,
-    currentY: point.y,
-    startX: point.x,
-    startY: point.y,
-  };
-  selectedIds.value = new Set();
-  selectionAnchorKey.value = undefined;
-  selectionMoved.value = false;
-  selecting.value = true;
-  window.addEventListener('mousemove', handleSelectionMouseMove);
-  window.addEventListener('mouseup', handleSelectionMouseUp);
-}
-
-function handleSelectionMouseMove(event: MouseEvent) {
-  if (!selecting.value) {
-    return;
-  }
-  const point = toBodyPoint(event);
-  selectionBox.value = {
-    ...selectionBox.value,
-    currentX: point.x,
-    currentY: point.y,
-  };
-  if (
-    Math.abs(selectionBox.value.currentX - selectionBox.value.startX) > 3 ||
-    Math.abs(selectionBox.value.currentY - selectionBox.value.startY) > 3
-  ) {
-    selectionMoved.value = true;
-  }
-  updateSelectionByBox();
-}
-
-function handleSelectionMouseUp() {
-  if (!selecting.value) {
-    return;
-  }
-  selecting.value = false;
-  suppressNextBodyClick.value = selectionMoved.value;
-  window.removeEventListener('mousemove', handleSelectionMouseMove);
-  window.removeEventListener('mouseup', handleSelectionMouseUp);
-}
-
-function updateSelectionByBox() {
-  const body = explorerBodyRef.value;
-  if (!body) {
-    return;
-  }
-  const bodyRect = body.getBoundingClientRect();
-  const left = Math.min(selectionBox.value.startX, selectionBox.value.currentX);
-  const top = Math.min(selectionBox.value.startY, selectionBox.value.currentY);
-  const right = Math.max(selectionBox.value.startX, selectionBox.value.currentX);
-  const bottom = Math.max(selectionBox.value.startY, selectionBox.value.currentY);
-  const nextSelected = new Set<string>();
-  for (const tile of body.querySelectorAll<HTMLElement>('.document-explorer-item[data-document-id]')) {
-    const tileRect = tile.getBoundingClientRect();
-    const tileLeft = tileRect.left - bodyRect.left + body.scrollLeft;
-    const tileTop = tileRect.top - bodyRect.top + body.scrollTop;
-    const tileRight = tileLeft + tileRect.width;
-    const tileBottom = tileTop + tileRect.height;
-    const intersects = tileLeft <= right && tileRight >= left && tileTop <= bottom && tileBottom >= top;
-    const id = tile.dataset.documentId;
-    if (intersects && id) {
-      nextSelected.add(id);
-    }
-  }
-  selectedIds.value = nextSelected;
-  selectionAnchorKey.value = Array.from(nextSelected).at(-1);
 }
 
 function isRenaming(record: DocumentFileInfo) {
@@ -747,10 +439,8 @@ onMounted(() => {
 onBeforeUnmount(() => {
   imageThumbnailLoadVersion += 1;
   revokeAllImageThumbnailUrls();
-  clearRenameTimer();
+  cleanupSelectionListeners();
   window.removeEventListener('keydown', handleShortcutKeydown);
-  window.removeEventListener('mousemove', handleSelectionMouseMove);
-  window.removeEventListener('mouseup', handleSelectionMouseUp);
 });
 </script>
 
@@ -758,7 +448,7 @@ onBeforeUnmount(() => {
   <div class="document-explorer">
     <Dropdown :trigger="['contextmenu']">
       <div
-        ref="explorerBodyRef"
+        :ref="setExplorerBodyRef"
         class="document-explorer__body"
         :class="{ 'document-explorer__body--selecting': selecting }"
         @click="handleBodyClick"
@@ -809,7 +499,7 @@ onBeforeUnmount(() => {
                 }"
                 :draggable="canMove(item)"
                 tabindex="0"
-                @click.stop="handleTileClick($event, item)"
+                @click.stop="handleItemClick($event, item)"
                 @contextmenu.stop="handleContextSelect(item)"
                 @dblclick.stop="handleTileOpen(item)"
                 @dragstart="handleDragStart($event, item)"
@@ -968,7 +658,7 @@ onBeforeUnmount(() => {
                 }"
                 :draggable="canMove(item)"
                 tabindex="0"
-                @click.stop="handleTileClick($event, item)"
+                @click.stop="handleItemClick($event, item)"
                 @contextmenu.stop="handleContextSelect(item)"
                 @dblclick.stop="handleTileOpen(item)"
                 @dragstart="handleDragStart($event, item)"
