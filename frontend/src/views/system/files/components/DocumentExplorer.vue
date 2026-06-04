@@ -1,8 +1,6 @@
 <script setup lang="ts">
 import type { DocumentFileInfo, DocumentScope } from '#/api/system/document';
 
-import { downloadDocumentThumbnail } from '#/api/system/document';
-
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, toRef, watch } from 'vue';
 
 import { IconifyIcon } from '@vben/icons';
@@ -23,6 +21,7 @@ import type {
 } from '../types';
 import { useDocumentDragDrop } from '../hooks/useDocumentDragDrop';
 import { useDocumentSelection } from '../hooks/useDocumentSelection';
+import { useDocumentThumbnails } from '../hooks/useDocumentThumbnails';
 import {
   canDropOnFolder as canDropOnDocumentFolder,
   canEditContentItem as canEditDocumentContent,
@@ -36,7 +35,6 @@ import {
   fileTypeText,
   formatDateTime,
   formatSize,
-  isImageFile,
 } from './documentExplorerUtils';
 
 interface Props {
@@ -112,8 +110,6 @@ const creatingHere = computed(
 const hasGridContent = computed(() => sortedItems.value.length > 0 || creatingHere.value);
 const createNameInputRef = ref<FocusableInput | null>(null);
 const renameNameInputRef = ref<FocusableInput | null>(null);
-const imageThumbnailUrls = ref<Record<string, string>>({});
-let imageThumbnailLoadVersion = 0;
 const cuttingIdSet = computed(() => new Set(props.cuttingIds));
 
 async function focusCreateNameInput() {
@@ -179,57 +175,6 @@ function sortDirectionIcon(field: DocumentSortField) {
   return props.sortState.order === 'asc' ? 'lucide:arrow-up' : 'lucide:arrow-down';
 }
 
-function imageThumbnailUrl(record: DocumentFileInfo) {
-  const key = itemKey(record);
-  return key ? imageThumbnailUrls.value[key] : undefined;
-}
-
-function revokeImageThumbnailUrl(key: string) {
-  const url = imageThumbnailUrls.value[key];
-  if (url) {
-    URL.revokeObjectURL(url);
-  }
-}
-
-function revokeAllImageThumbnailUrls() {
-  for (const key of Object.keys(imageThumbnailUrls.value)) {
-    revokeImageThumbnailUrl(key);
-  }
-  imageThumbnailUrls.value = {};
-}
-
-async function loadImageThumbnails() {
-  const version = ++imageThumbnailLoadVersion;
-  const imageItems = sortedItems.value.filter((item) => item.id && isImageFile(item));
-  const activeKeys = new Set(imageItems.map((item) => itemKey(item)).filter(Boolean));
-
-  for (const key of Object.keys(imageThumbnailUrls.value)) {
-    if (!activeKeys.has(key)) {
-      revokeImageThumbnailUrl(key);
-      delete imageThumbnailUrls.value[key];
-    }
-  }
-
-  for (const item of imageItems) {
-    const key = itemKey(item);
-    if (!item.id || !key || imageThumbnailUrls.value[key]) {
-      continue;
-    }
-    try {
-      const blob = await downloadDocumentThumbnail(item.id);
-      if (version !== imageThumbnailLoadVersion) {
-        continue;
-      }
-      imageThumbnailUrls.value = {
-        ...imageThumbnailUrls.value,
-        [key]: URL.createObjectURL(blob),
-      };
-    } catch {
-      // 缩略图加载失败时保留文件类型图标，避免影响文件列表使用。
-    }
-  }
-}
-
 function canMove(record: DocumentFileInfo) {
   return Boolean(canMoveDocument(record, actionContext.value));
 }
@@ -275,6 +220,14 @@ function emitAction(event: string, record: DocumentFileInfo) {
 function itemKey(record: DocumentFileInfo) {
   return record.id || record.fileName || '';
 }
+
+const {
+  cleanupImageThumbnails,
+  imageThumbnailUrl,
+} = useDocumentThumbnails({
+  itemKey,
+  sortedItems,
+});
 
 function confirmInlineEdit() {
   if (props.inlineEditor) {
@@ -365,25 +318,12 @@ function handleInlineKeydown(event: KeyboardEvent) {
   }
 }
 
-watch(
-  () =>
-    sortedItems.value
-      .filter((item) => item.id && isImageFile(item))
-      .map((item) => itemKey(item))
-      .join(','),
-  () => {
-    void loadImageThumbnails();
-  },
-  { immediate: true },
-);
-
 onMounted(() => {
   window.addEventListener('keydown', handleShortcutKeydown);
 });
 
 onBeforeUnmount(() => {
-  imageThumbnailLoadVersion += 1;
-  revokeAllImageThumbnailUrls();
+  cleanupImageThumbnails();
   cleanupSelectionListeners();
   window.removeEventListener('keydown', handleShortcutKeydown);
 });
