@@ -10,15 +10,8 @@ import type {
 
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 
-import { IconifyIcon } from '@vben/icons';
-
 import {
   Card,
-  Dropdown,
-  Input,
-  InputSearch,
-  Spin,
-  Tree,
 } from 'ant-design-vue';
 
 import {
@@ -33,9 +26,9 @@ import DocumentExplorer from './components/DocumentExplorer.vue';
 import DocumentHeaderToolbar from './components/DocumentHeaderToolbar.vue';
 import DocumentHistoryModal from './components/DocumentHistoryModal.vue';
 import DocumentImagePreviewModal from './components/DocumentImagePreviewModal.vue';
-import DocumentItemActionMenu from './components/DocumentItemActionMenu.vue';
 import DocumentOnlyOfficePreviewModal from './components/DocumentOnlyOfficePreviewModal.vue';
 import DocumentShareDrawer from './components/DocumentShareDrawer.vue';
+import DocumentTreePanel from './components/DocumentTreePanel.vue';
 import {
   BUSINESS_RECORD_VIEW_STORE_TYPE,
   BUSINESS_VIEW_STORE_TYPE,
@@ -558,92 +551,39 @@ onBeforeUnmount(() => {
       <Card
         class="document-tree-card"
         :body-style="{ padding: '12px' }"
-        @mousedown.capture="activateTreeShortcut"
       >
-        <InputSearch
-          v-model:value="keyword"
-          class="document-tree-search"
-          allow-clear
-          placeholder="搜索文件名"
+        <DocumentTreePanel
+          :can-manage-tree-folder="canManageTreeFolder"
+          :can-show-tree-context-menu="canShowTreeContextMenu"
+          :expanded-keys="expandedTreeKeys"
+          :find-folder-by-key="findFolderByKey"
+          :get-tree-copyable-records="getTreeCopyableRecords"
+          :get-tree-cuttable-records="getTreeCuttableRecords"
+          :get-tree-deletable-records="getTreeDeletableRecords"
+          :get-tree-downloadable-records="getTreeDownloadableRecords"
+          :get-tree-node-icon="getTreeNodeIcon"
+          :inline-file-name="inlineFileName"
+          :is-editing-tree-node="isEditingTreeNode"
+          :keyword="keyword"
+          :loading="treeLoading"
+          :scope="scope"
+          :selected-keys="selectedTreeKeys"
+          :tree-data="treeData"
+          @action="handleAction"
+          @activate-shortcut="activateTreeShortcut"
+          @batch-action="handleTreeMenuBatchAction"
+          @drop-to-tree="handleDropToTree"
+          @inline-cancel="cancelInlineEditor"
+          @inline-change="handleInlineNameChange"
+          @inline-submit="submitInlineName"
           @search="handleSearch"
+          @tree-drag-over="handleTreeDragOver"
+          @tree-drag-start="handleTreeDragStart"
+          @tree-expand="handleTreeExpand"
+          @tree-select="handleSelectTree"
+          @update-expanded-keys="expandedTreeKeys = $event"
+          @update-keyword="keyword = $event"
         />
-        <Spin :spinning="treeLoading">
-          <Tree
-            v-model:expanded-keys="expandedTreeKeys"
-            block-node
-            :selected-keys="selectedTreeKeys"
-            :tree-data="treeData"
-            @expand="handleTreeExpand"
-            @select="handleSelectTree"
-          >
-            <template #title="{ key, title }">
-              <Dropdown
-                v-if="canShowTreeContextMenu(String(key))"
-                :trigger="['contextmenu']"
-              >
-                <span
-                  class="document-tree-node"
-                  :class="{ 'document-tree-node--draggable': canManageTreeFolder(String(key)) }"
-                  :draggable="canManageTreeFolder(String(key))"
-                  @dragstart="handleTreeDragStart($event, String(key))"
-                  @dragover="handleTreeDragOver($event, String(key))"
-                  @drop="handleDropToTree($event, String(key))"
-                >
-                  <IconifyIcon
-                    :icon="getTreeNodeIcon(String(key))"
-                    class="document-tree-node__icon"
-                  />
-                  <Input
-                    v-if="isEditingTreeNode(String(key))"
-                    v-model:value="inlineFileName"
-                    class="document-tree-node__input"
-                    size="small"
-                    @blur="submitInlineName"
-                    @click.stop
-                    @keydown.esc.stop.prevent="cancelInlineEditor"
-                    @press-enter="submitInlineName"
-                  />
-                  <span v-else>{{ title }}</span>
-                </span>
-                <template #overlay>
-                  <DocumentItemActionMenu
-                    :can-edit="canManageTreeFolder(String(key))"
-                    :context-copyable-count="getTreeCopyableRecords(findFolderByKey(String(key))).length"
-                    :context-cuttable-count="getTreeCuttableRecords(findFolderByKey(String(key))).length"
-                    :context-deletable-count="getTreeDeletableRecords(findFolderByKey(String(key))).length"
-                    :context-downloadable-count="getTreeDownloadableRecords(findFolderByKey(String(key))).length"
-                    :record="findFolderByKey(String(key))"
-                    :scope="scope"
-                    @action="handleAction"
-                    @batch-action="handleTreeMenuBatchAction($event, findFolderByKey(String(key)))"
-                  />
-                </template>
-              </Dropdown>
-              <span
-                v-else
-                class="document-tree-node"
-                @dragover="handleTreeDragOver($event, String(key))"
-                @drop="handleDropToTree($event, String(key))"
-              >
-                <IconifyIcon
-                  :icon="getTreeNodeIcon(String(key))"
-                  class="document-tree-node__icon"
-                />
-                <Input
-                  v-if="isEditingTreeNode(String(key))"
-                  v-model:value="inlineFileName"
-                  class="document-tree-node__input"
-                  size="small"
-                  @blur="submitInlineName"
-                  @click.stop
-                  @keydown.esc.stop.prevent="cancelInlineEditor"
-                  @press-enter="submitInlineName"
-                />
-                <span v-else>{{ title }}</span>
-              </span>
-            </template>
-          </Tree>
-        </Spin>
       </Card>
 
       <Card
@@ -754,79 +694,6 @@ onBeforeUnmount(() => {
   overflow: hidden;
   min-height: 0;
   flex-direction: column;
-}
-
-.document-tree-search {
-  width: 100%;
-  margin-bottom: 12px;
-}
-
-.document-tree-card :deep(.ant-tree-treenode) {
-  align-items: center;
-  min-height: 28px;
-}
-
-.document-tree-card :deep(.ant-tree-switcher) {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 22px;
-  height: 28px;
-  line-height: 28px;
-}
-
-.document-tree-card :deep(.ant-tree-indent-unit) {
-  width: 22px;
-}
-
-.document-tree-card :deep(.ant-tree-node-content-wrapper) {
-  display: inline-flex;
-  align-items: center;
-  cursor: default;
-  min-height: 28px;
-  line-height: 28px;
-}
-
-.document-tree-card :deep(.ant-tree-title) {
-  display: inline-flex;
-  align-items: center;
-  min-width: 0;
-  width: 100%;
-}
-
-.document-tree-node {
-  display: inline-flex;
-  align-items: center;
-  cursor: default;
-  gap: 6px;
-  width: 100%;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.document-tree-node--draggable {
-  cursor: default;
-}
-
-.document-tree-node--draggable:active {
-  cursor: default;
-}
-
-.document-tree-node__icon {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 16px;
-  height: 16px;
-  flex: 0 0 auto;
-  color: hsl(var(--muted-foreground));
-  line-height: 1;
-}
-
-.document-tree-node__input {
-  width: 150px;
 }
 
 .document-content-card :deep(.ant-card-body) {
