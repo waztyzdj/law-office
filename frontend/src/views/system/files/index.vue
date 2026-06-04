@@ -3,24 +3,12 @@ import type {
   DocumentFileInfo,
   DocumentScope,
 } from '#/api/system/document';
-import type {
-  CurrentUserOrganization,
-  CurrentUserTenant,
-} from '#/api/system/user';
 
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 
 import {
   Card,
 } from 'ant-design-vue';
-
-import {
-  pageDocuments,
-} from '#/api/system/document';
-import {
-  getCurrentUserOrganization,
-  getCurrentUserTenantOptions,
-} from '#/api/system/user';
 
 import DocumentExplorer from './components/DocumentExplorer.vue';
 import DocumentHeaderToolbar from './components/DocumentHeaderToolbar.vue';
@@ -39,6 +27,7 @@ import {
 } from './tree';
 import { useDocumentNavigation } from './hooks/useDocumentNavigation';
 import { useDocumentActions } from './hooks/useDocumentActions';
+import { useDocumentDataLoader } from './hooks/useDocumentDataLoader';
 import { useDocumentSort } from './hooks/useDocumentSort';
 import { useDocumentTree } from './hooks/useDocumentTree';
 import { useDocumentTreeInteractions } from './hooks/useDocumentTreeInteractions';
@@ -47,11 +36,6 @@ import type {
   ScopeOption,
 } from './types';
 
-const PAGE_SIZE = 500;
-
-const loading = ref(false);
-const keyword = ref('');
-const dataSource = ref<DocumentFileInfo[]>([]);
 const {
   currentDocumentSortLabel,
   documentSortOptions,
@@ -62,12 +46,31 @@ const {
   handleChangeDocumentSortField,
   handleChangeDocumentSortOrder,
 } = useDocumentSort();
-const currentDeparts = ref<CurrentUserOrganization['departs']>([]);
-const currentTenant = ref<CurrentUserTenant>();
 const shareDrawerRef = ref<InstanceType<typeof DocumentShareDrawer>>();
 const historyModalRef = ref<InstanceType<typeof DocumentHistoryModal>>();
 const imagePreviewModalRef = ref<InstanceType<typeof DocumentImagePreviewModal>>();
 const previewModalRef = ref<InstanceType<typeof DocumentOnlyOfficePreviewModal>>();
+async function reloadCachedFolderTreesBridge() {
+  await reloadCachedFolderTrees();
+}
+const {
+  currentDeparts,
+  currentTenant,
+  dataSource,
+  fetchDocuments,
+  handleSearch,
+  keyword,
+  loadData,
+  loading,
+  loadShareRootContext,
+  reloadAll,
+  resetAndLoad,
+} = useDocumentDataLoader({
+  getActiveScopeOption: () => activeScopeOption.value,
+  getCurrentParentId: () => currentParentId.value,
+  getScope: () => scope.value,
+  reloadCachedFolderTrees: reloadCachedFolderTreesBridge,
+});
 const {
   activeRootKey,
   canGoBack,
@@ -464,73 +467,6 @@ function handleTreeShortcutKeydown(event: KeyboardEvent) {
 
 function isEditingTreeNode(key: string) {
   return documentTreeInteractions.isEditingTreeNode(key);
-}
-
-async function fetchDocuments(
-  parentId?: string,
-  searchKeyword?: string,
-  option: ScopeOption | undefined = activeScopeOption.value,
-) {
-  const records: DocumentFileInfo[] = [];
-  let pageNum = 1;
-  let total = 0;
-  const normalizedKeyword = searchKeyword?.trim();
-  const globalSearch = Boolean(normalizedKeyword);
-
-  do {
-    const result = await pageDocuments({
-      keyword: normalizedKeyword || undefined,
-      pageNum,
-      pageSize: PAGE_SIZE,
-      parentId: globalSearch ? undefined : parentId,
-      scope: globalSearch ? 'all' : option?.scope || scope.value,
-      shareTargetId: globalSearch ? undefined : option?.shareTargetId,
-      shareTargetType: globalSearch ? undefined : option?.shareTargetType,
-    });
-    const pageRecords = result.records || [];
-    records.push(...pageRecords);
-    total = result.total || records.length;
-    pageNum += 1;
-  } while (records.length < total && pageNum < 20);
-
-  return records;
-}
-
-async function loadData() {
-  loading.value = true;
-  try {
-    dataSource.value = await fetchDocuments(currentParentId.value, keyword.value);
-  } finally {
-    loading.value = false;
-  }
-}
-
-async function reloadAll() {
-  await Promise.all([loadData(), reloadCachedFolderTrees()]);
-}
-
-function resetAndLoad() {
-  void loadData();
-}
-
-function handleSearch(value: string) {
-  keyword.value = value;
-  resetAndLoad();
-}
-
-async function loadShareRootContext() {
-  const [organization, tenants] = await Promise.all([
-    getCurrentUserOrganization(),
-    getCurrentUserTenantOptions(),
-  ]);
-  const departMap = new Map<string, CurrentUserOrganization['departs'][number]>();
-  for (const depart of organization.departs || []) {
-    if (depart.id) {
-      departMap.set(depart.id, depart);
-    }
-  }
-  currentDeparts.value = [...departMap.values()];
-  currentTenant.value = tenants.find((item) => item.current) || tenants[0];
 }
 
 onMounted(async () => {
