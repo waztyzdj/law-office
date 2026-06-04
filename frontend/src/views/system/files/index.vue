@@ -13,17 +13,11 @@ import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 import { IconifyIcon } from '@vben/icons';
 
 import {
-  Breadcrumb,
-  BreadcrumbItem,
-  Button,
   Card,
   Dropdown,
   Input,
   InputSearch,
-  Menu,
-  Radio,
   Spin,
-  Tag,
   Tree,
 } from 'ant-design-vue';
 
@@ -36,6 +30,7 @@ import {
 } from '#/api/system/user';
 
 import DocumentExplorer from './components/DocumentExplorer.vue';
+import DocumentHeaderToolbar from './components/DocumentHeaderToolbar.vue';
 import DocumentHistoryModal from './components/DocumentHistoryModal.vue';
 import DocumentImagePreviewModal from './components/DocumentImagePreviewModal.vue';
 import DocumentItemActionMenu from './components/DocumentItemActionMenu.vue';
@@ -69,11 +64,10 @@ const {
   documentSortOptions,
   documentSortState,
   documentViewMode,
-  documentViewModeModel,
+  handleChangeDocumentViewMode,
   handleChangeDocumentSort,
   handleChangeDocumentSortField,
   handleChangeDocumentSortOrder,
-  isActiveDocumentSort,
 } = useDocumentSort();
 const currentDeparts = ref<CurrentUserOrganization['departs']>([]);
 const currentTenant = ref<CurrentUserTenant>();
@@ -657,141 +651,35 @@ onBeforeUnmount(() => {
         :body-style="{ padding: '16px' }"
         @mousedown.capture="deactivateTreeShortcut"
       >
-        <div class="document-header">
-          <div class="document-header__main">
-            <div class="document-header__nav">
-              <Button :disabled="!canGoBack" size="small" type="text" @click="handleGoBack">
-                <template #icon>
-                  <IconifyIcon icon="lucide:arrow-left" />
-                </template>
-                后退
-              </Button>
-              <Button :disabled="!canGoParent" size="small" type="text" @click="handleGoParent">
-                <template #icon>
-                  <IconifyIcon icon="lucide:arrow-up" />
-                </template>
-                返回上一级
-              </Button>
-            </div>
-            <div class="document-path-title">{{ currentFolderTitle }}</div>
-            <Breadcrumb class="document-path-breadcrumb">
-              <BreadcrumbItem v-if="isGlobalSearch">
-                全局搜索：{{ keyword.trim() }}
-              </BreadcrumbItem>
-              <BreadcrumbItem v-else>
-                <a @click="handleGoRoot">{{ currentScopeTitle }}</a>
-              </BreadcrumbItem>
-              <template v-if="!isGlobalSearch">
-                <BreadcrumbItem
-                  v-for="(item, index) in parentStack"
-                  :key="item.id"
-                >
-                  <a @click="handleGoBreadcrumb(index)">{{ item.fileName }}</a>
-                </BreadcrumbItem>
-              </template>
-            </Breadcrumb>
-            <span class="document-header__count">{{ dataSource.length }} 项</span>
-            <Tag v-if="scope === 'trash'" color="red">回收站</Tag>
-          </div>
-          <div class="document-header__actions">
-            <Dropdown trigger="click">
-              <Button class="document-sort-button" size="small" type="text">
-                <template #icon>
-                  <IconifyIcon icon="lucide:arrow-up-down" />
-                </template>
-                {{ currentDocumentSortLabel }}{{ documentSortState.order === 'asc' ? '升序' : '降序' }}
-              </Button>
-              <template #overlay>
-                <Menu>
-                  <Menu.Item
-                    v-for="option in documentSortOptions"
-                    :key="`toolbar-${option.field}`"
-                    @click="handleChangeDocumentSortField(option.field)"
-                  >
-                    <IconifyIcon
-                      v-if="isActiveDocumentSort(option.field)"
-                      class="document-menu-icon"
-                      icon="lucide:check"
-                    />
-                    <span v-else class="document-menu-icon document-menu-icon--placeholder" />
-                    {{ option.label }}
-                  </Menu.Item>
-                  <Menu.Divider />
-                  <Menu.Item key="toolbar-sort-asc" @click="handleChangeDocumentSortOrder('asc')">
-                    <IconifyIcon
-                      v-if="documentSortState.order === 'asc'"
-                      class="document-menu-icon"
-                      icon="lucide:check"
-                    />
-                    <span v-else class="document-menu-icon document-menu-icon--placeholder" />
-                    升序
-                  </Menu.Item>
-                  <Menu.Item key="toolbar-sort-desc" @click="handleChangeDocumentSortOrder('desc')">
-                    <IconifyIcon
-                      v-if="documentSortState.order === 'desc'"
-                      class="document-menu-icon"
-                      icon="lucide:check"
-                    />
-                    <span v-else class="document-menu-icon document-menu-icon--placeholder" />
-                    降序
-                  </Menu.Item>
-                </Menu>
-              </template>
-            </Dropdown>
-            <div class="document-view-switch">
-              <Radio.Group
-                v-model:value="documentViewModeModel"
-                class="document-view-radio"
-              >
-                <Radio.Button value="list">
-                  <span class="document-view-radio__item">
-                    <IconifyIcon icon="lucide:list" />
-                    列表
-                  </span>
-                </Radio.Button>
-                <Radio.Button value="grid">
-                  <span class="document-view-radio__item">
-                    <IconifyIcon icon="lucide:grid-2x2" />
-                    图标
-                  </span>
-                </Radio.Button>
-              </Radio.Group>
-            </div>
-            <Button
-              v-if="scope === 'trash'"
-              :disabled="dataSource.length === 0"
-              type="primary"
-              @click="handleClearTrash"
-            >
-              <template #icon>
-                <IconifyIcon icon="lucide:trash-2" />
-              </template>
-              清空回收站
-            </Button>
-            <Button
-              v-if="canCreateCurrentScope"
-              :loading="moving"
-              type="primary"
-              @click="handleCreateFolder()"
-            >
-              <template #icon>
-                <IconifyIcon icon="lucide:folder-plus" />
-              </template>
-              新建文件夹
-            </Button>
-            <Button
-              v-if="canUploadCurrentScope"
-              :loading="uploading"
-              type="primary"
-              @click="handleUploadClick"
-            >
-              <template #icon>
-                <IconifyIcon icon="lucide:upload" />
-              </template>
-              上传文件
-            </Button>
-          </div>
-        </div>
+        <DocumentHeaderToolbar
+          :can-create="canCreateCurrentScope"
+          :can-go-back="canGoBack"
+          :can-go-parent="canGoParent"
+          :can-upload="canUploadCurrentScope"
+          :current-folder-title="currentFolderTitle"
+          :current-scope-title="currentScopeTitle"
+          :data-count="dataSource.length"
+          :is-global-search="isGlobalSearch"
+          :keyword="keyword"
+          :moving="moving"
+          :parent-stack="parentStack"
+          :scope="scope"
+          :sort-label="currentDocumentSortLabel"
+          :sort-options="documentSortOptions"
+          :sort-state="documentSortState"
+          :uploading="uploading"
+          :view-mode="documentViewMode"
+          @change-sort-field="handleChangeDocumentSortField"
+          @change-sort-order="handleChangeDocumentSortOrder"
+          @clear-trash="handleClearTrash"
+          @create-folder="handleCreateFolder()"
+          @go-back="handleGoBack"
+          @go-breadcrumb="handleGoBreadcrumb"
+          @go-parent="handleGoParent"
+          @go-root="handleGoRoot"
+          @upload="handleUploadClick"
+          @view-mode-change="handleChangeDocumentViewMode"
+        />
 
         <DocumentExplorer
           :current-folder="currentFolder"
@@ -844,21 +732,6 @@ onBeforeUnmount(() => {
 </template>
 
 <style scoped>
-.document-menu-icon {
-  display: inline-flex;
-  width: 16px;
-  margin-right: 8px;
-  vertical-align: -2px;
-}
-
-.document-menu-icon--active {
-  color: hsl(var(--primary));
-}
-
-.document-menu-icon--placeholder {
-  flex: 0 0 auto;
-}
-
 .document-center {
   box-sizing: border-box;
   display: flex;
@@ -964,72 +837,6 @@ onBeforeUnmount(() => {
   flex-direction: column;
 }
 
-.document-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  margin-bottom: 12px;
-}
-
-.document-header__main {
-  display: flex;
-  min-width: 0;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 10px;
-}
-
-.document-header__nav {
-  display: flex;
-  flex: 0 0 auto;
-  gap: 4px;
-}
-
-.document-path-title {
-  flex: 0 0 auto;
-  font-weight: 600;
-  font-size: 16px;
-}
-
-.document-path-breadcrumb,
-.document-header__count {
-  flex: 0 1 auto;
-  min-width: 0;
-  color: hsl(var(--muted-foreground));
-}
-
-.document-header__actions {
-  display: flex;
-  flex: 0 0 auto;
-  align-items: center;
-  gap: 8px;
-}
-
-.document-sort-button {
-  color: hsl(var(--muted-foreground));
-}
-
-.document-view-switch {
-  display: flex;
-  flex: 0 0 auto;
-  align-items: center;
-  gap: 6px;
-  margin-right: 4px;
-}
-
-.document-view-radio {
-  display: inline-flex;
-  align-items: center;
-}
-
-.document-view-radio__item {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  white-space: nowrap;
-}
-
 .hidden-file-input {
   display: none;
 }
@@ -1055,15 +862,6 @@ onBeforeUnmount(() => {
 @media (max-width: 900px) {
   .document-shell {
     grid-template-columns: 1fr;
-  }
-
-  .document-header {
-    align-items: stretch;
-    flex-direction: column;
-  }
-
-  .document-header__actions {
-    justify-content: flex-start;
   }
 
   .document-tree-card {

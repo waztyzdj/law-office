@@ -124,6 +124,7 @@ export function useDocumentSort() {
     documentSortState,
     documentViewMode,
     documentViewModeModel,
+    handleChangeDocumentViewMode,
     handleChangeDocumentSort,
     handleChangeDocumentSortField,
     handleChangeDocumentSortOrder,
