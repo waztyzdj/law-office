@@ -54,8 +54,13 @@ import {
 import DocumentExplorer from './components/DocumentExplorer.vue';
 import DocumentHistoryModal from './components/DocumentHistoryModal.vue';
 import DocumentImagePreviewModal from './components/DocumentImagePreviewModal.vue';
+import DocumentItemActionMenu from './components/DocumentItemActionMenu.vue';
 import DocumentOnlyOfficePreviewModal from './components/DocumentOnlyOfficePreviewModal.vue';
 import DocumentShareDrawer from './components/DocumentShareDrawer.vue';
+import {
+  canMove as canMoveDocument,
+  isVirtualBusinessItem,
+} from './components/documentExplorerUtils';
 import {
   BUSINESS_RECORD_VIEW_STORE_TYPE,
   BUSINESS_VIEW_STORE_TYPE,
@@ -202,6 +207,10 @@ const isSharedInboxScope = computed(
   () => scope.value === 'shared' && !activeScopeOption.value?.shareTargetType,
 );
 const isBusinessScope = computed(() => scope.value === 'business');
+const documentActionContext = computed(() => ({
+  personalizeShared: isSharedInboxScope.value,
+  scope: scope.value,
+}));
 const activeSharedTarget = computed(() => {
   const option = activeScopeOption.value;
   if (
@@ -399,6 +408,32 @@ function canCreateInTreeFolder(key: string) {
 
 function canShowTreeContextMenu(key: string) {
   return canManageTreeFolder(key) || canCreateInTreeFolder(key);
+}
+
+function getTreeContextRecords(record?: DocumentFileInfo) {
+  return record?.id ? [record] : [];
+}
+
+function getTreeCopyableRecords(record?: DocumentFileInfo) {
+  return getTreeContextRecords(record).filter(
+    (item) => item.id && scope.value !== 'trash' && !isVirtualBusinessItem(item),
+  );
+}
+
+function getTreeCuttableRecords(record?: DocumentFileInfo) {
+  return getTreeContextRecords(record).filter((item) =>
+    canMoveDocument(item, documentActionContext.value),
+  );
+}
+
+function getTreeDownloadableRecords(record?: DocumentFileInfo) {
+  return getTreeContextRecords(record).filter((item) => item.canDownload && item.izFolder !== '1');
+}
+
+function getTreeDeletableRecords(record?: DocumentFileInfo) {
+  return getTreeContextRecords(record).filter(
+    (item) => canManageFolder(item) && scope.value !== 'trash' && scope.value !== 'business',
+  );
 }
 
 function canDropToTreeTarget(key: string) {
@@ -743,27 +778,6 @@ function handleRenameFolder(record?: DocumentFileInfo) {
   handleRename(record);
 }
 
-function handleShareTreeFolder(record?: DocumentFileInfo) {
-  if (!record?.id || !canManageFolder(record) || scope.value === 'trash') {
-    return;
-  }
-  handleShare(record);
-}
-
-function handleCancelShareTreeFolder(record?: DocumentFileInfo) {
-  if (!record?.id || !canManageFolder(record) || !record.sharedFlag) {
-    return;
-  }
-  handleCancelShare(record);
-}
-
-function handleStarTreeFolder(record?: DocumentFileInfo) {
-  if (!record?.id || !canManageFolder(record) || scope.value === 'trash') {
-    return;
-  }
-  void handleStar(record);
-}
-
 function handleInlineNameChange(value: string) {
   if (inlineEditor.value) {
     inlineEditor.value.fileName = value;
@@ -974,6 +988,18 @@ function handleBatchAction(event: DocumentBatchAction, records: DocumentFileInfo
   if (event === 'copy' || event === 'cut') {
     rememberDocumentClipboard(event, records);
   }
+}
+
+function handleTreeMenuBatchAction(event: DocumentBatchAction, record?: DocumentFileInfo) {
+  const records =
+    event === 'download'
+      ? getTreeDownloadableRecords(record)
+      : event === 'delete'
+        ? getTreeDeletableRecords(record)
+        : event === 'cut'
+          ? getTreeCuttableRecords(record)
+          : getTreeCopyableRecords(record);
+  handleBatchAction(event, records);
 }
 
 async function handleRestore(record: DocumentFileInfo) {
@@ -1439,56 +1465,17 @@ onBeforeUnmount(() => {
                   <span v-else>{{ title }}</span>
                 </span>
                 <template #overlay>
-                  <Menu>
-                    <Menu.Item
-                      v-if="canCreateInTreeFolder(String(key))"
-                      @click="handleCreateFolderIn(findFolderByKey(String(key)))"
-                    >
-                      <IconifyIcon class="document-menu-icon" icon="lucide:folder-plus" />
-                      新建文件夹
-                    </Menu.Item>
-                    <Menu.Item
-                      v-if="canManageTreeFolder(String(key))"
-                      @click="handleShareTreeFolder(findFolderByKey(String(key)))"
-                    >
-                      <IconifyIcon
-                        class="document-menu-icon"
-                        :class="{ 'document-menu-icon--active': findFolderByKey(String(key))?.sharedFlag }"
-                        icon="lucide:share-2"
-                      />
-                      {{ findFolderByKey(String(key))?.sharedFlag ? '查看共享' : '共享' }}
-                    </Menu.Item>
-                    <Menu.Item
-                      v-if="canManageTreeFolder(String(key)) && findFolderByKey(String(key))?.sharedFlag"
-                      danger
-                      @click="handleCancelShareTreeFolder(findFolderByKey(String(key)))"
-                    >
-                      <IconifyIcon class="document-menu-icon" icon="lucide:share-x" />
-                      取消共享
-                    </Menu.Item>
-                    <Menu.Item
-                      v-if="canManageTreeFolder(String(key))"
-                      @click="handleStarTreeFolder(findFolderByKey(String(key)))"
-                    >
-                      <IconifyIcon class="document-menu-icon" icon="lucide:star" />
-                      {{ findFolderByKey(String(key))?.izStar === '1' ? '取消收藏' : '收藏' }}
-                    </Menu.Item>
-                    <Menu.Item
-                      v-if="canManageTreeFolder(String(key))"
-                      @click="handleRenameFolder(findFolderByKey(String(key)))"
-                    >
-                      <IconifyIcon class="document-menu-icon" icon="lucide:pencil" />
-                      修改名称
-                    </Menu.Item>
-                    <Menu.Item
-                      v-if="canManageTreeFolder(String(key)) && !isBusinessScope"
-                      danger
-                      @click="handleDeleteFolder(findFolderByKey(String(key)))"
-                    >
-                      <IconifyIcon class="document-menu-icon" icon="lucide:trash-2" />
-                      删除文件夹
-                    </Menu.Item>
-                  </Menu>
+                  <DocumentItemActionMenu
+                    :can-edit="canManageTreeFolder(String(key))"
+                    :context-copyable-count="getTreeCopyableRecords(findFolderByKey(String(key))).length"
+                    :context-cuttable-count="getTreeCuttableRecords(findFolderByKey(String(key))).length"
+                    :context-deletable-count="getTreeDeletableRecords(findFolderByKey(String(key))).length"
+                    :context-downloadable-count="getTreeDownloadableRecords(findFolderByKey(String(key))).length"
+                    :record="findFolderByKey(String(key))"
+                    :scope="scope"
+                    @action="handleAction"
+                    @batch-action="handleTreeMenuBatchAction($event, findFolderByKey(String(key)))"
+                  />
                 </template>
               </Dropdown>
               <span

@@ -9,6 +9,7 @@ import { IconifyIcon } from '@vben/icons';
 
 import { Button, Dropdown, Empty, Input, Menu, Spin, Tooltip } from 'ant-design-vue';
 
+import DocumentItemActionMenu from './DocumentItemActionMenu.vue';
 import {
   DOCUMENT_SORT_OPTIONS as sortOptions,
   type DocumentSortField,
@@ -21,7 +22,6 @@ import type {
   InlineEditorState,
 } from '../types';
 import {
-  canCreateFolderInItem as canCreateFolderInDocument,
   canDropOnFolder as canDropOnDocumentFolder,
   canEditContentItem as canEditDocumentContent,
   canEditItem as canEditDocumentItem,
@@ -102,9 +102,6 @@ const actionContext = computed(() => ({
 
 const canCreateInScope = computed(() => props.canCreate);
 const canUploadInScope = computed(() => props.canUpload);
-const canRenameCurrentFolder = computed(
-  () => props.scope !== 'trash' && Boolean(props.currentFolder?.ownerFlag),
-);
 const currentFolderId = computed(() => props.currentFolder?.id || '');
 const creatingHere = computed(
   () =>
@@ -272,10 +269,6 @@ function canMove(record: DocumentFileInfo) {
 
 function canEditItem(record: DocumentFileInfo) {
   return canEditDocumentItem(record, actionContext.value);
-}
-
-function canCreateFolderInItem(record: DocumentFileInfo) {
-  return canCreateFolderInDocument(record, actionContext.value);
 }
 
 function canPreviewItem(record: DocumentFileInfo) {
@@ -875,177 +868,40 @@ onBeforeUnmount(() => {
                     <IconifyIcon icon="lucide:more-vertical" />
                   </Button>
                   <template #overlay>
-                    <Menu>
-                      <Menu.Item v-if="item.izFolder === '1'" @click="emitAction('open', item)">
-                        <IconifyIcon class="document-menu-icon" icon="lucide:folder-open" />
-                        打开
-                      </Menu.Item>
-                      <Menu.Item
-                        v-if="canPreviewItem(item)"
-                        @click="emitAction('preview', item)"
-                      >
-                        <IconifyIcon class="document-menu-icon" icon="lucide:eye" />
-                        预览
-                      </Menu.Item>
-                      <Menu.Item
-                        v-if="canEditContentItem(item)"
-                        @click="emitAction('edit', item)"
-                      >
-                        <IconifyIcon class="document-menu-icon" icon="lucide:file-pen-line" />
-                        在线编辑
-                      </Menu.Item>
-                      <Menu.Item
-                        v-if="canViewHistoryItem(item)"
-                        @click="emitAction('history', item)"
-                      >
-                        <IconifyIcon class="document-menu-icon" icon="lucide:history" />
-                        历史版本
-                      </Menu.Item>
-                      <Menu.Item
-                        v-if="canCreateFolderInItem(item)"
-                        @click="$emit('createFolderIn', item)"
-                      >
-                        <IconifyIcon class="document-menu-icon" icon="lucide:folder-plus" />
-                        新建文件夹
-                      </Menu.Item>
-                      <Menu.Item
-                        v-if="item.canDownload && item.izFolder !== '1'"
-                        @click="emitAction('download', item)"
-                      >
-                        <IconifyIcon class="document-menu-icon" icon="lucide:download" />
-                        下载
-                      </Menu.Item>
-                      <Menu.Item v-if="canEditItem(item)" @click="emitAction('star', item)">
-                        <IconifyIcon
-                          class="document-menu-icon"
-                          :class="{ 'document-menu-icon--starred': item.izStar === '1' }"
-                          icon="lucide:star"
-                        />
-                        {{ item.izStar === '1' ? '取消收藏' : '收藏' }}
-                      </Menu.Item>
-                      <Menu.Item
-                        v-if="canEditItem(item)"
-                        @click="emitAction('share', item)"
-                      >
-                        <IconifyIcon
-                          class="document-menu-icon"
-                          :class="{ 'document-menu-icon--active': item.sharedFlag }"
-                          icon="lucide:share-2"
-                        />
-                        {{ item.sharedFlag ? '查看共享' : '共享' }}
-                      </Menu.Item>
-                      <Menu.Item
-                        v-if="canEditItem(item) && item.sharedFlag"
-                        danger
-                        @click="emitAction('cancelShare', item)"
-                      >
-                        <IconifyIcon class="document-menu-icon" icon="lucide:share-x" />
-                        取消共享
-                      </Menu.Item>
-                      <Menu.Item v-if="canEditItem(item)" @click="emitAction('rename', item)">
-                        <IconifyIcon class="document-menu-icon" icon="lucide:pencil" />
-                        重命名
-                      </Menu.Item>
-                      <Menu.Item v-if="scope === 'trash'" @click="emitAction('restore', item)">
-                        <IconifyIcon class="document-menu-icon" icon="lucide:rotate-ccw" />
-                        恢复
-                      </Menu.Item>
-                      <Menu.Item v-if="scope === 'trash' && item.ownerFlag" danger @click="emitAction('purge', item)">
-                        <IconifyIcon class="document-menu-icon" icon="lucide:trash" />
-                        彻底删除
-                      </Menu.Item>
-                      <Menu.Item
-                        v-if="canEditItem(item) && scope !== 'trash' && scope !== 'business'"
-                        danger
-                        @click="emitAction('delete', item)"
-                      >
-                        <IconifyIcon class="document-menu-icon" icon="lucide:trash-2" />
-                        删除
-                      </Menu.Item>
-                    </Menu>
+                    <DocumentItemActionMenu
+                      :can-edit="canEditItem(item)"
+                      :can-edit-content="canEditContentItem(item)"
+                      :can-preview="canPreviewItem(item)"
+                      :can-view-history="canViewHistoryItem(item)"
+                      :context-copyable-count="getContextCopyableRecords(item).length"
+                      :context-cuttable-count="getContextCuttableRecords(item).length"
+                      :context-deletable-count="getContextDeletableRecords(item).length"
+                      :context-downloadable-count="getContextDownloadRecords(item).length"
+                      :record="item"
+                      :scope="scope"
+                      @action="emitAction"
+                      @batch-action="emitContextBatchAction($event, item)"
+                    />
                   </template>
                 </Dropdown>
               </div>
 
               <template #overlay>
-                <Menu>
-                  <Menu.Item
-                    :disabled="getContextCopyableRecords(item).length === 0"
-                    @click="emitContextBatchAction('copy', item)"
-                  >
-                    <IconifyIcon class="document-menu-icon" icon="lucide:copy" />
-                    复制
-                  </Menu.Item>
-                  <Menu.Item
-                    :disabled="getContextCuttableRecords(item).length === 0"
-                    @click="emitContextBatchAction('cut', item)"
-                  >
-                    <IconifyIcon class="document-menu-icon" icon="lucide:scissors" />
-                    剪切
-                  </Menu.Item>
-                  <Menu.Item
-                    :disabled="getContextDownloadRecords(item).length === 0"
-                    @click="emitContextBatchAction('download', item)"
-                  >
-                    <IconifyIcon class="document-menu-icon" icon="lucide:download" />
-                    下载
-                  </Menu.Item>
-                  <Menu.Item
-                    v-if="isSingleContext(item) && canPreviewItem(item)"
-                    @click="emitAction('preview', item)"
-                  >
-                    <IconifyIcon class="document-menu-icon" icon="lucide:eye" />
-                    预览
-                  </Menu.Item>
-                  <Menu.Item
-                    v-if="isSingleContext(item) && canEditContentItem(item)"
-                    @click="emitAction('edit', item)"
-                  >
-                    <IconifyIcon class="document-menu-icon" icon="lucide:file-pen-line" />
-                    在线编辑
-                  </Menu.Item>
-                  <Menu.Item
-                    v-if="isSingleContext(item) && canViewHistoryItem(item)"
-                    @click="emitAction('history', item)"
-                  >
-                    <IconifyIcon class="document-menu-icon" icon="lucide:history" />
-                    历史版本
-                  </Menu.Item>
-                  <Menu.Item
-                    v-if="isSingleContext(item) && canEditItem(item)"
-                    @click="emitAction('share', item)"
-                  >
-                    <IconifyIcon
-                      class="document-menu-icon"
-                      :class="{ 'document-menu-icon--active': item.sharedFlag }"
-                      icon="lucide:share-2"
-                    />
-                    {{ item.sharedFlag ? '查看共享' : '共享' }}
-                  </Menu.Item>
-                  <Menu.Item
-                    v-if="isSingleContext(item) && canEditItem(item) && item.sharedFlag"
-                    danger
-                    @click="emitAction('cancelShare', item)"
-                  >
-                    <IconifyIcon class="document-menu-icon" icon="lucide:share-x" />
-                    取消共享
-                  </Menu.Item>
-                  <Menu.Item
-                    v-if="isSingleContext(item) && canEditItem(item)"
-                    @click="emitAction('rename', item)"
-                  >
-                    <IconifyIcon class="document-menu-icon" icon="lucide:pencil" />
-                    重命名
-                  </Menu.Item>
-                  <Menu.Item
-                    :disabled="getContextDeletableRecords(item).length === 0"
-                    danger
-                    @click="emitContextBatchAction('delete', item)"
-                  >
-                    <IconifyIcon class="document-menu-icon" icon="lucide:trash-2" />
-                    删除
-                  </Menu.Item>
-                </Menu>
+                <DocumentItemActionMenu
+                  :can-edit="isSingleContext(item) && canEditItem(item)"
+                  :can-edit-content="isSingleContext(item) && canEditContentItem(item)"
+                  :can-preview="isSingleContext(item) && canPreviewItem(item)"
+                  :can-view-history="isSingleContext(item) && canViewHistoryItem(item)"
+                  :context-copyable-count="getContextCopyableRecords(item).length"
+                  :context-cuttable-count="getContextCuttableRecords(item).length"
+                  :context-deletable-count="getContextDeletableRecords(item).length"
+                  :context-downloadable-count="getContextDownloadRecords(item).length"
+                  :record="item"
+                  :scope="scope"
+                  :single-context="isSingleContext(item)"
+                  @action="emitAction"
+                  @batch-action="emitContextBatchAction($event, item)"
+                />
               </template>
             </Dropdown>
           </div>
@@ -1177,178 +1033,41 @@ onBeforeUnmount(() => {
                       <IconifyIcon icon="lucide:more-vertical" />
                     </Button>
                     <template #overlay>
-                      <Menu>
-                        <Menu.Item v-if="item.izFolder === '1'" @click="emitAction('open', item)">
-                          <IconifyIcon class="document-menu-icon" icon="lucide:folder-open" />
-                          打开
-                        </Menu.Item>
-                        <Menu.Item
-                          v-if="canPreviewItem(item)"
-                          @click="emitAction('preview', item)"
-                        >
-                          <IconifyIcon class="document-menu-icon" icon="lucide:eye" />
-                          预览
-                        </Menu.Item>
-                        <Menu.Item
-                          v-if="canEditContentItem(item)"
-                          @click="emitAction('edit', item)"
-                        >
-                          <IconifyIcon class="document-menu-icon" icon="lucide:file-pen-line" />
-                          在线编辑
-                        </Menu.Item>
-                        <Menu.Item
-                          v-if="canViewHistoryItem(item)"
-                          @click="emitAction('history', item)"
-                        >
-                          <IconifyIcon class="document-menu-icon" icon="lucide:history" />
-                          历史版本
-                        </Menu.Item>
-                        <Menu.Item
-                          v-if="canCreateFolderInItem(item)"
-                          @click="$emit('createFolderIn', item)"
-                        >
-                          <IconifyIcon class="document-menu-icon" icon="lucide:folder-plus" />
-                          新建文件夹
-                        </Menu.Item>
-                        <Menu.Item
-                          v-if="item.canDownload && item.izFolder !== '1'"
-                          @click="emitAction('download', item)"
-                        >
-                          <IconifyIcon class="document-menu-icon" icon="lucide:download" />
-                          下载
-                        </Menu.Item>
-                        <Menu.Item v-if="canEditItem(item)" @click="emitAction('star', item)">
-                          <IconifyIcon
-                            class="document-menu-icon"
-                            :class="{ 'document-menu-icon--starred': item.izStar === '1' }"
-                            icon="lucide:star"
-                          />
-                          {{ item.izStar === '1' ? '取消收藏' : '收藏' }}
-                        </Menu.Item>
-                        <Menu.Item
-                          v-if="canEditItem(item)"
-                          @click="emitAction('share', item)"
-                        >
-                          <IconifyIcon
-                            class="document-menu-icon"
-                            :class="{ 'document-menu-icon--active': item.sharedFlag }"
-                            icon="lucide:share-2"
-                          />
-                          {{ item.sharedFlag ? '查看共享' : '共享' }}
-                        </Menu.Item>
-                        <Menu.Item
-                          v-if="canEditItem(item) && item.sharedFlag"
-                          danger
-                          @click="emitAction('cancelShare', item)"
-                        >
-                          <IconifyIcon class="document-menu-icon" icon="lucide:share-x" />
-                          取消共享
-                        </Menu.Item>
-                        <Menu.Item v-if="canEditItem(item)" @click="emitAction('rename', item)">
-                          <IconifyIcon class="document-menu-icon" icon="lucide:pencil" />
-                          重命名
-                        </Menu.Item>
-                        <Menu.Item v-if="scope === 'trash'" @click="emitAction('restore', item)">
-                          <IconifyIcon class="document-menu-icon" icon="lucide:rotate-ccw" />
-                          恢复
-                        </Menu.Item>
-                        <Menu.Item v-if="scope === 'trash' && item.ownerFlag" danger @click="emitAction('purge', item)">
-                          <IconifyIcon class="document-menu-icon" icon="lucide:trash" />
-                          彻底删除
-                        </Menu.Item>
-                        <Menu.Item
-                          v-if="canEditItem(item) && scope !== 'trash' && scope !== 'business'"
-                          danger
-                          @click="emitAction('delete', item)"
-                        >
-                          <IconifyIcon class="document-menu-icon" icon="lucide:trash-2" />
-                          删除
-                        </Menu.Item>
-                      </Menu>
+                      <DocumentItemActionMenu
+                        :can-edit="canEditItem(item)"
+                        :can-edit-content="canEditContentItem(item)"
+                        :can-preview="canPreviewItem(item)"
+                        :can-view-history="canViewHistoryItem(item)"
+                        :context-copyable-count="getContextCopyableRecords(item).length"
+                        :context-cuttable-count="getContextCuttableRecords(item).length"
+                        :context-deletable-count="getContextDeletableRecords(item).length"
+                        :context-downloadable-count="getContextDownloadRecords(item).length"
+                        :record="item"
+                        :scope="scope"
+                        @action="emitAction"
+                        @batch-action="emitContextBatchAction($event, item)"
+                      />
                     </template>
                   </Dropdown>
                 </div>
               </div>
 
               <template #overlay>
-                <Menu>
-                  <Menu.Item
-                    :disabled="getContextCopyableRecords(item).length === 0"
-                    @click="emitContextBatchAction('copy', item)"
-                  >
-                    <IconifyIcon class="document-menu-icon" icon="lucide:copy" />
-                    复制
-                  </Menu.Item>
-                  <Menu.Item
-                    :disabled="getContextCuttableRecords(item).length === 0"
-                    @click="emitContextBatchAction('cut', item)"
-                  >
-                    <IconifyIcon class="document-menu-icon" icon="lucide:scissors" />
-                    剪切
-                  </Menu.Item>
-                  <Menu.Item
-                    :disabled="getContextDownloadRecords(item).length === 0"
-                    @click="emitContextBatchAction('download', item)"
-                  >
-                    <IconifyIcon class="document-menu-icon" icon="lucide:download" />
-                    下载
-                  </Menu.Item>
-                  <Menu.Item
-                    v-if="isSingleContext(item) && canPreviewItem(item)"
-                    @click="emitAction('preview', item)"
-                  >
-                    <IconifyIcon class="document-menu-icon" icon="lucide:eye" />
-                    预览
-                  </Menu.Item>
-                  <Menu.Item
-                    v-if="isSingleContext(item) && canEditContentItem(item)"
-                    @click="emitAction('edit', item)"
-                  >
-                    <IconifyIcon class="document-menu-icon" icon="lucide:file-pen-line" />
-                    在线编辑
-                  </Menu.Item>
-                  <Menu.Item
-                    v-if="isSingleContext(item) && canViewHistoryItem(item)"
-                    @click="emitAction('history', item)"
-                  >
-                    <IconifyIcon class="document-menu-icon" icon="lucide:history" />
-                    历史版本
-                  </Menu.Item>
-                  <Menu.Item
-                    v-if="isSingleContext(item) && canEditItem(item)"
-                    @click="emitAction('share', item)"
-                  >
-                    <IconifyIcon
-                      class="document-menu-icon"
-                      :class="{ 'document-menu-icon--active': item.sharedFlag }"
-                      icon="lucide:share-2"
-                    />
-                    {{ item.sharedFlag ? '查看共享' : '共享' }}
-                  </Menu.Item>
-                  <Menu.Item
-                    v-if="isSingleContext(item) && canEditItem(item) && item.sharedFlag"
-                    danger
-                    @click="emitAction('cancelShare', item)"
-                  >
-                    <IconifyIcon class="document-menu-icon" icon="lucide:share-x" />
-                    取消共享
-                  </Menu.Item>
-                  <Menu.Item
-                    v-if="isSingleContext(item) && canEditItem(item)"
-                    @click="emitAction('rename', item)"
-                  >
-                    <IconifyIcon class="document-menu-icon" icon="lucide:pencil" />
-                    重命名
-                  </Menu.Item>
-                  <Menu.Item
-                    :disabled="getContextDeletableRecords(item).length === 0"
-                    danger
-                    @click="emitContextBatchAction('delete', item)"
-                  >
-                    <IconifyIcon class="document-menu-icon" icon="lucide:trash-2" />
-                    删除
-                  </Menu.Item>
-                </Menu>
+                <DocumentItemActionMenu
+                  :can-edit="isSingleContext(item) && canEditItem(item)"
+                  :can-edit-content="isSingleContext(item) && canEditContentItem(item)"
+                  :can-preview="isSingleContext(item) && canPreviewItem(item)"
+                  :can-view-history="isSingleContext(item) && canViewHistoryItem(item)"
+                  :context-copyable-count="getContextCopyableRecords(item).length"
+                  :context-cuttable-count="getContextCuttableRecords(item).length"
+                  :context-deletable-count="getContextDeletableRecords(item).length"
+                  :context-downloadable-count="getContextDownloadRecords(item).length"
+                  :record="item"
+                  :scope="scope"
+                  :single-context="isSingleContext(item)"
+                  @action="emitAction"
+                  @batch-action="emitContextBatchAction($event, item)"
+                />
               </template>
             </Dropdown>
           </div>
@@ -1412,13 +1131,6 @@ onBeforeUnmount(() => {
           <Menu.Item v-if="canCreateInScope" @click="$emit('createFolder')">
             <IconifyIcon class="document-menu-icon" icon="lucide:folder-plus" />
             新建文件夹
-          </Menu.Item>
-          <Menu.Item
-            v-if="canRenameCurrentFolder && currentFolder"
-            @click="emitAction('rename', currentFolder)"
-          >
-            <IconifyIcon class="document-menu-icon" icon="lucide:pencil" />
-            修改文件夹名称
           </Menu.Item>
         </Menu>
       </template>
