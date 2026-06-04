@@ -354,6 +354,10 @@ public class SysFilesServiceImpl extends BaseServiceImpl<SysFilesMapper, SysFile
             return pageTrashDocuments(context, pageReq);
         }
 
+        if (SCOPE_SHARED_BY_ME.equals(scope) && !StringUtils.hasText(pageReq.getParentId())) {
+            return pageSharedByMeDocuments(context, pageReq);
+        }
+
         if (SCOPE_SHARED.equals(scope) && StringUtils.hasText(pageReq.getParentId())) {
             SysFiles parent = getActiveFile(pageReq.getParentId());
             assertCanViewDocument(parent, context);
@@ -844,9 +848,7 @@ public class SysFilesServiceImpl extends BaseServiceImpl<SysFilesMapper, SysFile
         if (contentLength != null && contentLength > 0) {
             file.setFileSize(contentLength / 1024.0);
         }
-        if (touchUpdateTime) {
-            fillUpdate(file, username);
-        }
+        fillUpdate(file, username);
         baseMapper.updateById(file);
     }
 
@@ -975,6 +977,15 @@ public class SysFilesServiceImpl extends BaseServiceImpl<SysFilesMapper, SysFile
                 .toList();
         List<SysFiles> sharedFiles = selectActiveFilesByIds(context, fileIds);
         return pageCombinedDocuments(context, pageReq, personalFolders, sharedFiles);
+    }
+
+    private PageVO<DocumentFileVO> pageSharedByMeDocuments(UserAccessContext context, DocumentPageReq pageReq) {
+        List<String> sharedIds = findFileIdsSharedByOwner(context);
+        List<SysFiles> sharedByMeFolders = selectSharedByMeFolders(context, null);
+        List<SysFiles> sharedFiles = sharedIds.isEmpty()
+                ? Collections.emptyList()
+                : selectActiveFilesByIds(context, sharedIds);
+        return pageCombinedDocuments(context, pageReq, sharedByMeFolders, sharedFiles);
     }
 
     private PageVO<DocumentFileVO> pageBusinessDocuments(UserAccessContext context, DocumentPageReq pageReq) {
@@ -1183,6 +1194,21 @@ public class SysFilesServiceImpl extends BaseServiceImpl<SysFilesMapper, SysFile
         return baseMapper.selectList(wrapper);
     }
 
+    private List<SysFiles> selectSharedByMeFolders(UserAccessContext context, String parentId) {
+        LambdaQueryWrapper<SysFiles> wrapper = Wrappers.lambdaQuery(SysFiles.class)
+                .eq(SysFiles::getTenantId, context.tenantId())
+                .eq(SysFiles::getCreateBy, context.username())
+                .eq(SysFiles::getStoreType, SHARED_BY_ME_STORE_TYPE)
+                .eq(SysFiles::getIzFolder, FLAG_YES)
+                .eq(SysFiles::getDeleteFlag, 0);
+        if (StringUtils.hasText(parentId)) {
+            wrapper.eq(SysFiles::getParentId, parentId);
+        } else {
+            wrapper.and(item -> item.isNull(SysFiles::getParentId).or().eq(SysFiles::getParentId, ""));
+        }
+        return baseMapper.selectList(wrapper);
+    }
+
     private List<SysFiles> selectBusinessFolders(UserAccessContext context, String parentId) {
         LambdaQueryWrapper<SysFiles> wrapper = Wrappers.lambdaQuery(SysFiles.class)
                 .eq(SysFiles::getTenantId, context.tenantId())
@@ -1250,11 +1276,7 @@ public class SysFilesServiceImpl extends BaseServiceImpl<SysFilesMapper, SysFile
                             item.or().in(SysFiles::getId, sharedIds);
                         }
                     });
-            if (StringUtils.hasText(req.getParentId())) {
-                wrapper.eq(SysFiles::getParentId, req.getParentId());
-            } else {
-                wrapper.and(item -> item.isNull(SysFiles::getParentId).or().eq(SysFiles::getParentId, ""));
-            }
+            wrapper.eq(SysFiles::getParentId, req.getParentId());
             return;
         }
         if (SCOPE_STARRED.equals(scope)) {
@@ -2172,7 +2194,12 @@ public class SysFilesServiceImpl extends BaseServiceImpl<SysFilesMapper, SysFile
             return;
         }
         Set<String> objectNames = versions.stream()
-                .flatMap(version -> List.of(version.getObjectName(), version.getChangesObjectName()).stream())
+                .flatMap(version -> {
+                    List<String> names = new ArrayList<>();
+                    names.add(version.getObjectName());
+                    names.add(version.getChangesObjectName());
+                    return names.stream();
+                })
                 .map(this::trimToNull)
                 .filter(StringUtils::hasText)
                 .collect(Collectors.toCollection(LinkedHashSet::new));
