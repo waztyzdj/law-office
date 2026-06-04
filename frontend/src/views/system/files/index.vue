@@ -21,7 +21,6 @@ import {
   Input,
   InputSearch,
   Menu,
-  Modal,
   Radio,
   Spin,
   Tag,
@@ -30,21 +29,7 @@ import {
 } from 'ant-design-vue';
 
 import {
-  batchDeleteDocuments,
-  batchMoveDocuments,
-  clearDocumentTrash,
-  copyDocuments,
-  createDocumentFolder,
-  deleteDocument,
-  downloadDocument,
-  moveDocument,
   pageDocuments,
-  purgeDocument,
-  renameDocument,
-  restoreDocument,
-  shareDocument,
-  toggleDocumentStar,
-  uploadDocument,
 } from '#/api/system/document';
 import {
   getCurrentUserOrganization,
@@ -65,7 +50,6 @@ import {
   BUSINESS_RECORD_VIEW_STORE_TYPE,
   BUSINESS_VIEW_STORE_TYPE,
   DOCUMENT_UPLOAD_ACCEPT,
-  IMAGE_PREVIEW_EXTENSIONS,
 } from './constants';
 import {
   buildDepartScopeOptions,
@@ -73,23 +57,19 @@ import {
   isScopeRootKey,
 } from './tree';
 import { useDocumentNavigation } from './hooks/useDocumentNavigation';
+import { useDocumentActions } from './hooks/useDocumentActions';
 import { useDocumentSort } from './hooks/useDocumentSort';
 import { useDocumentTree } from './hooks/useDocumentTree';
 import type {
   DocumentBatchAction,
-  InlineEditorState,
   ScopeOption,
 } from './types';
 
 const PAGE_SIZE = 500;
 
 const loading = ref(false);
-const uploading = ref(false);
-const moving = ref(false);
-const savingName = ref(false);
 const keyword = ref('');
 const dataSource = ref<DocumentFileInfo[]>([]);
-const inlineEditor = ref<InlineEditorState>();
 const {
   currentDocumentSortLabel,
   documentSortOptions,
@@ -104,15 +84,10 @@ const {
 const treeShortcutActive = ref(false);
 const currentDeparts = ref<CurrentUserOrganization['departs']>([]);
 const currentTenant = ref<CurrentUserTenant>();
-const fileInputRef = ref<HTMLInputElement>();
 const shareDrawerRef = ref<InstanceType<typeof DocumentShareDrawer>>();
 const historyModalRef = ref<InstanceType<typeof DocumentHistoryModal>>();
 const imagePreviewModalRef = ref<InstanceType<typeof DocumentImagePreviewModal>>();
 const previewModalRef = ref<InstanceType<typeof DocumentOnlyOfficePreviewModal>>();
-const documentClipboard = ref<{
-  ids: string[];
-  mode: Extract<DocumentBatchAction, 'copy' | 'cut'>;
-}>();
 const {
   activeRootKey,
   canGoBack,
@@ -276,19 +251,6 @@ const canUploadCurrentScope = computed(
       (scope.value === 'starred' && Boolean(currentFolder.value?.ownerFlag)) ||
       (Boolean(activeSharedTarget.value) && (!currentFolder.value || Boolean(currentFolder.value.ownerFlag)))),
 );
-const canPasteCurrentScope = computed(() => {
-  const clipboard = documentClipboard.value;
-  if (!clipboard || clipboard.ids.length === 0 || isGlobalSearch.value || scope.value === 'trash') {
-    return false;
-  }
-  if (clipboard.mode === 'copy') {
-    return canUploadCurrentScope.value;
-  }
-  return true;
-});
-const cuttingDocumentIds = computed(() =>
-  documentClipboard.value?.mode === 'cut' ? documentClipboard.value.ids : [],
-);
 const selectedTreeFolder = computed(() => {
   const key = selectedTreeKeys.value[0];
   return key && !isScopeRootKey(key) ? findFolderByKey(key) : undefined;
@@ -394,6 +356,108 @@ function canDropToTreeTarget(key: string) {
   return Boolean(target.ownerFlag);
 }
 
+const documentActions = useDocumentActions({
+  activeScopeOption,
+  activeSharedTarget,
+  canCreateCurrentScope,
+  canDropToTreeTarget,
+  canManageFolder,
+  canUploadCurrentScope,
+  currentParentId,
+  dataSource,
+  handleOpenFolder,
+  historyModalRef,
+  imagePreviewModalRef,
+  isGlobalSearch,
+  loadData,
+  previewModalRef,
+  reloadAll,
+  reloadTrashData: async () => {
+    await Promise.all([loadData(), reloadCachedFolderTrees()]);
+  },
+  scope,
+  shareDrawerRef,
+});
+const {
+  canPasteCurrentScope,
+  cuttingDocumentIds,
+  inlineEditor,
+  moving,
+  savingName,
+  uploading,
+} = documentActions;
+
+function cancelInlineEditor() {
+  documentActions.cancelInlineEditor();
+}
+
+function handleAction(event: string, record: DocumentFileInfo) {
+  documentActions.handleAction(event, record);
+}
+
+function handleBatchAction(event: DocumentBatchAction, records: DocumentFileInfo[]) {
+  documentActions.handleBatchAction(event, records);
+}
+
+function handleBatchMove(sourceIds: string[], targetParentId?: string) {
+  void documentActions.handleBatchMove(sourceIds, targetParentId);
+}
+
+function handleClearTrash() {
+  documentActions.handleClearTrash();
+}
+
+function handleCreateFolder(parentId?: string) {
+  documentActions.handleCreateFolder(parentId);
+}
+
+function handleDeleteFolder(record?: DocumentFileInfo) {
+  documentActions.handleDeleteFolder(record);
+}
+
+function handleFilesSelected(event: Event) {
+  void documentActions.handleFilesSelected(event);
+}
+
+function handleInlineNameChange(value: string) {
+  documentActions.handleInlineNameChange(value);
+}
+
+function handleMove(sourceId: string, targetParentId?: string) {
+  void documentActions.handleMove(sourceId, targetParentId);
+}
+
+function handlePaste() {
+  void documentActions.handlePaste();
+}
+
+function handlePasteToTreeFolder(record?: DocumentFileInfo) {
+  void documentActions.handlePasteToTreeFolder(record);
+}
+
+function handleRenameFolder(record?: DocumentFileInfo) {
+  documentActions.handleRenameFolder(record);
+}
+
+function handleUploadClick() {
+  documentActions.handleUploadClick();
+}
+
+function setFileInputRef(element: unknown) {
+  documentActions.fileInputRef.value = element instanceof HTMLInputElement ? element : undefined;
+}
+
+function rememberDocumentClipboard(
+  mode: Extract<DocumentBatchAction, 'copy' | 'cut'>,
+  records: DocumentFileInfo[],
+) {
+  documentActions.rememberDocumentClipboard(mode, records);
+}
+
+function submitInlineName() {
+  void documentActions.submitInlineName();
+}
+
 async function fetchDocuments(
   parentId?: string,
   searchKeyword?: string,
@@ -446,36 +510,6 @@ function handleSearch(value: string) {
   resetAndLoad();
 }
 
-function handleCreateFolder(parentId = currentParentId.value) {
-  if (scope.value === 'trash' || !canCreateCurrentScope.value) {
-    return;
-  }
-  inlineEditor.value = {
-    fileName: '新建文件夹',
-    mode: 'create',
-    parentId,
-  };
-}
-
-async function shareRootFolderIfNeeded(record: DocumentFileInfo, parentId?: string) {
-  const target = activeSharedTarget.value;
-  if (!record.id || parentId || !target) {
-    return;
-  }
-  await shareDocument({
-    enableDown: '1',
-    enableUpdat: '0',
-    fileId: record.id,
-    targets: [
-      {
-        permission: 'download',
-        targetId: target.targetId,
-        targetType: target.targetType,
-      },
-    ],
-  });
-}
-
 async function handleCreateFolderIn(record?: DocumentFileInfo) {
   if (!record?.id || !canCreateInsideFolder(record)) {
     return;
@@ -488,278 +522,12 @@ async function handleCreateFolderIn(record?: DocumentFileInfo) {
   handleCreateFolder(record.id);
 }
 
-function handleUploadClick() {
-  if (!canUploadCurrentScope.value || uploading.value) {
-    return;
-  }
-  fileInputRef.value?.click();
-}
-
-async function handleFilesSelected(event: Event) {
-  const input = event.target as HTMLInputElement;
-  const files = Array.from(input.files || []);
-  input.value = '';
-  if (files.length === 0) {
-    return;
-  }
-  uploading.value = true;
-  try {
-    for (const file of files) {
-      const uploaded = await uploadDocument(file, currentParentId.value, {
-        scope: scope.value,
-        shareTargetType: activeScopeOption.value?.shareTargetType,
-      });
-      await shareRootFolderIfNeeded(uploaded, currentParentId.value);
-    }
-    message.success(files.length > 1 ? '文件已上传' : '文件上传成功');
-    await loadData();
-  } finally {
-    uploading.value = false;
-  }
-}
-
-async function handleDownload(record: DocumentFileInfo) {
-  if (!record.id || record.izFolder === '1') {
-    return;
-  }
-  const blob = await downloadDocument(record.id);
-  const objectUrl = URL.createObjectURL(blob);
-  const link = document.createElement('a');
-  link.href = objectUrl;
-  link.download = record.fileName || 'download';
-  document.body.append(link);
-  link.click();
-  link.remove();
-  window.setTimeout(() => URL.revokeObjectURL(objectUrl), 0);
-}
-
-function handleRename(record: DocumentFileInfo) {
-  const nameParts = splitEditableFileName(record);
-  inlineEditor.value = {
-    extension: nameParts.extension,
-    fileName: nameParts.name,
-    mode: 'rename',
-    record,
-  };
-}
-
-function handleRenameFolder(record?: DocumentFileInfo) {
-  if (!record?.id || !canManageFolder(record)) {
-    return;
-  }
-  handleRename(record);
-}
-
-function handleInlineNameChange(value: string) {
-  if (inlineEditor.value) {
-    inlineEditor.value.fileName = value;
-  }
-}
-
-function cancelInlineEditor() {
-  inlineEditor.value = undefined;
-}
-
 function isEditingTreeNode(key: string) {
   const record = findFolderByKey(key);
   return (
     inlineEditor.value?.mode === 'rename' &&
     inlineEditor.value.record?.id === record?.id
   );
-}
-
-async function submitInlineName() {
-  if (!inlineEditor.value || savingName.value) {
-    return;
-  }
-  const editor = inlineEditor.value;
-  const editableName = editor.fileName.trim();
-  if (!editableName) {
-    message.warning('请输入名称');
-    return;
-  }
-  const fileName = buildSubmittedFileName(editor, editableName);
-  if (fileName.length > 255) {
-    message.warning('名称不能超过255个字符');
-    return;
-  }
-  savingName.value = true;
-  try {
-    if (editor.mode === 'create') {
-      const createdFolder = await createDocumentFolder({
-        fileName,
-        parentId: editor.parentId,
-        scope: scope.value,
-        shareTargetType: activeScopeOption.value?.shareTargetType,
-      });
-      await shareRootFolderIfNeeded(createdFolder, editor.parentId);
-      message.success('文件夹已创建');
-    } else if (editor.record?.id) {
-      if (fileName === (editor.record.fileName || '').trim()) {
-        cancelInlineEditor();
-        return;
-      }
-      await renameDocument({
-        fileName,
-        id: editor.record.id,
-      });
-      message.success('名称已更新');
-    }
-    cancelInlineEditor();
-    await reloadAll();
-  } finally {
-    savingName.value = false;
-  }
-}
-
-function splitEditableFileName(record: DocumentFileInfo) {
-  const fileName = record.fileName || '';
-  if (record.izFolder === '1') {
-    return { extension: '', name: fileName };
-  }
-  const dotIndex = fileName.lastIndexOf('.');
-  if (dotIndex <= 0 || dotIndex === fileName.length - 1) {
-    return { extension: '', name: fileName };
-  }
-  return {
-    extension: fileName.slice(dotIndex),
-    name: fileName.slice(0, dotIndex),
-  };
-}
-
-function buildSubmittedFileName(editor: InlineEditorState, editableName: string) {
-  if (editor.mode === 'rename' && editor.record?.izFolder !== '1') {
-    return `${editableName}${editor.extension || ''}`;
-  }
-  return editableName;
-}
-
-function handleShare(record: DocumentFileInfo) {
-  shareDrawerRef.value?.open({ record });
-}
-
-function handleCancelShare(record: DocumentFileInfo) {
-  if (!record.id || !record.sharedFlag || !record.ownerFlag) {
-    return;
-  }
-  Modal.confirm({
-    cancelText: '取消',
-    content: `确认取消“${record.fileName || ''}”的全部共享吗？`,
-    okButtonProps: { danger: true },
-    okText: '取消共享',
-    title: '取消共享',
-    async onOk() {
-      await shareDocument({
-        enableDown: '1',
-        enableUpdat: '0',
-        fileId: record.id || '',
-        targets: [],
-      });
-      message.success('共享已取消');
-      await reloadAll();
-    },
-  });
-}
-
-function handleDelete(record: DocumentFileInfo) {
-  if (!record.id) {
-    return;
-  }
-  Modal.confirm({
-    cancelText: '取消',
-    content: `确认删除“${record.fileName || ''}”吗？删除后可在回收站恢复。`,
-    okText: '确定',
-    title: '确认删除',
-    async onOk() {
-      await deleteDocument(record.id || '');
-      message.success('已移入回收站');
-      await reloadAll();
-    },
-  });
-}
-
-function handleDeleteFolder(record?: DocumentFileInfo) {
-  if (!record?.id || !canManageFolder(record)) {
-    return;
-  }
-  handleDelete(record);
-}
-
-function handleBatchDelete(fileIds: string[]) {
-  const ids = Array.from(new Set(fileIds.filter(Boolean)));
-  if (ids.length === 0) {
-    return;
-  }
-  Modal.confirm({
-    cancelText: '取消',
-    content: `确认删除选中的 ${ids.length} 个文档吗？删除后可在回收站恢复。`,
-    okText: '确定',
-    title: '确认删除',
-    async onOk() {
-      await batchDeleteDocuments(ids);
-      message.success('已移入回收站');
-      await reloadAll();
-    },
-  });
-}
-
-async function handleBatchDownload(records: DocumentFileInfo[]) {
-  const files = records.filter((record) => record.id && record.canDownload && record.izFolder !== '1');
-  if (files.length === 0) {
-    message.warning('请选择可下载的文件');
-    return;
-  }
-  for (const file of files) {
-    await handleDownload(file);
-  }
-}
-
-async function writeDocumentClipboardText(records: DocumentFileInfo[]) {
-  const text = records
-    .map((record) => record.fileName)
-    .filter((fileName): fileName is string => Boolean(fileName))
-    .join('\n');
-  if (!text || !navigator.clipboard?.writeText) {
-    return;
-  }
-  try {
-    await navigator.clipboard.writeText(text);
-  } catch {
-    // 浏览器可能因非安全上下文或权限限制拒绝写入系统剪贴板，不影响文档中心内部剪贴板。
-  }
-}
-
-function rememberDocumentClipboard(
-  mode: Extract<DocumentBatchAction, 'copy' | 'cut'>,
-  records: DocumentFileInfo[],
-) {
-  const uniqueRecords = Array.from(
-    new Map(records.filter((record) => record.id).map((record) => [record.id || '', record])).values(),
-  );
-  if (uniqueRecords.length === 0) {
-    return;
-  }
-  documentClipboard.value = {
-    ids: uniqueRecords.map((record) => record.id || ''),
-    mode,
-  };
-  const clipboard = documentClipboard.value;
-  void writeDocumentClipboardText(uniqueRecords);
-  message.success(`${clipboard.mode === 'copy' ? '已复制' : '已剪切'} ${clipboard.ids.length} 项`);
-}
-
-function handleBatchAction(event: DocumentBatchAction, records: DocumentFileInfo[]) {
-  if (event === 'download') {
-    void handleBatchDownload(records);
-    return;
-  }
-  if (event === 'delete') {
-    handleBatchDelete(records.map((record) => record.id || ''));
-    return;
-  }
-  if (event === 'copy' || event === 'cut') {
-    rememberDocumentClipboard(event, records);
-  }
 }
 
 function handleTreeMenuBatchAction(event: DocumentBatchAction, record?: DocumentFileInfo) {
@@ -772,162 +540,6 @@ function handleTreeMenuBatchAction(event: DocumentBatchAction, record?: Document
           ? getTreeCuttableRecords(record)
           : getTreeCopyableRecords(record);
   handleBatchAction(event, records);
-}
-
-async function handleRestore(record: DocumentFileInfo) {
-  if (!record.id) {
-    return;
-  }
-  await restoreDocument(record.id);
-  message.success('文档已恢复');
-  await reloadAll();
-}
-
-function handlePurge(record: DocumentFileInfo) {
-  if (!record.id) {
-    return;
-  }
-  Modal.confirm({
-    cancelText: '取消',
-    content: `彻底删除后无法恢复，确认删除“${record.fileName || ''}”吗？`,
-    okButtonProps: { danger: true },
-    okText: '彻底删除',
-    title: '彻底删除',
-    async onOk() {
-      await purgeDocument(record.id || '');
-      message.success('已彻底删除');
-      await Promise.all([loadData(), reloadCachedFolderTrees()]);
-    },
-  });
-}
-
-function handleClearTrash() {
-  if (scope.value !== 'trash' || dataSource.value.length === 0) {
-    return;
-  }
-  Modal.confirm({
-    cancelText: '取消',
-    content: '清空后所有回收站文件都无法恢复，确认清空回收站吗？',
-    okText: '清空回收站',
-    title: '清空回收站',
-    async onOk() {
-      await clearDocumentTrash();
-      message.success('回收站已清空');
-      await reloadAll();
-    },
-  });
-}
-
-async function handleStar(record: DocumentFileInfo) {
-  if (!record.id) {
-    return;
-  }
-  await toggleDocumentStar(record.id);
-  message.success(record.izStar === '1' ? '已取消收藏' : '已收藏');
-  await reloadAll();
-}
-
-async function handleMove(sourceId: string, targetParentId?: string) {
-  if (!sourceId || moving.value || scope.value === 'trash') {
-    return;
-  }
-  moving.value = true;
-  try {
-    await moveDocument({
-      id: sourceId,
-      parentId: targetParentId,
-      scope: scope.value,
-      shareTargetType: activeScopeOption.value?.shareTargetType,
-    });
-    message.success('已移动');
-    await reloadAll();
-  } finally {
-    moving.value = false;
-  }
-}
-
-async function handleBatchMove(sourceIds: string[], targetParentId?: string) {
-  const ids = Array.from(new Set(sourceIds.filter(Boolean)));
-  if (ids.length === 0 || moving.value || scope.value === 'trash') {
-    return;
-  }
-  moving.value = true;
-  try {
-    await batchMoveDocuments({
-      ids,
-      parentId: targetParentId,
-      scope: scope.value,
-      shareTargetType: activeScopeOption.value?.shareTargetType,
-    });
-    message.success(`已移动 ${ids.length} 项`);
-    await reloadAll();
-  } finally {
-    moving.value = false;
-  }
-}
-
-async function handlePaste() {
-  const clipboard = documentClipboard.value;
-  if (!clipboard || clipboard.ids.length === 0 || moving.value || !canPasteCurrentScope.value) {
-    return;
-  }
-  const targetParentId = currentParentId.value;
-  if (clipboard.mode === 'cut') {
-    await handleBatchMove(clipboard.ids, targetParentId);
-    documentClipboard.value = undefined;
-    return;
-  }
-  moving.value = true;
-  try {
-    const copiedFiles = await copyDocuments({
-      ids: clipboard.ids,
-      parentId: targetParentId,
-      scope: scope.value,
-      shareTargetType: activeScopeOption.value?.shareTargetType,
-    });
-    for (const copiedFile of copiedFiles) {
-      await shareRootFolderIfNeeded(copiedFile, targetParentId);
-    }
-    message.success(`已粘贴 ${copiedFiles.length} 项`);
-    await reloadAll();
-  } finally {
-    moving.value = false;
-  }
-}
-
-async function handlePasteToTreeFolder(record?: DocumentFileInfo) {
-  const clipboard = documentClipboard.value;
-  if (!record?.id || !clipboard || clipboard.ids.length === 0 || moving.value) {
-    return;
-  }
-  if (!canDropToTreeTarget(record.id)) {
-    return;
-  }
-  if (clipboard.ids.includes(record.id)) {
-    message.warning('不能粘贴到自身');
-    return;
-  }
-  if (clipboard.mode === 'cut') {
-    await handleBatchMove(clipboard.ids, record.id);
-    documentClipboard.value = undefined;
-    return;
-  }
-  moving.value = true;
-  try {
-    const copiedFiles = await copyDocuments({
-      ids: clipboard.ids,
-      parentId: record.id,
-      scope: scope.value,
-      shareTargetType: activeScopeOption.value?.shareTargetType,
-    });
-    for (const copiedFile of copiedFiles) {
-      await shareRootFolderIfNeeded(copiedFile, record.id);
-    }
-    message.success(`已粘贴 ${copiedFiles.length} 项`);
-    await reloadAll();
-  } finally {
-    moving.value = false;
-  }
 }
 
 function isEditableShortcutTarget(target: EventTarget | null) {
@@ -1069,26 +681,6 @@ function isDocumentDrag(event: DragEvent) {
   return types.includes('application/x-document-id') || types.includes('application/x-document-ids');
 }
 
-function getFileExtension(record: DocumentFileInfo) {
-  const fileName = record.fileName || '';
-  const dotIndex = fileName.lastIndexOf('.');
-  return dotIndex >= 0 ? fileName.slice(dotIndex + 1).toLowerCase() : '';
-}
-
-function isImagePreviewFile(record: DocumentFileInfo) {
-  const fileType = String(record.fileType || '').toLowerCase();
-  const extension = getFileExtension(record);
-  if (extension === 'svg') {
-    return false;
-  }
-  return (
-    record.izFolder !== '1' &&
-    (fileType === 'image' ||
-      fileType.startsWith('image/') ||
-      IMAGE_PREVIEW_EXTENSIONS.has(extension))
-  );
-}
-
 function handleTreeDragOver(event: DragEvent, targetKey: string) {
   if (!isDocumentDrag(event) || scope.value === 'trash') {
     return;
@@ -1099,60 +691,6 @@ function handleTreeDragOver(event: DragEvent, targetKey: string) {
   event.preventDefault();
   if (event.dataTransfer) {
     event.dataTransfer.dropEffect = 'move';
-  }
-}
-
-function handleAction(event: string, record: DocumentFileInfo) {
-  if (event === 'open') {
-    void handleOpenFolder(record);
-    return;
-  }
-  if (event === 'preview') {
-    if (isImagePreviewFile(record)) {
-      imagePreviewModalRef.value?.open(record);
-      return;
-    }
-    previewModalRef.value?.open(record);
-    return;
-  }
-  if (event === 'edit') {
-    previewModalRef.value?.open(record, 'edit');
-    return;
-  }
-  if (event === 'history') {
-    historyModalRef.value?.open(record);
-    return;
-  }
-  if (event === 'download') {
-    void handleDownload(record);
-    return;
-  }
-  if (event === 'rename') {
-    handleRename(record);
-    return;
-  }
-  if (event === 'share') {
-    handleShare(record);
-    return;
-  }
-  if (event === 'cancelShare') {
-    handleCancelShare(record);
-    return;
-  }
-  if (event === 'delete') {
-    handleDelete(record);
-    return;
-  }
-  if (event === 'restore') {
-    void handleRestore(record);
-    return;
-  }
-  if (event === 'purge') {
-    handlePurge(record);
-    return;
-  }
-  if (event === 'star') {
-    void handleStar(record);
   }
 }
 
@@ -1450,7 +988,7 @@ onBeforeUnmount(() => {
     </div>
 
     <input
-      ref="fileInputRef"
+      :ref="setFileInputRef"
       :accept="DOCUMENT_UPLOAD_ACCEPT"
       class="hidden-file-input"
       multiple
