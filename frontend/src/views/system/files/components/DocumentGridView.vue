@@ -1,6 +1,8 @@
 <script setup lang="ts">
-import type { DocumentFileInfo, DocumentScope } from '#/api/system/document';
-import type { DocumentBatchAction, InlineEditorState } from '../types';
+import type {
+  DocumentContentViewEmits,
+  DocumentContentViewProps,
+} from '../types';
 
 import { nextTick, ref } from 'vue';
 
@@ -21,48 +23,12 @@ interface RenameEditorExpose {
   focus: () => void;
 }
 
-interface Props {
-  canEditContentItem: (record: DocumentFileInfo) => boolean;
-  canEditItem: (record: DocumentFileInfo) => boolean;
-  canMove: (record: DocumentFileInfo) => boolean;
-  canPreviewItem: (record: DocumentFileInfo) => boolean;
-  canViewHistoryItem: (record: DocumentFileInfo) => boolean;
-  creatingHere?: boolean;
-  getContextCopyableRecords: (record: DocumentFileInfo) => DocumentFileInfo[];
-  getContextCuttableRecords: (record: DocumentFileInfo) => DocumentFileInfo[];
-  getContextDeletableRecords: (record: DocumentFileInfo) => DocumentFileInfo[];
-  getContextDownloadRecords: (record: DocumentFileInfo) => DocumentFileInfo[];
-  imageThumbnailUrl: (record: DocumentFileInfo) => string | undefined;
-  inlineEditor?: InlineEditorState;
-  isCutting: (record: DocumentFileInfo) => boolean;
-  isRenaming: (record: DocumentFileInfo) => boolean;
-  isSelected: (record: DocumentFileInfo) => boolean;
-  isSingleContext: (record: DocumentFileInfo) => boolean;
-  itemKey: (record: DocumentFileInfo) => string;
-  items: DocumentFileInfo[];
-  savingName?: boolean;
-  scope: DocumentScope;
-}
-
-withDefaults(defineProps<Props>(), {
+withDefaults(defineProps<DocumentContentViewProps>(), {
   creatingHere: false,
   savingName: false,
 });
 
-const emit = defineEmits<{
-  action: [event: string, record: DocumentFileInfo];
-  contextBatchAction: [event: DocumentBatchAction, record: DocumentFileInfo];
-  contextSelect: [record: DocumentFileInfo];
-  dropOnFolder: [event: DragEvent, record: DocumentFileInfo];
-  folderDragOver: [event: DragEvent, record: DocumentFileInfo];
-  inlineCancel: [];
-  inlineChange: [value: string];
-  inlineSubmit: [];
-  itemClick: [event: MouseEvent, record: DocumentFileInfo];
-  itemOpen: [record: DocumentFileInfo];
-  itemTileOpen: [record: DocumentFileInfo];
-  itemDragStart: [event: DragEvent, record: DocumentFileInfo];
-}>();
+const emit = defineEmits<DocumentContentViewEmits>();
 
 const createNameInputRef = ref<FocusableInput | null>(null);
 const renameNameInputRef = ref<RenameEditorExpose | null>(null);
