@@ -9,6 +9,7 @@ import { Button, Dropdown, Empty, Input, Menu, Spin, Tooltip } from 'ant-design-
 
 import DocumentInlineRenameEditor from './DocumentInlineRenameEditor.vue';
 import DocumentItemActionMenu from './DocumentItemActionMenu.vue';
+import DocumentSelectionBox from './DocumentSelectionBox.vue';
 import {
   DOCUMENT_SORT_OPTIONS as sortOptions,
   type DocumentSortField,
@@ -625,11 +626,7 @@ onBeforeUnmount(() => {
           </div>
           <Empty v-else class="document-empty" description="当前文件夹暂无内容" />
         </Spin>
-        <div
-          v-if="selecting"
-          class="document-selection-box"
-          :style="selectionBoxStyle"
-        />
+        <DocumentSelectionBox :style="selectionBoxStyle" :visible="selecting" />
       </div>
       <template #overlay>
         <Menu>
@@ -737,14 +734,6 @@ onBeforeUnmount(() => {
 
 .document-explorer__body--selecting {
   user-select: none;
-}
-
-.document-selection-box {
-  position: absolute;
-  z-index: 5;
-  pointer-events: none;
-  border: 1px solid hsl(var(--primary) / 70%);
-  background: hsl(var(--primary) / 12%);
 }
 
 .document-grid {
