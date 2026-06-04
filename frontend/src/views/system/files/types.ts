@@ -77,13 +77,18 @@ export interface DocumentContentViewEmits {
   inlineSubmit: [];
   itemClick: [event: MouseEvent, record: DocumentFileInfo];
   itemDragStart: [event: DragEvent, record: DocumentFileInfo];
+  itemActivate: [record: DocumentFileInfo];
   itemOpen: [record: DocumentFileInfo];
-  itemTileOpen: [record: DocumentFileInfo];
 }
 
 export type DocumentContentViewListeners = {
   [Key in keyof DocumentContentViewEmits]: (...args: DocumentContentViewEmits[Key]) => void;
 };
+
+export interface DocumentContentViewExpose {
+  focusCreateNameInput: () => Promise<void>;
+  focusRenameNameInput: () => Promise<void>;
+}
 
 export interface DocumentListViewProps extends DocumentContentViewProps {
   sortState: DocumentSortState;

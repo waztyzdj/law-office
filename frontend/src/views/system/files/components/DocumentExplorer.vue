@@ -18,6 +18,7 @@ import {
 } from '../constants';
 import type {
   DocumentBatchAction,
+  DocumentContentViewExpose,
   DocumentContentViewListeners,
   DocumentContentViewProps,
   DocumentViewMode,
@@ -51,11 +52,6 @@ interface Props {
   scope: DocumentScope;
   sortState: DocumentSortState;
   viewMode?: DocumentViewMode;
-}
-
-interface DocumentViewExpose {
-  focusCreateNameInput: () => Promise<void>;
-  focusRenameNameInput: () => Promise<void>;
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -107,8 +103,8 @@ const creatingHere = computed(
     (props.inlineEditor.parentId || '') === currentFolderId.value,
 );
 const hasGridContent = computed(() => sortedItems.value.length > 0 || creatingHere.value);
-const gridViewRef = ref<DocumentViewExpose | null>(null);
-const listViewRef = ref<DocumentViewExpose | null>(null);
+const gridViewRef = ref<DocumentContentViewExpose | null>(null);
+const listViewRef = ref<DocumentContentViewExpose | null>(null);
 const cuttingIdSet = computed(() => new Set(props.cuttingIds));
 
 async function focusCreateNameInput() {
@@ -287,7 +283,7 @@ function setExplorerBodyRef(element: unknown) {
   documentSelection.explorerBodyRef.value = element instanceof HTMLElement ? element : undefined;
 }
 
-function handleTileOpen(record: DocumentFileInfo) {
+function handleItemActivate(record: DocumentFileInfo) {
   clearRenameTimer();
   handleOpen(record);
 }
@@ -340,10 +336,10 @@ const contentViewListeners: DocumentContentViewListeners = {
   inlineCancel: () => emit('inlineCancel'),
   inlineChange: handleNameInput,
   inlineSubmit: () => emit('inlineSubmit'),
+  itemActivate: handleItemActivate,
   itemClick: handleItemClick,
   itemDragStart: handleDragStart,
   itemOpen: handleOpen,
-  itemTileOpen: handleTileOpen,
 };
 
 onMounted(() => {

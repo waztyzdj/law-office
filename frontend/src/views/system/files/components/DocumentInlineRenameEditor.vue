@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue';
+import { computed, nextTick, ref } from 'vue';
 
 import { Input } from 'ant-design-vue';
 
@@ -12,6 +12,9 @@ interface Props {
 
 interface FocusableInput {
   focus: () => void;
+  resizableTextArea?: {
+    textArea?: HTMLTextAreaElement;
+  };
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -33,8 +36,10 @@ const editorClass = computed(() => [
   `document-inline-rename-editor--${props.variant}`,
 ]);
 
-function focus() {
+async function focus() {
+  await nextTick();
   textareaRef.value?.focus();
+  textareaRef.value?.resizableTextArea?.textArea?.select();
 }
 
 function handleKeydown(event: KeyboardEvent) {

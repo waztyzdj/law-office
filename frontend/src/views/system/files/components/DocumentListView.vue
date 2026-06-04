@@ -1,15 +1,15 @@
 <script setup lang="ts">
 import type {
+  DocumentContentViewExpose,
   DocumentListViewEmits,
   DocumentListViewProps,
 } from '../types';
-
-import { nextTick, ref } from 'vue';
 
 import { IconifyIcon } from '@vben/icons';
 
 import { Button, Dropdown, Input, Tooltip } from 'ant-design-vue';
 
+import { useDocumentInlineEditorFocus } from '../hooks/useDocumentInlineEditorFocus';
 import DocumentInlineRenameEditor from './DocumentInlineRenameEditor.vue';
 import DocumentItemActionMenu from './DocumentItemActionMenu.vue';
 import DocumentListSortHeader from './DocumentListSortHeader.vue';
@@ -20,44 +20,23 @@ import {
   formatSize,
 } from './documentExplorerUtils';
 
-interface FocusableInput {
-  focus: () => void;
-  input?: HTMLInputElement;
-}
-
-interface RenameEditorExpose {
-  focus: () => void;
-}
-
 withDefaults(defineProps<DocumentListViewProps>(), {
   creatingHere: false,
   savingName: false,
 });
 
 const emit = defineEmits<DocumentListViewEmits>();
+const {
+  focusCreateNameInput,
+  focusRenameNameInput,
+  handleInlineKeydown,
+  setCreateNameInputRef,
+  setRenameNameInputRef,
+} = useDocumentInlineEditorFocus({
+  cancel: () => emit('inlineCancel'),
+});
 
-const createNameInputRef = ref<FocusableInput | null>(null);
-const renameNameInputRef = ref<RenameEditorExpose | null>(null);
-
-async function focusCreateNameInput() {
-  await nextTick();
-  createNameInputRef.value?.focus();
-  createNameInputRef.value?.input?.select();
-}
-
-async function focusRenameNameInput() {
-  await nextTick();
-  renameNameInputRef.value?.focus();
-}
-
-function handleInlineKeydown(event: KeyboardEvent) {
-  if (event.key === 'Escape') {
-    event.preventDefault();
-    emit('inlineCancel');
-  }
-}
-
-defineExpose({
+defineExpose<DocumentContentViewExpose>({
   focusCreateNameInput,
   focusRenameNameInput,
 });
@@ -76,7 +55,7 @@ defineExpose({
           class="document-list-row__icon document-list-row__icon--folder"
         />
         <Input
-          ref="createNameInputRef"
+          :ref="setCreateNameInputRef"
           :value="inlineEditor?.fileName"
           autofocus
           class="document-list-row__name-input"
@@ -112,7 +91,7 @@ defineExpose({
         tabindex="0"
         @click.stop="$emit('itemClick', $event, item)"
         @contextmenu.stop="$emit('contextSelect', item)"
-        @dblclick.stop="$emit('itemTileOpen', item)"
+        @dblclick.stop="$emit('itemActivate', item)"
         @dragstart="$emit('itemDragStart', $event, item)"
         @dragover="$emit('folderDragOver', $event, item)"
         @drop="$emit('dropOnFolder', $event, item)"
@@ -133,7 +112,7 @@ defineExpose({
           />
           <DocumentInlineRenameEditor
             v-if="isRenaming(item)"
-            ref="renameNameInputRef"
+            :ref="setRenameNameInputRef"
             :disabled="savingName"
             :rows="1"
             :value="inlineEditor?.fileName"
