@@ -9,6 +9,7 @@ import { Button, Dropdown, Empty, Input, Menu, Spin, Tooltip } from 'ant-design-
 
 import DocumentInlineRenameEditor from './DocumentInlineRenameEditor.vue';
 import DocumentItemActionMenu from './DocumentItemActionMenu.vue';
+import DocumentListSortHeader from './DocumentListSortHeader.vue';
 import DocumentSelectionBox from './DocumentSelectionBox.vue';
 import {
   DOCUMENT_SORT_OPTIONS as sortOptions,
@@ -32,7 +33,6 @@ import {
   canPreviewItem as canPreviewDocumentItem,
   canViewHistoryItem as canViewDocumentHistory,
   compareDocuments,
-  documentListColumns,
   fileIcon,
   fileTypeText,
   formatDateTime,
@@ -172,13 +172,6 @@ function setSortOrder(order: DocumentSortOrder) {
 
 function isActiveSort(field: DocumentSortField, order?: DocumentSortOrder) {
   return props.sortState.field === field && (!order || props.sortState.order === order);
-}
-
-function sortDirectionIcon(field: DocumentSortField) {
-  if (!isActiveSort(field)) {
-    return 'lucide:chevrons-up-down';
-  }
-  return props.sortState.order === 'asc' ? 'lucide:arrow-up' : 'lucide:arrow-down';
 }
 
 function canMove(record: DocumentFileInfo) {
@@ -473,24 +466,7 @@ onBeforeUnmount(() => {
             </Dropdown>
           </div>
           <div v-else-if="hasGridContent" class="document-list">
-            <div class="document-list__header">
-              <button
-                v-for="column in documentListColumns"
-                :key="column.field"
-                class="document-list__cell document-list__sort"
-                :class="column.className"
-                type="button"
-                @click="setSort(column.field)"
-              >
-                <span>{{ column.label }}</span>
-                <IconifyIcon
-                  class="document-list__sort-icon"
-                  :class="{ 'document-list__sort-icon--active': isActiveSort(column.field) }"
-                  :icon="sortDirectionIcon(column.field)"
-                />
-              </button>
-              <div class="document-list__cell document-list__cell--actions"></div>
-            </div>
+            <DocumentListSortHeader :sort-state="sortState" @sort="setSort" />
             <div
               v-if="creatingHere"
               class="document-list-row document-list-row--editing"
@@ -757,54 +733,11 @@ onBeforeUnmount(() => {
   background: hsl(var(--background));
 }
 
-.document-list__header,
 .document-list-row {
   display: grid;
   grid-template-columns: minmax(240px, 1fr) 120px 100px 150px 116px;
   align-items: center;
   min-width: 720px;
-}
-
-.document-list__header {
-  position: sticky;
-  top: 0;
-  z-index: 1;
-  min-height: 36px;
-  border-bottom: 1px solid hsl(var(--border));
-  background: hsl(var(--muted) / 45%);
-  color: hsl(var(--muted-foreground));
-  font-size: 12px;
-  font-weight: 500;
-}
-
-.document-list__sort {
-  display: inline-flex;
-  height: 100%;
-  align-items: center;
-  justify-content: center;
-  gap: 4px;
-  cursor: pointer;
-  border: 0;
-  background: transparent;
-  font: inherit;
-  text-align: center;
-}
-
-.document-list__sort:hover,
-.document-list__sort:focus-visible {
-  background: hsl(var(--muted) / 70%);
-  color: hsl(var(--foreground));
-  outline: none;
-}
-
-.document-list__sort-icon {
-  width: 14px;
-  height: 14px;
-  color: hsl(var(--muted-foreground));
-}
-
-.document-list__sort-icon--active {
-  color: hsl(var(--primary));
 }
 
 .document-list-row {
@@ -861,11 +794,6 @@ onBeforeUnmount(() => {
   align-items: center;
   gap: 8px;
   color: hsl(var(--foreground));
-}
-
-.document-list__header .document-list__cell {
-  justify-content: center;
-  color: hsl(var(--muted-foreground));
 }
 
 .document-list__cell--actions {
