@@ -69,22 +69,20 @@ import {
 } from './constants';
 import {
   buildDepartScopeOptions,
-  getScopeFromRootKey,
   getScopeRootKey,
   isScopeRootKey,
 } from './tree';
+import { useDocumentNavigation } from './hooks/useDocumentNavigation';
 import { useDocumentSort } from './hooks/useDocumentSort';
 import { useDocumentTree } from './hooks/useDocumentTree';
 import type {
   DocumentBatchAction,
-  DocumentNavigationLocation,
   InlineEditorState,
   ScopeOption,
 } from './types';
 
 const PAGE_SIZE = 500;
 
-const activeRootKey = ref('my');
 const loading = ref(false);
 const uploading = ref(false);
 const moving = ref(false);
@@ -92,7 +90,6 @@ const savingName = ref(false);
 const keyword = ref('');
 const dataSource = ref<DocumentFileInfo[]>([]);
 const inlineEditor = ref<InlineEditorState>();
-const parentStack = ref<DocumentFileInfo[]>([]);
 const {
   currentDocumentSortLabel,
   documentSortOptions,
@@ -116,11 +113,34 @@ const documentClipboard = ref<{
   ids: string[];
   mode: Extract<DocumentBatchAction, 'copy' | 'cut'>;
 }>();
-const navigationHistory = ref<DocumentNavigationLocation[]>([]);
-let treeRenameTimer: number | undefined;
-
-const currentParentId = computed(() => parentStack.value.at(-1)?.id);
-const currentFolder = computed(() => parentStack.value.at(-1));
+const {
+  activeRootKey,
+  canGoBack,
+  canGoParent,
+  clearTreeRenameTimer,
+  currentFolder,
+  currentParentId,
+  handleGoBack,
+  handleGoBreadcrumb,
+  handleGoParent,
+  handleGoRoot,
+  handleOpenFolder,
+  handleSelectTree,
+  parentStack,
+  pushNavigationHistory,
+  setTreeNavigationOptions,
+} = useDocumentNavigation({
+  activateTreeShortcut: () => {
+    treeShortcutActive.value = true;
+  },
+  cancelInlineEditor,
+  canManageTreeFolder,
+  isEditingTreeNode,
+  isGlobalSearch: () => isGlobalSearch.value,
+  loadData,
+  renameFolder: handleRenameFolder,
+  resetAndLoad,
+});
 const scopeOptions = computed<ScopeOption[]>(() => {
   const departChildren = buildDepartScopeOptions(currentDeparts.value);
 
@@ -191,6 +211,20 @@ const {
   fetchDocuments,
   scopeOptions,
 });
+setTreeNavigationOptions({
+  ensureFolderTreePathLoaded,
+  expandedTreeKeys,
+  expandPathKeys,
+  findCachedPath,
+  findFolderByKey,
+  findScopeOption,
+  folderTree,
+  folderTreeCache,
+  getActiveSelectedTreeKey,
+  getSelectedTreeKey,
+  loadFolderTree,
+  selectedTreeKeys,
+});
 const activeScopeOption = computed(
   () => findScopeOption(activeRootKey.value) || scopeOptions.value[0],
 );
@@ -255,8 +289,6 @@ const canPasteCurrentScope = computed(() => {
 const cuttingDocumentIds = computed(() =>
   documentClipboard.value?.mode === 'cut' ? documentClipboard.value.ids : [],
 );
-const canGoParent = computed(() => !isGlobalSearch.value && parentStack.value.length > 0);
-const canGoBack = computed(() => !isGlobalSearch.value && navigationHistory.value.length > 0);
 const selectedTreeFolder = computed(() => {
   const key = selectedTreeKeys.value[0];
   return key && !isScopeRootKey(key) ? findFolderByKey(key) : undefined;
@@ -411,169 +443,6 @@ function resetAndLoad() {
 
 function handleSearch(value: string) {
   keyword.value = value;
-  resetAndLoad();
-}
-
-function getCurrentNavigationLocation(): DocumentNavigationLocation {
-  return {
-    parentStack: [...parentStack.value],
-    rootKey: activeRootKey.value,
-  };
-}
-
-function isSameNavigationLocation(
-  first: DocumentNavigationLocation,
-  second: DocumentNavigationLocation,
-) {
-  return (
-    first.rootKey === second.rootKey &&
-    (first.parentStack.at(-1)?.id || '') === (second.parentStack.at(-1)?.id || '')
-  );
-}
-
-function pushNavigationHistory() {
-  const current = getCurrentNavigationLocation();
-  const last = navigationHistory.value.at(-1);
-  if (!last || !isSameNavigationLocation(last, current)) {
-    navigationHistory.value = [...navigationHistory.value.slice(-49), current];
-  }
-}
-
-async function applyNavigationLocation(location: DocumentNavigationLocation) {
-  cancelInlineEditor();
-  activeRootKey.value = location.rootKey;
-  parentStack.value = [...location.parentStack];
-  selectedTreeKeys.value = [getSelectedTreeKey(location.rootKey, currentParentId.value)];
-  expandedTreeKeys.value = Array.from(
-    new Set([...expandedTreeKeys.value, getScopeRootKey(location.rootKey)]),
-  );
-  expandPathKeys(parentStack.value);
-  await Promise.all([loadData(), loadFolderTree(location.rootKey, false)]);
-  await ensureFolderTreePathLoaded(location.rootKey, parentStack.value);
-  selectedTreeKeys.value = [getSelectedTreeKey(location.rootKey, currentParentId.value)];
-}
-
-async function handleGoBack() {
-  const location = navigationHistory.value.at(-1);
-  if (!location) {
-    return;
-  }
-  navigationHistory.value = navigationHistory.value.slice(0, -1);
-  await applyNavigationLocation(location);
-}
-
-function handleGoParent() {
-  if (!canGoParent.value) {
-    return;
-  }
-  pushNavigationHistory();
-  parentStack.value = parentStack.value.slice(0, -1);
-  selectedTreeKeys.value = [getActiveSelectedTreeKey()];
-  cancelInlineEditor();
-  resetAndLoad();
-}
-
-function clearTreeRenameTimer() {
-  if (treeRenameTimer) {
-    window.clearTimeout(treeRenameTimer);
-    treeRenameTimer = undefined;
-  }
-}
-
-async function handleSelectTree(keys: unknown[], info?: { node?: { key?: string | number } }) {
-  treeShortcutActive.value = true;
-  const key = String(
-    info?.node?.key || keys[0] || selectedTreeKeys.value[0] || getScopeRootKey(activeRootKey.value),
-  );
-  const alreadySelected = selectedTreeKeys.value[0] === key;
-  clearTreeRenameTimer();
-  selectedTreeKeys.value = [key];
-  if (alreadySelected && canManageTreeFolder(key) && !isEditingTreeNode(key)) {
-    const folder = findFolderByKey(key);
-    if (folder) {
-      treeRenameTimer = window.setTimeout(() => {
-        handleRenameFolder(folder);
-        treeRenameTimer = undefined;
-      }, 220);
-      return;
-    }
-  }
-  cancelInlineEditor();
-  if (isScopeRootKey(key)) {
-    const nextRootKey = getScopeFromRootKey(key);
-    const nextRoot = findScopeOption(nextRootKey);
-    if (!nextRoot?.scope) {
-      return;
-    }
-    const nextLocation = { parentStack: [], rootKey: nextRootKey };
-    const currentLocation = getCurrentNavigationLocation();
-    if (!isSameNavigationLocation(currentLocation, nextLocation)) {
-      pushNavigationHistory();
-    }
-    parentStack.value = [];
-    expandedTreeKeys.value = Array.from(new Set([...expandedTreeKeys.value, key]));
-    if (nextRootKey !== activeRootKey.value) {
-      activeRootKey.value = nextRootKey;
-      await Promise.all([loadData(), loadFolderTree()]);
-      return;
-    }
-    resetAndLoad();
-    return;
-  }
-
-  const cachedPath = findCachedPath(key);
-  const selectedRecord = cachedPath?.path.at(-1);
-  const parentPath = selectedRecord?.izFolder === '1'
-    ? cachedPath?.path || []
-    : cachedPath?.path.slice(0, -1) || [];
-  const nextLocation = {
-    parentStack: parentPath,
-    rootKey: cachedPath?.rootKey || activeRootKey.value,
-  };
-  const currentLocation = getCurrentNavigationLocation();
-  if (!isSameNavigationLocation(currentLocation, nextLocation)) {
-    pushNavigationHistory();
-  }
-  if (cachedPath) {
-    activeRootKey.value = cachedPath.rootKey;
-    folderTree.value = folderTreeCache.value[cachedPath.rootKey] || [];
-  }
-  parentStack.value = nextLocation.parentStack;
-  expandPathKeys(parentStack.value);
-  resetAndLoad();
-}
-
-async function handleOpenFolder(record: DocumentFileInfo) {
-  if (!record.id || record.izFolder !== '1') {
-    return;
-  }
-  cancelInlineEditor();
-  pushNavigationHistory();
-  parentStack.value = [...parentStack.value, record];
-  selectedTreeKeys.value = [getActiveSelectedTreeKey()];
-  expandPathKeys(parentStack.value);
-  await Promise.all([loadData(), ensureFolderTreePathLoaded(activeRootKey.value, parentStack.value)]);
-}
-
-function handleGoRoot() {
-  if (parentStack.value.length === 0) {
-    return;
-  }
-  pushNavigationHistory();
-  parentStack.value = [];
-  selectedTreeKeys.value = [getScopeRootKey(activeRootKey.value)];
-  cancelInlineEditor();
-  resetAndLoad();
-}
-
-function handleGoBreadcrumb(index: number) {
-  if (index === parentStack.value.length - 1) {
-    return;
-  }
-  pushNavigationHistory();
-  parentStack.value = parentStack.value.slice(0, index + 1);
-  selectedTreeKeys.value = [getActiveSelectedTreeKey()];
-  cancelInlineEditor();
   resetAndLoad();
 }
 
