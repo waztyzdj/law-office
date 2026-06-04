@@ -25,7 +25,6 @@ import {
   Spin,
   Tag,
   Tree,
-  message,
 } from 'ant-design-vue';
 
 import {
@@ -43,23 +42,18 @@ import DocumentItemActionMenu from './components/DocumentItemActionMenu.vue';
 import DocumentOnlyOfficePreviewModal from './components/DocumentOnlyOfficePreviewModal.vue';
 import DocumentShareDrawer from './components/DocumentShareDrawer.vue';
 import {
-  canMove as canMoveDocument,
-  isVirtualBusinessItem,
-} from './components/documentExplorerUtils';
-import {
   BUSINESS_RECORD_VIEW_STORE_TYPE,
   BUSINESS_VIEW_STORE_TYPE,
   DOCUMENT_UPLOAD_ACCEPT,
 } from './constants';
 import {
   buildDepartScopeOptions,
-  getScopeRootKey,
-  isScopeRootKey,
 } from './tree';
 import { useDocumentNavigation } from './hooks/useDocumentNavigation';
 import { useDocumentActions } from './hooks/useDocumentActions';
 import { useDocumentSort } from './hooks/useDocumentSort';
 import { useDocumentTree } from './hooks/useDocumentTree';
+import { useDocumentTreeInteractions } from './hooks/useDocumentTreeInteractions';
 import type {
   DocumentBatchAction,
   ScopeOption,
@@ -81,7 +75,6 @@ const {
   handleChangeDocumentSortOrder,
   isActiveDocumentSort,
 } = useDocumentSort();
-const treeShortcutActive = ref(false);
 const currentDeparts = ref<CurrentUserOrganization['departs']>([]);
 const currentTenant = ref<CurrentUserTenant>();
 const shareDrawerRef = ref<InstanceType<typeof DocumentShareDrawer>>();
@@ -106,7 +99,7 @@ const {
   setTreeNavigationOptions,
 } = useDocumentNavigation({
   activateTreeShortcut: () => {
-    treeShortcutActive.value = true;
+    activateTreeShortcut();
   },
   cancelInlineEditor,
   canManageTreeFolder,
@@ -251,10 +244,6 @@ const canUploadCurrentScope = computed(
       (scope.value === 'starred' && Boolean(currentFolder.value?.ownerFlag)) ||
       (Boolean(activeSharedTarget.value) && (!currentFolder.value || Boolean(currentFolder.value.ownerFlag)))),
 );
-const selectedTreeFolder = computed(() => {
-  const key = selectedTreeKeys.value[0];
-  return key && !isScopeRootKey(key) ? findFolderByKey(key) : undefined;
-});
 const currentScopeTitle = computed(
   () => activeScopeOption.value?.title || '根目录',
 );
@@ -292,68 +281,6 @@ function canCreateInsideFolder(record?: DocumentFileInfo) {
     );
   }
   return canManageFolder(record);
-}
-
-function canManageTreeFolder(key: string) {
-  const record = findFolderByKey(key);
-  return !isScopeRootKey(key) && record?.izFolder === '1' && canManageFolder(record);
-}
-
-function canCreateInTreeFolder(key: string) {
-  return !isScopeRootKey(key) && canCreateInsideFolder(findFolderByKey(key));
-}
-
-function canShowTreeContextMenu(key: string) {
-  return canManageTreeFolder(key) || canCreateInTreeFolder(key);
-}
-
-function getTreeContextRecords(record?: DocumentFileInfo) {
-  return record?.id ? [record] : [];
-}
-
-function getTreeCopyableRecords(record?: DocumentFileInfo) {
-  return getTreeContextRecords(record).filter(
-    (item) => item.id && scope.value !== 'trash' && !isVirtualBusinessItem(item),
-  );
-}
-
-function getTreeCuttableRecords(record?: DocumentFileInfo) {
-  return getTreeContextRecords(record).filter((item) =>
-    canMoveDocument(item, documentActionContext.value),
-  );
-}
-
-function getTreeDownloadableRecords(record?: DocumentFileInfo) {
-  return getTreeContextRecords(record).filter((item) => item.canDownload && item.izFolder !== '1');
-}
-
-function getTreeDeletableRecords(record?: DocumentFileInfo) {
-  return getTreeContextRecords(record).filter(
-    (item) => canManageFolder(item) && scope.value !== 'trash' && scope.value !== 'business',
-  );
-}
-
-function canDropToTreeTarget(key: string) {
-  if (scope.value === 'trash') {
-    return false;
-  }
-  if (isScopeRootKey(key)) {
-    return !isBusinessScope.value && key === getScopeRootKey(activeRootKey.value);
-  }
-  const target = findFolderByKey(key);
-  if (!target?.id) {
-    return false;
-  }
-  if (isSharedInboxScope.value) {
-    return Boolean(target.ownerFlag) && target.storeType === 'shared_view';
-  }
-  if (isBusinessScope.value) {
-    return (
-      target.storeType === BUSINESS_RECORD_VIEW_STORE_TYPE ||
-      (Boolean(target.ownerFlag) && target.storeType === BUSINESS_VIEW_STORE_TYPE)
-    );
-  }
-  return Boolean(target.ownerFlag);
 }
 
 const documentActions = useDocumentActions({
@@ -458,6 +385,100 @@ function submitInlineName() {
   void documentActions.submitInlineName();
 }
 
+const documentTreeInteractions = useDocumentTreeInteractions({
+  activeRootKey,
+  canCreateInsideFolder,
+  canManageFolder,
+  documentActionContext,
+  ensureFolderTreePathLoaded,
+  expandPathKeys,
+  findCachedPath,
+  findFolderByKey,
+  getActiveSelectedTreeKey,
+  handleBatchAction,
+  handleBatchMove,
+  handleCreateFolder,
+  handleDeleteFolder,
+  handleMove,
+  handlePasteToTreeFolder,
+  handleRenameFolder,
+  inlineEditor,
+  isBusinessScope,
+  isSharedInboxScope,
+  loadData,
+  loading,
+  moving,
+  parentStack,
+  pushNavigationHistory,
+  rememberDocumentClipboard,
+  scope,
+  selectedTreeKeys,
+  treeLoading,
+});
+function activateTreeShortcut() {
+  documentTreeInteractions.activateTreeShortcut();
+}
+
+function canDropToTreeTarget(key: string) {
+  return documentTreeInteractions.canDropToTreeTarget(key);
+}
+
+function canManageTreeFolder(key: string) {
+  return documentTreeInteractions.canManageTreeFolder(key);
+}
+
+function canShowTreeContextMenu(key: string) {
+  return documentTreeInteractions.canShowTreeContextMenu(key);
+}
+
+function deactivateTreeShortcut() {
+  documentTreeInteractions.deactivateTreeShortcut();
+}
+
+function getTreeCopyableRecords(record?: DocumentFileInfo) {
+  return documentTreeInteractions.getTreeCopyableRecords(record);
+}
+
+function getTreeCuttableRecords(record?: DocumentFileInfo) {
+  return documentTreeInteractions.getTreeCuttableRecords(record);
+}
+
+function getTreeDeletableRecords(record?: DocumentFileInfo) {
+  return documentTreeInteractions.getTreeDeletableRecords(record);
+}
+
+function getTreeDownloadableRecords(record?: DocumentFileInfo) {
+  return documentTreeInteractions.getTreeDownloadableRecords(record);
+}
+
+function handleCreateFolderIn(record?: DocumentFileInfo) {
+  void documentTreeInteractions.handleCreateFolderIn(record);
+}
+
+function handleDropToTree(event: DragEvent, targetKey: string) {
+  documentTreeInteractions.handleDropToTree(event, targetKey);
+}
+
+function handleTreeDragOver(event: DragEvent, targetKey: string) {
+  documentTreeInteractions.handleTreeDragOver(event, targetKey);
+}
+
+function handleTreeDragStart(event: DragEvent, key: string) {
+  documentTreeInteractions.handleTreeDragStart(event, key);
+}
+
+function handleTreeMenuBatchAction(event: DocumentBatchAction, record?: DocumentFileInfo) {
+  documentTreeInteractions.handleTreeMenuBatchAction(event, record);
+}
+
+function handleTreeShortcutKeydown(event: KeyboardEvent) {
+  documentTreeInteractions.handleTreeShortcutKeydown(event);
+}
+
+function isEditingTreeNode(key: string) {
+  return documentTreeInteractions.isEditingTreeNode(key);
+}
+
 async function fetchDocuments(
   parentId?: string,
   searchKeyword?: string,
@@ -510,190 +531,6 @@ function handleSearch(value: string) {
   resetAndLoad();
 }
 
-async function handleCreateFolderIn(record?: DocumentFileInfo) {
-  if (!record?.id || !canCreateInsideFolder(record)) {
-    return;
-  }
-  pushNavigationHistory();
-  parentStack.value = [...parentStack.value, record];
-  selectedTreeKeys.value = [getActiveSelectedTreeKey()];
-  expandPathKeys(parentStack.value);
-  await Promise.all([loadData(), ensureFolderTreePathLoaded(activeRootKey.value, parentStack.value)]);
-  handleCreateFolder(record.id);
-}
-
-function isEditingTreeNode(key: string) {
-  const record = findFolderByKey(key);
-  return (
-    inlineEditor.value?.mode === 'rename' &&
-    inlineEditor.value.record?.id === record?.id
-  );
-}
-
-function handleTreeMenuBatchAction(event: DocumentBatchAction, record?: DocumentFileInfo) {
-  const records =
-    event === 'download'
-      ? getTreeDownloadableRecords(record)
-      : event === 'delete'
-        ? getTreeDeletableRecords(record)
-        : event === 'cut'
-          ? getTreeCuttableRecords(record)
-          : getTreeCopyableRecords(record);
-  handleBatchAction(event, records);
-}
-
-function isEditableShortcutTarget(target: EventTarget | null) {
-  if (!(target instanceof HTMLElement)) {
-    return false;
-  }
-  const tagName = target.tagName.toLowerCase();
-  return (
-    target.isContentEditable ||
-    tagName === 'input' ||
-    tagName === 'textarea' ||
-    tagName === 'select' ||
-    Boolean(target.closest('[contenteditable="true"], .ant-input, .ant-select'))
-  );
-}
-
-function handleTreeShortcutKeydown(event: KeyboardEvent) {
-  if (
-    !treeShortcutActive.value ||
-    loading.value ||
-    moving.value ||
-    treeLoading.value ||
-    isEditableShortcutTarget(event.target)
-  ) {
-    return;
-  }
-  const folder = selectedTreeFolder.value;
-  if (!folder?.id) {
-    return;
-  }
-  const key = event.key.toLowerCase();
-  if (key === 'f2') {
-    event.preventDefault();
-    event.stopImmediatePropagation();
-    handleRenameFolder(folder);
-    return;
-  }
-  if (key === 'delete' || (event.metaKey && key === 'backspace')) {
-    event.preventDefault();
-    event.stopImmediatePropagation();
-    handleDeleteFolder(folder);
-    return;
-  }
-  const shortcutPressed = event.ctrlKey || event.metaKey;
-  if (!shortcutPressed || event.altKey) {
-    return;
-  }
-  if (event.shiftKey && key === 'n') {
-    event.preventDefault();
-    event.stopImmediatePropagation();
-    void handleCreateFolderIn(folder);
-    return;
-  }
-  if (key === 'x') {
-    if (!canManageFolder(folder)) {
-      return;
-    }
-    event.preventDefault();
-    event.stopImmediatePropagation();
-    rememberDocumentClipboard('cut', [folder]);
-    return;
-  }
-  if (key === 'c') {
-    if (!canManageFolder(folder)) {
-      return;
-    }
-    event.preventDefault();
-    event.stopImmediatePropagation();
-    rememberDocumentClipboard('copy', [folder]);
-    return;
-  }
-  if (key === 'v') {
-    event.preventDefault();
-    event.stopImmediatePropagation();
-    void handlePasteToTreeFolder(folder);
-  }
-}
-
-function getDragSourceIds(event: DragEvent) {
-  const rawIds = event.dataTransfer?.getData('application/x-document-ids');
-  if (rawIds) {
-    try {
-      const parsed = JSON.parse(rawIds);
-      if (Array.isArray(parsed)) {
-        return parsed.filter((id): id is string => typeof id === 'string' && id.length > 0);
-      }
-    } catch {
-      // Fallback to the single-item payload below.
-    }
-  }
-  const sourceId = event.dataTransfer?.getData('application/x-document-id');
-  return sourceId ? [sourceId] : [];
-}
-
-function handleDropToTree(event: DragEvent, targetKey: string) {
-  event.preventDefault();
-  const targetFolder = isScopeRootKey(targetKey) ? undefined : findFolderByKey(targetKey);
-  const targetParentId = isScopeRootKey(targetKey) ? undefined : targetFolder?.id;
-  const sourceIds = getDragSourceIds(event).filter((sourceId) => sourceId !== targetParentId);
-  if (sourceIds.length === 0 || scope.value === 'trash') {
-    return;
-  }
-  if (!canDropToTreeTarget(targetKey)) {
-    return;
-  }
-  const targetPath = isScopeRootKey(targetKey)
-    ? []
-    : findCachedPath(targetKey)?.path || [];
-  if (targetPath.some((item) => item.id && sourceIds.includes(item.id))) {
-    message.warning('不能移动到自身或子文件夹');
-    return;
-  }
-  if (sourceIds.length === 1) {
-    const sourceId = sourceIds[0];
-    if (!sourceId) {
-      return;
-    }
-    void handleMove(sourceId, targetParentId);
-    return;
-  }
-  void handleBatchMove(sourceIds, targetParentId);
-}
-
-function handleTreeDragStart(event: DragEvent, key: string) {
-  const folder = findFolderByKey(key);
-  if (!folder?.id || !canManageTreeFolder(key) || moving.value) {
-    event.preventDefault();
-    return;
-  }
-  event.dataTransfer?.setData('application/x-document-id', folder.id);
-  event.dataTransfer?.setData('text/plain', folder.fileName || '');
-  if (event.dataTransfer) {
-    event.dataTransfer.effectAllowed = 'move';
-  }
-}
-
-function isDocumentDrag(event: DragEvent) {
-  const types = Array.from(event.dataTransfer?.types || []);
-  return types.includes('application/x-document-id') || types.includes('application/x-document-ids');
-}
-
-function handleTreeDragOver(event: DragEvent, targetKey: string) {
-  if (!isDocumentDrag(event) || scope.value === 'trash') {
-    return;
-  }
-  if (!canDropToTreeTarget(targetKey)) {
-    return;
-  }
-  event.preventDefault();
-  if (event.dataTransfer) {
-    event.dataTransfer.dropEffect = 'move';
-  }
-}
-
 async function loadShareRootContext() {
   const [organization, tenants] = await Promise.all([
     getCurrentUserOrganization(),
@@ -727,7 +564,7 @@ onBeforeUnmount(() => {
       <Card
         class="document-tree-card"
         :body-style="{ padding: '12px' }"
-        @mousedown.capture="treeShortcutActive = true"
+        @mousedown.capture="activateTreeShortcut"
       >
         <InputSearch
           v-model:value="keyword"
@@ -818,7 +655,7 @@ onBeforeUnmount(() => {
       <Card
         class="document-content-card"
         :body-style="{ padding: '16px' }"
-        @mousedown.capture="treeShortcutActive = false"
+        @mousedown.capture="deactivateTreeShortcut"
       >
         <div class="document-header">
           <div class="document-header__main">

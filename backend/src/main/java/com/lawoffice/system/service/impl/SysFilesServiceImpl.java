@@ -556,10 +556,7 @@ public class SysFilesServiceImpl extends BaseServiceImpl<SysFilesMapper, SysFile
             }
             validateNotMoveToDescendant(file.getId(), parentId);
         }
-        file.setParentId(parentId);
-        file.setIzRootFolder(StringUtils.hasText(parentId) ? FLAG_NO : FLAG_YES);
-        fillUpdate(file, username);
-        baseMapper.updateById(file);
+        updateDocumentParent(file, parentId, username);
         return buildDocumentVO(file, context);
     }
 
@@ -2345,10 +2342,7 @@ public class SysFilesServiceImpl extends BaseServiceImpl<SysFilesMapper, SysFile
             }
             validateNotMoveToDescendant(folder.getId(), parentId);
         }
-        folder.setParentId(parentId);
-        folder.setIzRootFolder(StringUtils.hasText(parentId) ? FLAG_NO : FLAG_YES);
-        fillUpdate(folder, context.username());
-        baseMapper.updateById(folder);
+        updateDocumentParent(folder, parentId, context.username());
     }
 
     private void moveBusinessPlacement(UserAccessContext context, SysFiles file, String parentId) {
@@ -2537,6 +2531,20 @@ public class SysFilesServiceImpl extends BaseServiceImpl<SysFilesMapper, SysFile
     private void fillUpdate(SysFiles file, String username) {
         file.setUpdateBy(username);
         file.setUpdateTime(LocalDateTime.now());
+    }
+
+    private void updateDocumentParent(SysFiles file, String parentId, String username) {
+        String rootFlag = StringUtils.hasText(parentId) ? FLAG_NO : FLAG_YES;
+        fillUpdate(file, username);
+        baseMapper.update(null, Wrappers.lambdaUpdate(SysFiles.class)
+                .eq(SysFiles::getId, file.getId())
+                .eq(SysFiles::getTenantId, file.getTenantId())
+                .set(SysFiles::getParentId, parentId)
+                .set(SysFiles::getIzRootFolder, rootFlag)
+                .set(SysFiles::getUpdateBy, file.getUpdateBy())
+                .set(SysFiles::getUpdateTime, file.getUpdateTime()));
+        file.setParentId(parentId);
+        file.setIzRootFolder(rootFlag);
     }
 
     private SysFiles getActiveFile(String fileId) {
