@@ -170,7 +170,7 @@ defineExpose<DocumentContentViewExpose>({
             @batch-action="$emit('contextBatchAction', $event, item)"
           >
             <Button
-              v-if="scope !== 'shared' && canShowItemActionMenu(item)"
+              v-if="canShowItemActionMenu(item)"
               class="document-list-row__more"
               size="small"
               type="text"
