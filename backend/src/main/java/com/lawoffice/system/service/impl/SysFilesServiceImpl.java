@@ -980,7 +980,7 @@ public class SysFilesServiceImpl extends BaseServiceImpl<SysFilesMapper, SysFile
     }
 
     private PageVO<DocumentFileVO> pageSharedByMeDocuments(UserAccessContext context, DocumentPageReq pageReq) {
-        List<String> sharedIds = findFileIdsSharedByOwner(context);
+        List<String> sharedIds = filterSharedRootFileIds(findFileIdsSharedByOwner(context), context);
         List<SysFiles> sharedByMeFolders = selectSharedByMeFolders(context, null);
         List<SysFiles> sharedFiles = sharedIds.isEmpty()
                 ? Collections.emptyList()
