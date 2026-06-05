@@ -13,6 +13,19 @@ interface SelectionBoxState {
   startY: number;
 }
 
+interface SelectionItemRect {
+  bottom: number;
+  id: string;
+  left: number;
+  right: number;
+  top: number;
+}
+
+interface SelectionViewportRect {
+  left: number;
+  top: number;
+}
+
 interface UseDocumentSelectionOptions {
   canEditItem: (record: DocumentFileInfo) => boolean;
   canMove: (record: DocumentFileInfo) => boolean;
@@ -43,6 +56,10 @@ export function useDocumentSelection(options: UseDocumentSelectionOptions) {
     startY: 0,
   });
   let renameTimer: number | undefined;
+  let selectionFrame = 0;
+  let selectionItemRects: SelectionItemRect[] = [];
+  let selectionViewportRect: SelectionViewportRect | undefined;
+  let latestSelectionPoint: { x: number; y: number } | undefined;
 
   const selectionBoxStyle = computed(() => {
     const left = Math.min(selectionBox.value.startX, selectionBox.value.currentX);
@@ -288,7 +305,7 @@ export function useDocumentSelection(options: UseDocumentSelectionOptions) {
     if (!body) {
       return { x: 0, y: 0 };
     }
-    const rect = body.getBoundingClientRect();
+    const rect = selectionViewportRect || body.getBoundingClientRect();
     return {
       x: event.clientX - rect.left + body.scrollLeft,
       y: event.clientY - rect.top + body.scrollTop,
@@ -318,6 +335,7 @@ export function useDocumentSelection(options: UseDocumentSelectionOptions) {
     }
     event.preventDefault();
     clearRenameTimer();
+    cacheSelectionItemRects();
     const point = toBodyPoint(event);
     selectionBox.value = {
       currentX: point.x,
@@ -337,7 +355,20 @@ export function useDocumentSelection(options: UseDocumentSelectionOptions) {
     if (!selecting.value) {
       return;
     }
-    const point = toBodyPoint(event);
+    latestSelectionPoint = toBodyPoint(event);
+    if (selectionFrame) {
+      return;
+    }
+    selectionFrame = window.requestAnimationFrame(() => {
+      selectionFrame = 0;
+      if (!selecting.value || !latestSelectionPoint) {
+        return;
+      }
+      applySelectionPoint(latestSelectionPoint);
+    });
+  }
+
+  function applySelectionPoint(point: { x: number; y: number }) {
     selectionBox.value = {
       ...selectionBox.value,
       currentX: point.x,
@@ -356,34 +387,76 @@ export function useDocumentSelection(options: UseDocumentSelectionOptions) {
     if (!selecting.value) {
       return;
     }
+    if (selectionFrame) {
+      window.cancelAnimationFrame(selectionFrame);
+      selectionFrame = 0;
+    }
+    if (latestSelectionPoint) {
+      applySelectionPoint(latestSelectionPoint);
+    }
     selecting.value = false;
     suppressNextBodyClick.value = selectionMoved.value;
+    latestSelectionPoint = undefined;
+    selectionItemRects = [];
+    selectionViewportRect = undefined;
     window.removeEventListener('mousemove', handleSelectionMouseMove);
     window.removeEventListener('mouseup', handleSelectionMouseUp);
   }
 
-  function updateSelectionByBox() {
+  function cacheSelectionItemRects() {
     const body = explorerBodyRef.value;
     if (!body) {
+      selectionItemRects = [];
+      selectionViewportRect = undefined;
       return;
     }
     const bodyRect = body.getBoundingClientRect();
+    selectionViewportRect = {
+      left: bodyRect.left,
+      top: bodyRect.top,
+    };
+    selectionItemRects = Array.from(
+      body.querySelectorAll<HTMLElement>('.document-explorer-item[data-document-id]'),
+    ).map((tile) => {
+      const tileRect = tile.getBoundingClientRect();
+      const tileLeft = tileRect.left - bodyRect.left + body.scrollLeft;
+      const tileTop = tileRect.top - bodyRect.top + body.scrollTop;
+      return {
+        bottom: tileTop + tileRect.height,
+        id: tile.dataset.documentId || '',
+        left: tileLeft,
+        right: tileLeft + tileRect.width,
+        top: tileTop,
+      };
+    }).filter((item) => item.id);
+  }
+
+  function areSelectionSetsEqual(first: Set<string>, second: Set<string>) {
+    if (first.size !== second.size) {
+      return false;
+    }
+    for (const item of first) {
+      if (!second.has(item)) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  function updateSelectionByBox() {
     const left = Math.min(selectionBox.value.startX, selectionBox.value.currentX);
     const top = Math.min(selectionBox.value.startY, selectionBox.value.currentY);
     const right = Math.max(selectionBox.value.startX, selectionBox.value.currentX);
     const bottom = Math.max(selectionBox.value.startY, selectionBox.value.currentY);
     const nextSelected = new Set<string>();
-    for (const tile of body.querySelectorAll<HTMLElement>('.document-explorer-item[data-document-id]')) {
-      const tileRect = tile.getBoundingClientRect();
-      const tileLeft = tileRect.left - bodyRect.left + body.scrollLeft;
-      const tileTop = tileRect.top - bodyRect.top + body.scrollTop;
-      const tileRight = tileLeft + tileRect.width;
-      const tileBottom = tileTop + tileRect.height;
-      const intersects = tileLeft <= right && tileRight >= left && tileTop <= bottom && tileBottom >= top;
-      const id = tile.dataset.documentId;
-      if (intersects && id) {
-        nextSelected.add(id);
+    for (const item of selectionItemRects) {
+      const intersects = item.left <= right && item.right >= left && item.top <= bottom && item.bottom >= top;
+      if (intersects) {
+        nextSelected.add(item.id);
       }
+    }
+    if (areSelectionSetsEqual(selectedIds.value, nextSelected)) {
+      return;
     }
     selectedIds.value = nextSelected;
     selectionAnchorKey.value = Array.from(nextSelected).at(-1);
@@ -391,6 +464,13 @@ export function useDocumentSelection(options: UseDocumentSelectionOptions) {
 
   function cleanupSelectionListeners() {
     clearRenameTimer();
+    if (selectionFrame) {
+      window.cancelAnimationFrame(selectionFrame);
+      selectionFrame = 0;
+    }
+    selectionItemRects = [];
+    latestSelectionPoint = undefined;
+    selectionViewportRect = undefined;
     window.removeEventListener('mousemove', handleSelectionMouseMove);
     window.removeEventListener('mouseup', handleSelectionMouseUp);
   }
