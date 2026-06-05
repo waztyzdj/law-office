@@ -14,7 +14,10 @@ import org.springframework.util.StringUtils;
 
 import java.util.Collection;
 import java.util.Collections;
+import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 @Component
@@ -71,6 +74,55 @@ public class MessageBusinessDocumentProvider implements IBusinessDocumentProvide
                     && message.getSenderDeleteFlag() == MessageConstants.FLAG_NO;
         }
         return hasReceivedMessageAccess(bizId, context);
+    }
+
+    @Override
+    public Set<String> filterAccessibleBizIds(
+            Collection<String> bizIds,
+            BusinessDocumentAccessContext context) {
+        if (bizIds == null || bizIds.isEmpty()) {
+            return Collections.emptySet();
+        }
+        Set<String> requestedIds = bizIds.stream()
+                .filter(StringUtils::hasText)
+                .collect(Collectors.toCollection(LinkedHashSet::new));
+        if (requestedIds.isEmpty()) {
+            return Collections.emptySet();
+        }
+
+        List<SysMessage> messages = messageMapper.selectList(Wrappers.lambdaQuery(SysMessage.class)
+                .select(SysMessage::getId, SysMessage::getSenderId, SysMessage::getSenderDeleteFlag)
+                .in(SysMessage::getId, requestedIds)
+                .eq(SysMessage::getTenantId, context.tenantId())
+                .eq(SysMessage::getDeleteFlag, 0));
+
+        Set<String> accessibleIds = new LinkedHashSet<>();
+        Set<String> receivedCandidateIds = new LinkedHashSet<>();
+        for (SysMessage message : messages) {
+            if (context.userId().equals(message.getSenderId())) {
+                if (message.getSenderDeleteFlag() != null
+                        && message.getSenderDeleteFlag() == MessageConstants.FLAG_NO) {
+                    accessibleIds.add(message.getId());
+                }
+                continue;
+            }
+            receivedCandidateIds.add(message.getId());
+        }
+
+        if (!receivedCandidateIds.isEmpty()) {
+            receiverMapper.selectList(Wrappers.lambdaQuery(SysMessageReceiver.class)
+                            .select(SysMessageReceiver::getMessageId)
+                            .in(SysMessageReceiver::getMessageId, receivedCandidateIds)
+                            .eq(SysMessageReceiver::getTenantId, context.tenantId())
+                            .eq(SysMessageReceiver::getReceiverId, context.userId())
+                            .eq(SysMessageReceiver::getDeleteFlag, 0))
+                    .stream()
+                    .map(SysMessageReceiver::getMessageId)
+                    .filter(StringUtils::hasText)
+                    .forEach(accessibleIds::add);
+        }
+
+        return accessibleIds;
     }
 
     private SysMessage getActiveTenantMessage(String messageId, BusinessDocumentAccessContext context) {

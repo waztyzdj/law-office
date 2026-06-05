@@ -1425,9 +1425,41 @@ public class SysFilesServiceImpl extends BaseServiceImpl<SysFilesMapper, SysFile
                 .toList();
         Map<String, SysFiles> fileMap = selectActiveFilesByIds(context, fileIds).stream()
                 .collect(Collectors.toMap(SysFiles::getId, file -> file, (left, right) -> left));
+        Map<String, Set<String>> accessibleBizIds = resolveAccessibleBusinessBizIds(relations, fileMap, context);
         return relations.stream()
-                .filter(relation -> hasBusinessRelationAccess(relation, fileMap.get(relation.getFileId()), context))
+                .filter(relation -> fileMap.containsKey(relation.getFileId()))
+                .filter(relation -> accessibleBizIds.getOrDefault(relation.getBizType(), Collections.emptySet())
+                        .contains(relation.getBizId()))
                 .toList();
+    }
+
+    private Map<String, Set<String>> resolveAccessibleBusinessBizIds(
+            List<SysFileRelation> relations,
+            Map<String, SysFiles> fileMap,
+            UserAccessContext context) {
+        Map<String, Set<String>> bizIdsByType = new LinkedHashMap<>();
+        for (SysFileRelation relation : relations) {
+            if (relation == null
+                    || !StringUtils.hasText(relation.getBizType())
+                    || !StringUtils.hasText(relation.getBizId())
+                    || !fileMap.containsKey(relation.getFileId())) {
+                continue;
+            }
+            bizIdsByType.computeIfAbsent(relation.getBizType(), key -> new LinkedHashSet<>())
+                    .add(relation.getBizId());
+        }
+        Map<String, Set<String>> accessibleBizIds = new LinkedHashMap<>();
+        BusinessDocumentAccessContext accessContext = toBusinessDocumentAccessContext(context);
+        for (Map.Entry<String, Set<String>> entry : bizIdsByType.entrySet()) {
+            IBusinessDocumentProvider provider = findBusinessDocumentProvider(entry.getKey());
+            if (provider == null) {
+                accessibleBizIds.put(entry.getKey(), Collections.emptySet());
+                continue;
+            }
+            Set<String> ids = provider.filterAccessibleBizIds(entry.getValue(), accessContext);
+            accessibleBizIds.put(entry.getKey(), ids == null ? Collections.emptySet() : ids);
+        }
+        return accessibleBizIds;
     }
 
     private boolean hasBusinessRelationAccess(
