@@ -15,7 +15,9 @@ import {
   getScopeFromRootKey,
   getScopeRootKey,
   isScopeRootKey,
+  mergeFolderTreeNodes,
   shouldRenderFolderTree,
+  updateFolderTreeRecord,
   updateFolderTreeNodes,
 } from '../tree';
 import type { FolderTreeNode, ScopeOption } from '../types';
@@ -32,9 +34,9 @@ interface UseDocumentTreeOptions {
 }
 
 export function useDocumentTree(options: UseDocumentTreeOptions) {
-  const folderTree = ref<FolderTreeNode[]>([]);
   const folderTreeCache = ref<Record<string, FolderTreeNode[]>>({});
   const treeLoading = ref(false);
+  const treeRenderKey = ref(0);
   const expandedTreeKeys = ref<string[]>([getScopeRootKey('my')]);
   const selectedTreeKeys = ref<string[]>([getScopeRootKey('my')]);
 
@@ -69,6 +71,10 @@ export function useDocumentTree(options: UseDocumentTreeOptions) {
 
   function getActiveSelectedTreeKey() {
     return getSelectedTreeKey(options.activeRootKey.value, options.currentParentId.value);
+  }
+
+  function selectFolderTreeParent(parentId?: string) {
+    selectedTreeKeys.value = [getSelectedTreeKey(options.activeRootKey.value, parentId)];
   }
 
   function getRootKeyFromFolderNodeKey(key: string) {
@@ -112,21 +118,63 @@ export function useDocumentTree(options: UseDocumentTreeOptions) {
       ...folderTreeCache.value,
       [rootKey]: nodes,
     };
-    if (rootKey === options.activeRootKey.value) {
-      folderTree.value = nodes;
-    }
+    treeRenderKey.value += 1;
   }
 
   function setFolderTreeNodeChildren(rootKey: string, targetKey: string, children: FolderTreeNode[]) {
     const nextTree = updateFolderTreeNodes(folderTreeCache.value[rootKey] || [], targetKey, children);
     setFolderTreeCache(rootKey, nextTree);
+    pruneExpandedTreeKeys();
+    normalizeSelectedTreeKeys();
+  }
+
+  function isExpandableTreeKey(key: string) {
+    if (isScopeRootKey(key)) {
+      return true;
+    }
+    const rootKey = getRootKeyFromFolderNodeKey(key);
+    const node = findFolderTreeNode(folderTreeCache.value[rootKey] || [], key);
+    return Boolean(node && !node.isLeaf && node.children?.length);
+  }
+
+  function pruneExpandedTreeKeys() {
+    expandedTreeKeys.value = expandedTreeKeys.value.filter((key) => isExpandableTreeKey(key));
+  }
+
+  function normalizeSelectedTreeKeys() {
+    const selectedKey = selectedTreeKeys.value[0];
+    if (!selectedKey || isScopeRootKey(selectedKey)) {
+      return;
+    }
+    const rootKey = getRootKeyFromFolderNodeKey(selectedKey);
+    const node = findFolderTreeNode(folderTreeCache.value[rootKey] || [], selectedKey);
+    if (!node) {
+      selectedTreeKeys.value = [getActiveSelectedTreeKey()];
+    }
+  }
+
+  function updateCachedFolderTreeRecord(record: DocumentFileInfo) {
+    if (!record.id || record.izFolder !== '1') {
+      return;
+    }
+    const nextCache = Object.fromEntries(
+      Object.entries(folderTreeCache.value).map(([rootKey, nodes]) => [
+        rootKey,
+        updateFolderTreeRecord(nodes, getFolderNodeKey(rootKey, record.id), record),
+      ]),
+    );
+    folderTreeCache.value = nextCache;
   }
 
   function hasLoadedFolderTreeRoot(rootKey: string) {
     return Object.prototype.hasOwnProperty.call(folderTreeCache.value, rootKey);
   }
 
-  async function loadFolderTree(rootKey = options.activeRootKey.value, updateSelection = true) {
+  async function loadFolderTree(
+    rootKey = options.activeRootKey.value,
+    updateSelection = true,
+    preserveLoadedChildren = false,
+  ) {
     const option = findScopeOption(rootKey);
     if (!option?.scope) {
       return;
@@ -140,8 +188,13 @@ export function useDocumentTree(options: UseDocumentTreeOptions) {
     }
     treeLoading.value = true;
     try {
-      const nextTree = await loadFolderNodes(undefined, option, rootKey);
+      const loadedTree = await loadFolderNodes(undefined, option, rootKey);
+      const nextTree = preserveLoadedChildren
+        ? mergeFolderTreeNodes(loadedTree, folderTreeCache.value[rootKey] || [])
+        : loadedTree;
       setFolderTreeCache(rootKey, nextTree);
+      pruneExpandedTreeKeys();
+      normalizeSelectedTreeKeys();
       if (updateSelection) {
         selectedTreeKeys.value = [getSelectedTreeKey(rootKey, options.currentParentId.value)];
       }
@@ -160,6 +213,26 @@ export function useDocumentTree(options: UseDocumentTreeOptions) {
       await loadFolderTreeNodeChildren(options.activeRootKey.value, options.currentParentId.value);
     }
     selectedTreeKeys.value = [getActiveSelectedTreeKey()];
+  }
+
+  async function refreshFolderTreeChildren(parentId = options.currentParentId.value) {
+    const rootKey = options.activeRootKey.value;
+    const option = findScopeOption(rootKey);
+    if (!option?.scope || !shouldRenderFolderTree(option) || option.scope === 'trash') {
+      selectedTreeKeys.value = [getActiveSelectedTreeKey()];
+      return;
+    }
+    treeLoading.value = true;
+    try {
+      if (parentId) {
+        await loadFolderTreeNodeChildren(rootKey, parentId);
+      } else {
+        await loadFolderTree(rootKey, false, true);
+      }
+      selectedTreeKeys.value = [getActiveSelectedTreeKey()];
+    } finally {
+      treeLoading.value = false;
+    }
   }
 
   async function loadInitialFolderTrees() {
@@ -219,6 +292,7 @@ export function useDocumentTree(options: UseDocumentTreeOptions) {
 
   function expandPathKeys(path: DocumentFileInfo[]) {
     const keys = path
+      .slice(0, -1)
       .map((item) => getFolderNodeKey(options.activeRootKey.value, item.id))
       .filter(Boolean) as string[];
     expandedTreeKeys.value = Array.from(
@@ -233,8 +307,6 @@ export function useDocumentTree(options: UseDocumentTreeOptions) {
     findCachedPath,
     findFolderByKey,
     findScopeOption,
-    folderTree,
-    folderTreeCache,
     getActiveSelectedTreeKey,
     getRootKeyFromFolderNodeKey,
     getSelectedTreeKey,
@@ -243,8 +315,12 @@ export function useDocumentTree(options: UseDocumentTreeOptions) {
     loadFolderTree,
     loadInitialFolderTrees,
     reloadCachedFolderTrees,
+    refreshFolderTreeChildren,
+    selectFolderTreeParent,
     selectedTreeKeys,
     treeData,
     treeLoading,
+    treeRenderKey,
+    updateCachedFolderTreeRecord,
   };
 }

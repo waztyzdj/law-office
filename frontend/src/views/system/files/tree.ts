@@ -112,10 +112,28 @@ export function buildFolderTreeNode(
   return {
     children: children && children.length > 0 ? children : undefined,
     file: record,
-    isLeaf: children ? children.length === 0 : record.hasChild === false,
+    isLeaf: children ? children.length === 0 : record.hasChild !== true,
     key: getFolderNodeKey(rootKey, record.id),
     title: record.fileName || '未命名文件夹',
   };
+}
+
+export function mergeFolderTreeNodes(
+  nextNodes: FolderTreeNode[],
+  previousNodes: FolderTreeNode[] = [],
+): FolderTreeNode[] {
+  const previousNodeMap = new Map(previousNodes.map((node) => [node.key, node]));
+  return nextNodes.map((nextNode) => {
+    const previousNode = previousNodeMap.get(nextNode.key);
+    if (nextNode.isLeaf || !previousNode?.children?.length) {
+      return nextNode;
+    }
+    return {
+      ...nextNode,
+      children: previousNode.children,
+      isLeaf: false,
+    };
+  });
 }
 
 export function updateFolderTreeNodes(
@@ -125,10 +143,11 @@ export function updateFolderTreeNodes(
 ): FolderTreeNode[] {
   return nodes.map((node) => {
     if (node.key === targetKey) {
+      const nextChildren = mergeFolderTreeNodes(children, node.children || []);
       return {
         ...node,
-        children: children.length > 0 ? children : undefined,
-        isLeaf: children.length === 0,
+        children: nextChildren.length > 0 ? nextChildren : undefined,
+        isLeaf: nextChildren.length === 0,
       };
     }
     if (!node.children?.length) {
@@ -137,6 +156,35 @@ export function updateFolderTreeNodes(
     return {
       ...node,
       children: updateFolderTreeNodes(node.children, targetKey, children),
+    };
+  });
+}
+
+export function updateFolderTreeRecord(
+  nodes: FolderTreeNode[],
+  targetKey: string,
+  record: DocumentFileInfo,
+): FolderTreeNode[] {
+  return nodes.map((node) => {
+    if (node.key === targetKey) {
+      const file = {
+        ...node.file,
+        ...record,
+      };
+      const hasLoadedChildren = Array.isArray(node.children);
+      return {
+        ...node,
+        file,
+        isLeaf: hasLoadedChildren ? node.children?.length === 0 : file.hasChild !== true,
+        title: file.fileName || node.title,
+      };
+    }
+    if (!node.children?.length) {
+      return node;
+    }
+    return {
+      ...node,
+      children: updateFolderTreeRecord(node.children, targetKey, record),
     };
   });
 }

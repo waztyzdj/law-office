@@ -1,6 +1,6 @@
 import type { Ref } from 'vue';
 import type { DocumentFileInfo } from '#/api/system/document';
-import type { DocumentNavigationLocation, FolderTreeNode, ScopeOption } from '../types';
+import type { DocumentNavigationLocation, ScopeOption } from '../types';
 
 import { computed, ref } from 'vue';
 
@@ -18,11 +18,8 @@ interface CachedFolderPath {
 interface UseDocumentNavigationOptions {
   activateTreeShortcut: () => void;
   cancelInlineEditor: () => void;
-  canManageTreeFolder: (key: string) => boolean;
-  isEditingTreeNode: (key: string) => boolean;
   isGlobalSearch: () => boolean;
   loadData: () => Promise<void>;
-  renameFolder: (record: DocumentFileInfo) => void;
   resetAndLoad: () => void;
 }
 
@@ -31,10 +28,7 @@ interface DocumentNavigationTreeOptions {
   expandedTreeKeys: Ref<string[]>;
   expandPathKeys: (path: DocumentFileInfo[]) => void;
   findCachedPath: (key: string) => CachedFolderPath | undefined;
-  findFolderByKey: (key: string) => DocumentFileInfo | undefined;
   findScopeOption: (key: string) => ScopeOption | undefined;
-  folderTree: Ref<FolderTreeNode[]>;
-  folderTreeCache: Ref<Record<string, FolderTreeNode[]>>;
   getActiveSelectedTreeKey: () => string;
   getSelectedTreeKey: (rootKey: string, fileId?: string) => string;
   loadFolderTree: (rootKey?: string, updateSelection?: boolean) => Promise<void>;
@@ -46,7 +40,6 @@ export function useDocumentNavigation(options: UseDocumentNavigationOptions) {
   const navigationHistory = ref<DocumentNavigationLocation[]>([]);
   const parentStack = ref<DocumentFileInfo[]>([]);
   let treeOptions: DocumentNavigationTreeOptions | undefined;
-  let treeRenameTimer: number | undefined;
 
   const currentParentId = computed(() => parentStack.value.at(-1)?.id);
   const currentFolder = computed(() => parentStack.value.at(-1));
@@ -125,32 +118,13 @@ export function useDocumentNavigation(options: UseDocumentNavigationOptions) {
     options.resetAndLoad();
   }
 
-  function clearTreeRenameTimer() {
-    if (treeRenameTimer) {
-      window.clearTimeout(treeRenameTimer);
-      treeRenameTimer = undefined;
-    }
-  }
-
   async function handleSelectTree(keys: unknown[], info?: { node?: { key?: string | number } }) {
     const tree = getTreeOptions();
     options.activateTreeShortcut();
     const key = String(
       info?.node?.key || keys[0] || tree.selectedTreeKeys.value[0] || getScopeRootKey(activeRootKey.value),
     );
-    const alreadySelected = tree.selectedTreeKeys.value[0] === key;
-    clearTreeRenameTimer();
     tree.selectedTreeKeys.value = [key];
-    if (alreadySelected && options.canManageTreeFolder(key) && !options.isEditingTreeNode(key)) {
-      const folder = tree.findFolderByKey(key);
-      if (folder) {
-        treeRenameTimer = window.setTimeout(() => {
-          options.renameFolder(folder);
-          treeRenameTimer = undefined;
-        }, 220);
-        return;
-      }
-    }
     options.cancelInlineEditor();
     if (isScopeRootKey(key)) {
       const nextRootKey = getScopeFromRootKey(key);
@@ -189,7 +163,6 @@ export function useDocumentNavigation(options: UseDocumentNavigationOptions) {
     }
     if (cachedPath) {
       activeRootKey.value = cachedPath.rootKey;
-      tree.folderTree.value = tree.folderTreeCache.value[cachedPath.rootKey] || [];
     }
     parentStack.value = nextLocation.parentStack;
     tree.expandPathKeys(parentStack.value);
@@ -210,6 +183,20 @@ export function useDocumentNavigation(options: UseDocumentNavigationOptions) {
       options.loadData(),
       tree.ensureFolderTreePathLoaded(activeRootKey.value, parentStack.value),
     ]);
+  }
+
+  function updateNavigationFolderRecord(record: DocumentFileInfo) {
+    if (!record.id || parentStack.value.every((item) => item.id !== record.id)) {
+      return;
+    }
+    parentStack.value = parentStack.value.map((item) =>
+      item.id === record.id
+        ? {
+            ...item,
+            ...record,
+          }
+        : item,
+    );
   }
 
   function handleGoRoot() {
@@ -240,7 +227,6 @@ export function useDocumentNavigation(options: UseDocumentNavigationOptions) {
     activeRootKey,
     canGoBack,
     canGoParent,
-    clearTreeRenameTimer,
     currentFolder,
     currentParentId,
     handleGoBack,
@@ -252,5 +238,6 @@ export function useDocumentNavigation(options: UseDocumentNavigationOptions) {
     parentStack,
     pushNavigationHistory,
     setTreeNavigationOptions,
+    updateNavigationFolderRecord,
   };
 }

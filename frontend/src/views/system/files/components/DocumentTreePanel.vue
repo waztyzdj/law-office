@@ -34,6 +34,7 @@ interface Props {
   scope: DocumentScope;
   selectedKeys: string[];
   treeData: DataNode[];
+  treeRenderKey: number;
 }
 
 const props = defineProps<Props>();
@@ -50,7 +51,7 @@ const emit = defineEmits<{
   treeDragOver: [event: DragEvent, key: string];
   treeDragStart: [event: DragEvent, key: string];
   treeExpand: [keys: Key[]];
-  treeSelect: [keys: Key[]];
+  treeSelect: [keys: Key[], info: { node?: { key?: Key } }];
   updateExpandedKeys: [keys: string[]];
   updateKeyword: [value: string];
 }>();
@@ -69,8 +70,8 @@ function handleExpand(keys: Key[]) {
   emit('treeExpand', keys);
 }
 
-function handleSelect(keys: Key[]) {
-  emit('treeSelect', keys);
+function handleSelect(keys: Key[], info: { node?: { key?: Key } }) {
+  emit('treeSelect', keys, info);
 }
 
 function handleAction(event: string, record?: DocumentFileInfo) {
@@ -92,6 +93,7 @@ function handleAction(event: string, record?: DocumentFileInfo) {
     />
     <Spin :spinning="loading">
       <Tree
+        :key="treeRenderKey"
         v-model:expanded-keys="expandedKeysModel"
         block-node
         :selected-keys="selectedKeys"

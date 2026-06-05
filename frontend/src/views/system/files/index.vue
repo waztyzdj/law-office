@@ -75,7 +75,6 @@ const {
   activeRootKey,
   canGoBack,
   canGoParent,
-  clearTreeRenameTimer,
   currentFolder,
   currentParentId,
   handleGoBack,
@@ -87,16 +86,14 @@ const {
   parentStack,
   pushNavigationHistory,
   setTreeNavigationOptions,
+  updateNavigationFolderRecord,
 } = useDocumentNavigation({
   activateTreeShortcut: () => {
     activateTreeShortcut();
   },
   cancelInlineEditor,
-  canManageTreeFolder,
-  isEditingTreeNode,
   isGlobalSearch: () => isGlobalSearch.value,
   loadData,
-  renameFolder: handleRenameFolder,
   resetAndLoad,
 });
 const scopeOptions = computed<ScopeOption[]>(() => {
@@ -151,8 +148,6 @@ const {
   findCachedPath,
   findFolderByKey,
   findScopeOption,
-  folderTree,
-  folderTreeCache,
   getActiveSelectedTreeKey,
   getSelectedTreeKey,
   getTreeNodeIcon,
@@ -160,9 +155,13 @@ const {
   loadFolderTree,
   loadInitialFolderTrees,
   reloadCachedFolderTrees,
+  refreshFolderTreeChildren,
+  selectFolderTreeParent,
   selectedTreeKeys,
   treeData,
   treeLoading,
+  treeRenderKey,
+  updateCachedFolderTreeRecord,
 } = useDocumentTree({
   activeRootKey,
   currentParentId,
@@ -174,10 +173,7 @@ setTreeNavigationOptions({
   expandedTreeKeys,
   expandPathKeys,
   findCachedPath,
-  findFolderByKey,
   findScopeOption,
-  folderTree,
-  folderTreeCache,
   getActiveSelectedTreeKey,
   getSelectedTreeKey,
   loadFolderTree,
@@ -292,8 +288,12 @@ const documentActions = useDocumentActions({
   reloadTrashData: async () => {
     await Promise.all([loadData(), reloadCachedFolderTrees()]);
   },
+  refreshFolderTreeChildren,
+  selectFolderTreeParent,
   scope,
   shareDrawerRef,
+  updateCachedFolderTreeRecord,
+  updateNavigationFolderRecord,
 });
 const {
   canPasteCurrentScope,
@@ -476,7 +476,6 @@ onMounted(async () => {
 });
 
 onBeforeUnmount(() => {
-  clearTreeRenameTimer();
   window.removeEventListener('keydown', handleTreeShortcutKeydown, true);
 });
 </script>
@@ -505,6 +504,7 @@ onBeforeUnmount(() => {
           :scope="scope"
           :selected-keys="selectedTreeKeys"
           :tree-data="treeData"
+          :tree-render-key="treeRenderKey"
           @action="handleAction"
           @activate-shortcut="activateTreeShortcut"
           @batch-action="handleTreeMenuBatchAction"

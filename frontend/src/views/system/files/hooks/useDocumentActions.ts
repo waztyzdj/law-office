@@ -75,9 +75,13 @@ interface UseDocumentActionsOptions {
   previewModalRef: Ref<DocumentOnlyOfficePreviewModalExpose | undefined>;
   reloadAll: () => Promise<void>;
   reloadTrashData: () => Promise<void>;
+  refreshFolderTreeChildren: (parentId?: string) => Promise<void>;
+  selectFolderTreeParent: (parentId?: string) => void;
   isGlobalSearch: ComputedRef<boolean>;
   scope: ComputedRef<DocumentScope>;
   shareDrawerRef: Ref<DocumentShareDrawerExpose | undefined>;
+  updateCachedFolderTreeRecord: (record: DocumentFileInfo) => void;
+  updateNavigationFolderRecord: (record: DocumentFileInfo) => void;
 }
 
 export function useDocumentActions(options: UseDocumentActionsOptions) {
@@ -238,20 +242,34 @@ export function useDocumentActions(options: UseDocumentActionsOptions) {
           shareTargetType: options.activeScopeOption.value?.shareTargetType,
         });
         await shareRootFolderIfNeeded(createdFolder, editor.parentId);
+        cancelInlineEditor();
+        await Promise.all([
+          options.loadData(),
+          options.refreshFolderTreeChildren(editor.parentId),
+        ]);
         message.success('文件夹已创建');
       } else if (editor.record?.id) {
         if (fileName === (editor.record.fileName || '').trim()) {
           cancelInlineEditor();
           return;
         }
-        await renameDocument({
+        const renamedRecord = await renameDocument({
           fileName,
           id: editor.record.id,
         });
+        const nextRecord = {
+          ...editor.record,
+          ...renamedRecord,
+          fileName,
+        };
+        if (nextRecord.izFolder === '1') {
+          options.updateCachedFolderTreeRecord(nextRecord);
+          options.updateNavigationFolderRecord(nextRecord);
+        }
+        cancelInlineEditor();
+        await options.loadData();
         message.success('名称已更新');
       }
-      cancelInlineEditor();
-      await options.reloadAll();
     } finally {
       savingName.value = false;
     }
@@ -310,6 +328,7 @@ export function useDocumentActions(options: UseDocumentActionsOptions) {
     if (!record.id) {
       return;
     }
+    const deletedParentId = record.parentId || options.currentParentId.value;
     Modal.confirm({
       cancelText: '取消',
       content: `确认删除“${record.fileName || ''}”吗？删除后可在回收站恢复。`,
@@ -317,6 +336,16 @@ export function useDocumentActions(options: UseDocumentActionsOptions) {
       title: '确认删除',
       async onOk() {
         await deleteDocument(record.id || '');
+        if (record.izFolder === '1') {
+          cancelInlineEditor();
+          message.success('文件夹已移入回收站');
+          options.selectFolderTreeParent(deletedParentId);
+          await Promise.all([
+            options.loadData(),
+            options.refreshFolderTreeChildren(deletedParentId),
+          ]);
+          return;
+        }
         message.success('已移入回收站');
         await options.reloadAll();
       },
@@ -330,11 +359,15 @@ export function useDocumentActions(options: UseDocumentActionsOptions) {
     handleDelete(record);
   }
 
-  function handleBatchDelete(fileIds: string[]) {
-    const ids = Array.from(new Set(fileIds.filter(Boolean)));
+  function handleBatchDelete(records: DocumentFileInfo[]) {
+    const ids = Array.from(new Set(records.map((record) => record.id || '').filter(Boolean)));
     if (ids.length === 0) {
       return;
     }
+    const folders = records.filter((record) => record.id && record.izFolder === '1');
+    const folderParentIds = Array.from(
+      new Set(folders.map((record) => record.parentId || options.currentParentId.value)),
+    );
     Modal.confirm({
       cancelText: '取消',
       content: `确认删除选中的 ${ids.length} 个文档吗？删除后可在回收站恢复。`,
@@ -342,6 +375,18 @@ export function useDocumentActions(options: UseDocumentActionsOptions) {
       title: '确认删除',
       async onOk() {
         await batchDeleteDocuments(ids);
+        if (folders.length > 0) {
+          cancelInlineEditor();
+          message.success('文件夹已移入回收站');
+          const selectedParentId =
+            folderParentIds.length === 1 ? folderParentIds[0] : options.currentParentId.value;
+          options.selectFolderTreeParent(selectedParentId);
+          await Promise.all([
+            options.loadData(),
+            ...folderParentIds.map((parentId) => options.refreshFolderTreeChildren(parentId)),
+          ]);
+          return;
+        }
         message.success('已移入回收站');
         await options.reloadAll();
       },
@@ -399,7 +444,7 @@ export function useDocumentActions(options: UseDocumentActionsOptions) {
       return;
     }
     if (event === 'delete') {
-      handleBatchDelete(records.map((record) => record.id || ''));
+      handleBatchDelete(records);
       return;
     }
     if (event === 'copy' || event === 'cut') {

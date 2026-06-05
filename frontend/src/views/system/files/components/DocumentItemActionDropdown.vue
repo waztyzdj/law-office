@@ -1,15 +1,19 @@
+<script lang="ts">
+import { ref } from 'vue';
+
+const activeDocumentItemActionDropdownId = ref<symbol | null>(null);
+</script>
+
 <script setup lang="ts">
 import type { DocumentFileInfo, DocumentScope } from '#/api/system/document';
 import type { DropdownProps } from 'ant-design-vue';
 import type { DocumentBatchAction, DocumentContentViewProps } from '../types';
 
-import { computed, ref } from 'vue';
+import { computed } from 'vue';
 
 import { Dropdown } from 'ant-design-vue';
 
 import DocumentItemActionMenu from './DocumentItemActionMenu.vue';
-
-const activeDropdownId = ref<symbol | null>(null);
 
 interface Props
   extends Pick<
@@ -47,14 +51,14 @@ const singleContext = computed(() =>
   isContextMode.value ? props.isSingleContext(props.record) : true,
 );
 const dropdownOpen = computed({
-  get: () => activeDropdownId.value === dropdownId,
+  get: () => activeDocumentItemActionDropdownId.value === dropdownId,
   set: (open: boolean) => {
     if (open) {
-      activeDropdownId.value = dropdownId;
+      activeDocumentItemActionDropdownId.value = dropdownId;
       return;
     }
-    if (activeDropdownId.value === dropdownId) {
-      activeDropdownId.value = null;
+    if (activeDocumentItemActionDropdownId.value === dropdownId) {
+      activeDocumentItemActionDropdownId.value = null;
     }
   },
 });
