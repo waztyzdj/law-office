@@ -11,6 +11,7 @@ import {
 } from '../constants';
 
 export interface DocumentExplorerActionContext {
+  globalSearch?: boolean;
   personalizeShared?: boolean;
   scope: DocumentScope;
 }
@@ -25,6 +26,10 @@ export function isReadonlyCollectionScope(scope: DocumentScope) {
 
 export function isReadonlyBrowseScope(scope: DocumentScope) {
   return scope === 'business' || isSharedReadonlyScope(scope) || isReadonlyCollectionScope(scope);
+}
+
+function isReadonlyActionContext(context: DocumentExplorerActionContext) {
+  return Boolean(context.globalSearch) || isReadonlyBrowseScope(context.scope);
 }
 
 export function isActualStarredItem(record?: DocumentFileInfo) {
@@ -179,7 +184,7 @@ export function isImageFile(record: DocumentFileInfo) {
 }
 
 export function canMove(record: DocumentFileInfo, context: DocumentExplorerActionContext) {
-  if (isReadonlyBrowseScope(context.scope)) {
+  if (isReadonlyActionContext(context)) {
     return false;
   }
   return (
@@ -190,14 +195,14 @@ export function canMove(record: DocumentFileInfo, context: DocumentExplorerActio
 }
 
 export function canEditItem(record: DocumentFileInfo, context: DocumentExplorerActionContext) {
-  if (isReadonlyBrowseScope(context.scope)) {
+  if (isReadonlyActionContext(context)) {
     return false;
   }
   return context.scope !== 'trash' && Boolean(record.ownerFlag);
 }
 
 export function canCreateFolderInItem(record: DocumentFileInfo, context: DocumentExplorerActionContext) {
-  if (isReadonlyBrowseScope(context.scope)) {
+  if (isReadonlyActionContext(context)) {
     return false;
   }
   if (record.izFolder !== '1' || !record.id) {
@@ -216,7 +221,7 @@ export function canPreviewItem(record: DocumentFileInfo, _context: DocumentExplo
 }
 
 export function canEditContentItem(record: DocumentFileInfo, context: DocumentExplorerActionContext) {
-  if (context.scope === 'business') {
+  if (context.globalSearch || context.scope === 'business') {
     return false;
   }
   const extension = getFileExtension(record);
@@ -230,7 +235,7 @@ export function canEditContentItem(record: DocumentFileInfo, context: DocumentEx
 }
 
 export function canViewHistoryItem(record: DocumentFileInfo, context: DocumentExplorerActionContext) {
-  if (isReadonlyBrowseScope(context.scope)) {
+  if (isReadonlyActionContext(context)) {
     return false;
   }
   const extension = getFileExtension(record);
@@ -243,7 +248,7 @@ export function canViewHistoryItem(record: DocumentFileInfo, context: DocumentEx
 }
 
 export function canDropOnFolder(target: DocumentFileInfo, context: DocumentExplorerActionContext) {
-  if (isReadonlyBrowseScope(context.scope)) {
+  if (isReadonlyActionContext(context)) {
     return false;
   }
   if (context.scope === 'trash' || target.izFolder !== '1' || !target.id) {

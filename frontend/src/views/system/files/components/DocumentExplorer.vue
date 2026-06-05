@@ -53,6 +53,7 @@ interface Props {
   moving?: boolean;
   personalizeShared?: boolean;
   savingName?: boolean;
+  isGlobalSearch?: boolean;
   scope: DocumentScope;
   sortState: DocumentSortState;
   viewMode?: DocumentViewMode;
@@ -63,6 +64,7 @@ const props = withDefaults(defineProps<Props>(), {
   canPaste: false,
   canUpload: false,
   cuttingIds: () => [],
+  isGlobalSearch: false,
   moving: false,
   personalizeShared: false,
   savingName: false,
@@ -98,13 +100,14 @@ const sortedItems = computed(() =>
   }),
 );
 const actionContext = computed(() => ({
+  globalSearch: props.isGlobalSearch,
   personalizeShared: props.personalizeShared,
   scope: props.scope,
 }));
 
 const canCreateInScope = computed(() => props.canCreate);
 const canUploadInScope = computed(() => props.canUpload);
-const canShowBodyWriteActions = computed(() => !isReadonlyBrowseScope(props.scope));
+const canShowBodyWriteActions = computed(() => !props.isGlobalSearch && !isReadonlyBrowseScope(props.scope));
 const hasBodyWriteActions = computed(
   () =>
     canShowBodyWriteActions.value &&
@@ -207,6 +210,9 @@ function canDropOnFolder(target: DocumentFileInfo) {
 }
 
 function canShowItemActionMenu(record: DocumentFileInfo) {
+  if (props.isGlobalSearch) {
+    return record.izFolder !== '1' && (canPreviewItem(record) || Boolean(record.canDownload));
+  }
   if (props.scope === 'trash') {
     return Boolean(record.id);
   }
@@ -226,6 +232,16 @@ function canShowItemActionMenu(record: DocumentFileInfo) {
 }
 
 function handleOpen(record: DocumentFileInfo) {
+  if (props.isGlobalSearch) {
+    if (canPreviewItem(record)) {
+      emit('action', 'preview', record);
+      return;
+    }
+    if (record.izFolder !== '1' && record.canDownload) {
+      emit('action', 'download', record);
+    }
+    return;
+  }
   if (record.izFolder === '1') {
     emit('action', 'open', record);
     return;
@@ -269,6 +285,7 @@ const documentSelection = useDocumentSelection({
   emitBatchAction: (event, records) => emit('batchAction', event, records),
   emitPaste: () => emit('paste'),
   inlineEditor: toRef(props, 'inlineEditor'),
+  isReadonlyContext: computed(() => props.isGlobalSearch || isReadonlyBrowseScope(props.scope)),
   isRenaming,
   loading: toRef(props, 'loading'),
   moving: toRef(props, 'moving'),
@@ -357,6 +374,7 @@ const contentViewProps = computed<DocumentContentViewProps>(() => ({
   getContextRestorableRecords,
   imageThumbnailUrl,
   inlineEditor: props.inlineEditor,
+  isGlobalSearch: props.isGlobalSearch,
   isCutting,
   isRenaming,
   isSelected,

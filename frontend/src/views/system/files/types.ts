@@ -58,6 +58,7 @@ export interface DocumentContentViewProps {
   getContextRestorableRecords: (record: DocumentFileInfo) => DocumentFileInfo[];
   imageThumbnailUrl: (record: DocumentFileInfo) => string | undefined;
   inlineEditor?: InlineEditorState;
+  isGlobalSearch?: boolean;
   isCutting: (record: DocumentFileInfo) => boolean;
   isRenaming: (record: DocumentFileInfo) => boolean;
   isSelected: (record: DocumentFileInfo) => boolean;

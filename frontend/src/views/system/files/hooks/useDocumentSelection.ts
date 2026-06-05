@@ -37,6 +37,7 @@ interface UseDocumentSelectionOptions {
   emitBatchAction: (event: DocumentBatchAction, records: DocumentFileInfo[]) => void;
   emitPaste: () => void;
   inlineEditor: Readonly<Ref<InlineEditorState | undefined>>;
+  isReadonlyContext: Readonly<Ref<boolean>>;
   isRenaming: (record: DocumentFileInfo) => boolean;
   loading: Readonly<Ref<boolean>>;
   moving: Readonly<Ref<boolean>>;
@@ -212,7 +213,7 @@ export function useDocumentSelection(options: UseDocumentSelectionOptions) {
   }
 
   function getContextDeletableRecords(record: DocumentFileInfo) {
-    if (isReadonlyBrowseScope(options.scope.value)) {
+    if (options.isReadonlyContext.value || isReadonlyBrowseScope(options.scope.value)) {
       return [];
     }
     return getContextRecords(record).filter(
@@ -221,14 +222,14 @@ export function useDocumentSelection(options: UseDocumentSelectionOptions) {
   }
 
   function getContextCuttableRecords(record: DocumentFileInfo) {
-    if (isReadonlyBrowseScope(options.scope.value)) {
+    if (options.isReadonlyContext.value || isReadonlyBrowseScope(options.scope.value)) {
       return [];
     }
     return getContextRecords(record).filter((item) => options.canMove(item));
   }
 
   function getContextCopyableRecords(record: DocumentFileInfo) {
-    if (isReadonlyBrowseScope(options.scope.value)) {
+    if (options.isReadonlyContext.value || isReadonlyBrowseScope(options.scope.value)) {
       return [];
     }
     return getContextRecords(record).filter(
@@ -274,7 +275,7 @@ export function useDocumentSelection(options: UseDocumentSelectionOptions) {
     }
     const key = event.key.toLowerCase();
     if (key === 'delete' || (event.metaKey && key === 'backspace')) {
-      if (isReadonlyBrowseScope(options.scope.value)) {
+      if (options.isReadonlyContext.value || isReadonlyBrowseScope(options.scope.value)) {
         return;
       }
       const records = selectedRecords.value.filter(
@@ -292,7 +293,7 @@ export function useDocumentSelection(options: UseDocumentSelectionOptions) {
       return;
     }
     if (key === 'x') {
-      if (isReadonlyBrowseScope(options.scope.value)) {
+      if (options.isReadonlyContext.value || isReadonlyBrowseScope(options.scope.value)) {
         return;
       }
       const records = selectedRecords.value.filter((item) => options.canMove(item));
@@ -304,7 +305,7 @@ export function useDocumentSelection(options: UseDocumentSelectionOptions) {
       return;
     }
     if (key === 'c') {
-      if (isReadonlyBrowseScope(options.scope.value)) {
+      if (options.isReadonlyContext.value || isReadonlyBrowseScope(options.scope.value)) {
         return;
       }
       const records = selectedRecords.value.filter(

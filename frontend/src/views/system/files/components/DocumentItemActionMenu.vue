@@ -26,6 +26,7 @@ interface Props {
   contextDownloadableCount?: number;
   contextRestorableCount?: number;
   record?: DocumentFileInfo;
+  searchResult?: boolean;
   scope: DocumentScope;
   singleContext?: boolean;
 }
@@ -50,6 +51,7 @@ const props = withDefaults(defineProps<Props>(), {
   contextDeletableCount: 0,
   contextDownloadableCount: 0,
   contextRestorableCount: 0,
+  searchResult: false,
   singleContext: true,
 });
 
@@ -59,6 +61,20 @@ const emit = defineEmits<{
 }>();
 
 const batchItems = computed<ActionMenuItem[]>(() => {
+  if (props.searchResult) {
+    if (props.singleContext) {
+      return [];
+    }
+    return [
+      {
+        batchAction: 'download',
+        disabled: props.contextDownloadableCount === 0,
+        icon: 'lucide:download',
+        key: 'download',
+        label: '下载',
+      },
+    ];
+  }
   if (props.scope === 'trash') {
     if (props.singleContext) {
       return [];
@@ -128,6 +144,21 @@ const batchItems = computed<ActionMenuItem[]>(() => {
 const singleItems = computed<ActionMenuItem[]>(() => {
   if (!props.singleContext) {
     return [];
+  }
+  if (props.searchResult) {
+    const items: ActionMenuItem[] = [];
+    if (props.canPreview) {
+      items.push({ action: 'preview', icon: 'lucide:eye', key: 'preview', label: '预览' });
+    }
+    if (props.contextDownloadableCount > 0) {
+      items.push({
+        batchAction: 'download',
+        icon: 'lucide:download',
+        key: 'download',
+        label: '下载',
+      });
+    }
+    return items;
   }
   if (props.scope === 'trash') {
     const items: ActionMenuItem[] = [];
@@ -263,6 +294,7 @@ const singleItems = computed<ActionMenuItem[]>(() => {
 });
 
 const showDeleteItem = computed(() =>
+  !props.searchResult &&
   !isReadonlyCollectionScope(props.scope) &&
   props.scope !== 'shared' &&
   props.scope !== 'trash' &&

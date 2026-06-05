@@ -79,8 +79,8 @@ const {
   handleGoBreadcrumb,
   handleGoParent,
   handleGoRoot,
-  handleOpenFolder,
-  handleSelectTree,
+  handleOpenFolder: handleNavigationOpenFolder,
+  handleSelectTree: handleNavigationSelectTree,
   parentStack,
   pushNavigationHistory,
   resetCurrentRootNavigation,
@@ -95,6 +95,22 @@ const {
   loadData,
   resetAndLoad,
 });
+
+function clearSearchKeyword() {
+  if (keyword.value) {
+    keyword.value = '';
+  }
+}
+
+async function handleOpenFolder(record: DocumentFileInfo) {
+  clearSearchKeyword();
+  await handleNavigationOpenFolder(record);
+}
+
+async function handleSelectTree(...args: Parameters<typeof handleNavigationSelectTree>) {
+  clearSearchKeyword();
+  await handleNavigationSelectTree(...args);
+}
 const scopeOptions = computed<ScopeOption[]>(() => {
   const departChildren = buildDepartScopeOptions(currentDeparts.value);
 
@@ -579,6 +595,7 @@ onBeforeUnmount(() => {
           :current-folder="currentFolder"
           :data-source="dataSource"
           :inline-editor="inlineEditor"
+          :is-global-search="isGlobalSearch"
           :loading="loading || uploading"
           :moving="moving"
           :saving-name="savingName"
