@@ -86,6 +86,9 @@ export function useDocumentSelection(options: UseDocumentSelectionOptions) {
       .filter((item) => item.id && options.canMove(item))
       .map((item) => item.id || ''),
   );
+  const selectedMovableRecords = computed(() =>
+    selectedRecords.value.filter((item) => item.id && options.canMove(item)),
+  );
 
   function clearRenameTimer() {
     if (renameTimer) {
@@ -516,6 +519,7 @@ export function useDocumentSelection(options: UseDocumentSelectionOptions) {
     selectOnly,
     selectedIds,
     selectedMovableIds,
+    selectedMovableRecords,
     selectedRecords,
     selecting,
     selectionBoxStyle,

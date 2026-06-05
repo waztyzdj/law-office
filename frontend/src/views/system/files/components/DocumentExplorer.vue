@@ -72,13 +72,17 @@ const props = withDefaults(defineProps<Props>(), {
 const emit = defineEmits<{
   action: [event: string, record: DocumentFileInfo];
   batchAction: [event: DocumentBatchAction, records: DocumentFileInfo[]];
-  batchMove: [sourceIds: string[], targetParentId?: string];
+  batchMove: [
+    sourceIds: string[],
+    targetParentId?: string,
+    sourceParentIds?: Array<string | undefined>,
+  ];
   createFolder: [];
   createFolderIn: [record: DocumentFileInfo];
   inlineCancel: [];
   inlineChange: [value: string];
   inlineSubmit: [];
-  move: [sourceId: string, targetParentId?: string];
+  move: [sourceId: string, targetParentId?: string, sourceParentId?: string];
   paste: [];
   sortChange: [state: DocumentSortState];
   upload: [];
@@ -286,6 +290,7 @@ const {
   cleanupSelectionListeners,
   selectOnly,
   selectedMovableIds,
+  selectedMovableRecords,
   selecting,
   selectionBoxStyle,
 } = documentSelection;
@@ -297,12 +302,15 @@ const {
 } = useDocumentDragDrop({
   canDropOnFolder,
   canMove,
-  emitBatchMove: (sourceIds, targetParentId) => emit('batchMove', sourceIds, targetParentId),
-  emitMove: (sourceId, targetParentId) => emit('move', sourceId, targetParentId),
+  emitBatchMove: (sourceIds, targetParentId, sourceParentIds) =>
+    emit('batchMove', sourceIds, targetParentId, sourceParentIds),
+  emitMove: (sourceId, targetParentId, sourceParentId) =>
+    emit('move', sourceId, targetParentId, sourceParentId),
   isSelected,
   moving: toRef(props, 'moving'),
   selectOnly,
   selectedMovableIds,
+  selectedMovableRecords,
 });
 
 function setExplorerBodyRef(element: unknown) {

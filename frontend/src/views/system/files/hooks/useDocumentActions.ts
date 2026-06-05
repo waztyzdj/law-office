@@ -121,7 +121,7 @@ export function useDocumentActions(options: UseDocumentActionsOptions) {
   );
 
   async function refreshDocumentArea(parentIds: Array<string | undefined> = [options.currentParentId.value]) {
-    const uniqueParentIds = Array.from(new Set(parentIds));
+    const uniqueParentIds = Array.from(new Set(parentIds.map((parentId) => parentId || undefined)));
     await Promise.all([
       options.loadData(),
       ...uniqueParentIds.map((parentId) => options.refreshFolderTreeChildren(parentId)),
@@ -532,7 +532,11 @@ export function useDocumentActions(options: UseDocumentActionsOptions) {
     await options.reloadAll();
   }
 
-  async function handleMove(sourceId: string, targetParentId?: string) {
+  async function handleMove(
+    sourceId: string,
+    targetParentId?: string,
+    sourceParentId = options.currentParentId.value,
+  ) {
     if (!sourceId || moving.value || options.scope.value === 'trash' || options.scope.value === 'business') {
       return;
     }
@@ -545,13 +549,17 @@ export function useDocumentActions(options: UseDocumentActionsOptions) {
         shareTargetType: options.activeScopeOption.value?.shareTargetType,
       });
       message.success('已移动');
-      await options.reloadAll();
+      await refreshDocumentArea([sourceParentId, targetParentId]);
     } finally {
       moving.value = false;
     }
   }
 
-  async function handleBatchMove(sourceIds: string[], targetParentId?: string) {
+  async function handleBatchMove(
+    sourceIds: string[],
+    targetParentId?: string,
+    sourceParentIds: Array<string | undefined> = [options.currentParentId.value],
+  ) {
     const ids = Array.from(new Set(sourceIds.filter(Boolean)));
     if (ids.length === 0 || moving.value || options.scope.value === 'trash' || options.scope.value === 'business') {
       return;
@@ -565,7 +573,7 @@ export function useDocumentActions(options: UseDocumentActionsOptions) {
         shareTargetType: options.activeScopeOption.value?.shareTargetType,
       });
       message.success(`已移动 ${ids.length} 项`);
-      await options.reloadAll();
+      await refreshDocumentArea([...sourceParentIds, targetParentId]);
     } finally {
       moving.value = false;
     }

@@ -4,12 +4,17 @@ import type { DocumentFileInfo } from '#/api/system/document';
 interface UseDocumentDragDropOptions {
   canDropOnFolder: (record: DocumentFileInfo) => boolean;
   canMove: (record: DocumentFileInfo) => boolean;
-  emitBatchMove: (sourceIds: string[], targetParentId?: string) => void;
-  emitMove: (sourceId: string, targetParentId?: string) => void;
+  emitBatchMove: (
+    sourceIds: string[],
+    targetParentId?: string,
+    sourceParentIds?: Array<string | undefined>,
+  ) => void;
+  emitMove: (sourceId: string, targetParentId?: string, sourceParentId?: string) => void;
   isSelected: (record: DocumentFileInfo) => boolean;
   moving: Readonly<Ref<boolean>>;
   selectOnly: (record: DocumentFileInfo) => void;
   selectedMovableIds: ComputedRef<string[]>;
+  selectedMovableRecords: ComputedRef<DocumentFileInfo[]>;
 }
 
 export function useDocumentDragDrop(options: UseDocumentDragDropOptions) {
@@ -21,11 +26,18 @@ export function useDocumentDragDrop(options: UseDocumentDragDropOptions) {
     if (!options.isSelected(record)) {
       options.selectOnly(record);
     }
-    const sourceIds = options.isSelected(record) && options.selectedMovableIds.value.length > 0
-      ? options.selectedMovableIds.value
-      : [record.id];
+    const sourceRecords =
+      options.isSelected(record) && options.selectedMovableRecords.value.length > 0
+        ? options.selectedMovableRecords.value
+        : [record];
+    const sourceIds = sourceRecords.map((item) => item.id || '').filter(Boolean);
+    const sourceParentIds = sourceRecords.map((item) => item.parentId || undefined);
     event.dataTransfer?.setData('application/x-document-id', sourceIds[0] || record.id);
     event.dataTransfer?.setData('application/x-document-ids', JSON.stringify(sourceIds));
+    event.dataTransfer?.setData(
+      'application/x-document-source-parent-ids',
+      JSON.stringify(sourceParentIds.map((parentId) => parentId || null)),
+    );
     event.dataTransfer?.setData('text/plain', record.fileName || '');
     if (event.dataTransfer) {
       event.dataTransfer.effectAllowed = 'move';
@@ -53,6 +65,24 @@ export function useDocumentDragDrop(options: UseDocumentDragDropOptions) {
     return sourceId ? [sourceId] : [];
   }
 
+  function getDragSourceParentIds(event: DragEvent) {
+    const rawParentIds = event.dataTransfer?.getData('application/x-document-source-parent-ids');
+    if (!rawParentIds) {
+      return [];
+    }
+    try {
+      const parsed = JSON.parse(rawParentIds);
+      if (Array.isArray(parsed)) {
+        return parsed
+          .filter((parentId): parentId is string | null => typeof parentId === 'string' || parentId === null)
+          .map((parentId) => parentId ?? undefined);
+      }
+    } catch {
+      return [];
+    }
+    return [];
+  }
+
   function handleFolderDragOver(event: DragEvent, target: DocumentFileInfo) {
     if (!options.canDropOnFolder(target)) {
       return;
@@ -69,6 +99,7 @@ export function useDocumentDragDrop(options: UseDocumentDragDropOptions) {
   function handleDropOnFolder(event: DragEvent, target: DocumentFileInfo) {
     event.preventDefault();
     const sourceIds = getDragSourceIds(event).filter((sourceId) => sourceId !== target.id);
+    const sourceParentIds = getDragSourceParentIds(event);
     if (sourceIds.length === 0 || !options.canDropOnFolder(target) || options.moving.value) {
       return;
     }
@@ -77,10 +108,10 @@ export function useDocumentDragDrop(options: UseDocumentDragDropOptions) {
       if (!sourceId) {
         return;
       }
-      options.emitMove(sourceId, target.id);
+      options.emitMove(sourceId, target.id, sourceParentIds[0]);
       return;
     }
-    options.emitBatchMove(sourceIds, target.id);
+    options.emitBatchMove(sourceIds, target.id, sourceParentIds);
   }
 
   return {

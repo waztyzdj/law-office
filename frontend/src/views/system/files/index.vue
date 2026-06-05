@@ -309,8 +309,12 @@ function handleBatchAction(event: DocumentBatchAction, records: DocumentFileInfo
   documentActions.handleBatchAction(event, records);
 }
 
-function handleBatchMove(sourceIds: string[], targetParentId?: string) {
-  void documentActions.handleBatchMove(sourceIds, targetParentId);
+function handleBatchMove(
+  sourceIds: string[],
+  targetParentId?: string,
+  sourceParentIds?: Array<string | undefined>,
+) {
+  void documentActions.handleBatchMove(sourceIds, targetParentId, sourceParentIds);
 }
 
 function handleClearTrash() {
@@ -333,8 +337,8 @@ function handleInlineNameChange(value: string) {
   documentActions.handleInlineNameChange(value);
 }
 
-function handleMove(sourceId: string, targetParentId?: string) {
-  void documentActions.handleMove(sourceId, targetParentId);
+function handleMove(sourceId: string, targetParentId?: string, sourceParentId?: string) {
+  void documentActions.handleMove(sourceId, targetParentId, sourceParentId);
 }
 
 function handlePaste() {
