@@ -538,16 +538,18 @@ onBeforeUnmount(() => {
   overflow: hidden;
   flex: 1;
   min-height: 0;
+  user-select: none;
+}
+
+.document-explorer__body :deep(input),
+.document-explorer__body :deep(textarea) {
+  user-select: text;
 }
 
 .document-explorer__body :deep(.ant-spin-nested-loading),
 .document-explorer__body :deep(.ant-spin-container) {
   height: 100%;
   min-height: 0;
-}
-
-.document-explorer__body--selecting {
-  user-select: none;
 }
 
 .document-empty {

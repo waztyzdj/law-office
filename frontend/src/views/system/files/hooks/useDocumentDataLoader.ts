@@ -27,7 +27,9 @@ export function useDocumentDataLoader(options: UseDocumentDataLoaderOptions) {
   const currentTenant = ref<CurrentUserTenant>();
   const dataSource = ref<DocumentFileInfo[]>([]);
   const keyword = ref('');
+  const activeKeyword = ref('');
   const loading = ref(false);
+  let loadSeq = 0;
 
   async function fetchDocuments(
     parentId?: string,
@@ -60,11 +62,20 @@ export function useDocumentDataLoader(options: UseDocumentDataLoaderOptions) {
   }
 
   async function loadData() {
+    const seq = ++loadSeq;
+    const parentId = options.getCurrentParentId();
+    const searchKeyword = activeKeyword.value;
+    const scopeOption = options.getActiveScopeOption();
     loading.value = true;
     try {
-      dataSource.value = await fetchDocuments(options.getCurrentParentId(), keyword.value);
+      const records = await fetchDocuments(parentId, searchKeyword, scopeOption);
+      if (seq === loadSeq) {
+        dataSource.value = records;
+      }
     } finally {
-      loading.value = false;
+      if (seq === loadSeq) {
+        loading.value = false;
+      }
     }
   }
 
@@ -78,7 +89,24 @@ export function useDocumentDataLoader(options: UseDocumentDataLoaderOptions) {
 
   function handleSearch(value: string) {
     keyword.value = value;
+    activeKeyword.value = value.trim();
     resetAndLoad();
+  }
+
+  function handleKeywordChange(value: string) {
+    keyword.value = value;
+    if (!value.trim() && activeKeyword.value) {
+      activeKeyword.value = '';
+      resetAndLoad();
+    }
+  }
+
+  function clearSearchKeyword() {
+    if (keyword.value || activeKeyword.value) {
+      loadSeq += 1;
+    }
+    keyword.value = '';
+    activeKeyword.value = '';
   }
 
   async function loadShareRootContext() {
@@ -99,8 +127,11 @@ export function useDocumentDataLoader(options: UseDocumentDataLoaderOptions) {
   return {
     currentDeparts,
     currentTenant,
+    activeKeyword,
+    clearSearchKeyword,
     dataSource,
     fetchDocuments,
+    handleKeywordChange,
     handleSearch,
     keyword,
     loadData,

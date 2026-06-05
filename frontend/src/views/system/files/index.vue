@@ -52,10 +52,13 @@ async function reloadCachedFolderTreesBridge() {
   await reloadCachedFolderTrees();
 }
 const {
+  activeKeyword,
+  clearSearchKeyword: clearDocumentSearchKeyword,
   currentDeparts,
   currentTenant,
   dataSource,
   fetchDocuments,
+  handleKeywordChange,
   handleSearch,
   keyword,
   loadData,
@@ -97,9 +100,7 @@ const {
 });
 
 function clearSearchKeyword() {
-  if (keyword.value) {
-    keyword.value = '';
-  }
+  clearDocumentSearchKeyword();
 }
 
 async function handleOpenFolder(record: DocumentFileInfo) {
@@ -201,7 +202,7 @@ const activeScopeOption = computed(
   () => findScopeOption(activeRootKey.value) || scopeOptions.value[0],
 );
 const scope = computed<DocumentScope>(() => activeScopeOption.value?.scope || 'my');
-const isGlobalSearch = computed(() => keyword.value.trim().length > 0);
+const isGlobalSearch = computed(() => activeKeyword.value.length > 0);
 const canManageCurrentScope = computed(() => scope.value === 'my');
 const isSharedInboxScope = computed(
   () => scope.value === 'shared' && !activeScopeOption.value?.shareTargetType,
@@ -552,7 +553,7 @@ onBeforeUnmount(() => {
           @tree-expand="handleTreeExpand"
           @tree-select="handleSelectTree"
           @update-expanded-keys="expandedTreeKeys = $event"
-          @update-keyword="keyword = $event"
+          @update-keyword="handleKeywordChange"
         />
       </Card>
 
@@ -600,7 +601,7 @@ onBeforeUnmount(() => {
               :current-scope-title="currentScopeTitle"
               :data-count="dataSource.length"
               :is-global-search="isGlobalSearch"
-              :keyword="keyword"
+              :keyword="activeKeyword"
               :moving="moving"
               :parent-stack="parentStack"
               :scope="scope"
