@@ -32,6 +32,7 @@ interface DocumentNavigationTreeOptions {
   getActiveSelectedTreeKey: () => string;
   getSelectedTreeKey: (rootKey: string, fileId?: string) => string;
   loadFolderTree: (rootKey?: string, updateSelection?: boolean) => Promise<void>;
+  resolveExistingFolderTreePath: (rootKey: string, path: DocumentFileInfo[]) => Promise<DocumentFileInfo[]>;
   selectedTreeKeys: Ref<string[]>;
 }
 
@@ -86,14 +87,13 @@ export function useDocumentNavigation(options: UseDocumentNavigationOptions) {
     const tree = getTreeOptions();
     options.cancelInlineEditor();
     activeRootKey.value = location.rootKey;
-    parentStack.value = [...location.parentStack];
-    tree.selectedTreeKeys.value = [tree.getSelectedTreeKey(location.rootKey, currentParentId.value)];
     tree.expandedTreeKeys.value = Array.from(
       new Set([...tree.expandedTreeKeys.value, getScopeRootKey(location.rootKey)]),
     );
-    tree.expandPathKeys(parentStack.value);
-    await Promise.all([options.loadData(), tree.loadFolderTree(location.rootKey, false)]);
-    await tree.ensureFolderTreePathLoaded(location.rootKey, parentStack.value);
+    const resolvedPath = await tree.resolveExistingFolderTreePath(location.rootKey, location.parentStack);
+    parentStack.value = resolvedPath;
+    tree.expandPathKeys(resolvedPath);
+    await options.loadData();
     tree.selectedTreeKeys.value = [tree.getSelectedTreeKey(location.rootKey, currentParentId.value)];
   }
 

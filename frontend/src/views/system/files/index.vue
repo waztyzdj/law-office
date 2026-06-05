@@ -156,6 +156,7 @@ const {
   loadInitialFolderTrees,
   reloadCachedFolderTrees,
   refreshFolderTreeChildren,
+  resolveExistingFolderTreePath,
   selectFolderTreeParent,
   selectedTreeKeys,
   treeData,
@@ -177,6 +178,7 @@ setTreeNavigationOptions({
   getActiveSelectedTreeKey,
   getSelectedTreeKey,
   loadFolderTree,
+  resolveExistingFolderTreePath,
   selectedTreeKeys,
 });
 const activeScopeOption = computed(

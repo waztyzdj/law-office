@@ -103,6 +103,21 @@ export function useDocumentTree(options: UseDocumentTreeOptions) {
     return undefined;
   }
 
+  function resolveCachedFolderPath(rootKey: string, path: DocumentFileInfo[]) {
+    const resolvedPath: DocumentFileInfo[] = [];
+    for (const folder of path) {
+      if (!folder.id) {
+        break;
+      }
+      const node = findFolderTreeNode(folderTreeCache.value[rootKey] || [], getFolderNodeKey(rootKey, folder.id));
+      if (!node?.file) {
+        break;
+      }
+      resolvedPath.push(node.file);
+    }
+    return resolvedPath;
+  }
+
   async function loadFolderNodes(
     parentId?: string,
     option: ScopeOption | undefined = findScopeOption(options.activeRootKey.value),
@@ -282,6 +297,11 @@ export function useDocumentTree(options: UseDocumentTreeOptions) {
     }
   }
 
+  async function resolveExistingFolderTreePath(rootKey: string, path: DocumentFileInfo[]) {
+    await ensureFolderTreePathLoaded(rootKey, path);
+    return resolveCachedFolderPath(rootKey, path);
+  }
+
   async function handleTreeExpand(keys: unknown[]) {
     expandedTreeKeys.value = keys.map((key) => String(key));
     const loadKeys = expandedTreeKeys.value.filter((key) => (
@@ -316,6 +336,7 @@ export function useDocumentTree(options: UseDocumentTreeOptions) {
     loadInitialFolderTrees,
     reloadCachedFolderTrees,
     refreshFolderTreeChildren,
+    resolveExistingFolderTreePath,
     selectFolderTreeParent,
     selectedTreeKeys,
     treeData,
