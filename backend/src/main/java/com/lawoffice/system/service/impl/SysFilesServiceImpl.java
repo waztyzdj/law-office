@@ -360,8 +360,8 @@ public class SysFilesServiceImpl extends BaseServiceImpl<SysFilesMapper, SysFile
 
         if (SCOPE_SHARED.equals(scope) && StringUtils.hasText(pageReq.getParentId())) {
             SysFiles parent = getActiveFile(pageReq.getParentId());
-            assertCanViewDocument(parent, context);
-            return pageDocumentChildrenByParent(context, pageReq, parent.getId());
+            int inheritedRank = resolveSharedDocumentPermissionRank(parent, context);
+            return pageSharedFolderChildren(context, pageReq, parent, inheritedRank);
         }
 
         if (SCOPE_SHARED_BY_ME.equals(scope) && StringUtils.hasText(pageReq.getParentId())) {
@@ -906,7 +906,8 @@ public class SysFilesServiceImpl extends BaseServiceImpl<SysFilesMapper, SysFile
     private PageVO<DocumentFileVO> pageSharedFolderChildren(
             UserAccessContext context,
             DocumentPageReq pageReq,
-            SysFiles parent) {
+            SysFiles parent,
+            int inheritedRank) {
         LambdaQueryWrapper<SysFiles> wrapper = Wrappers.lambdaQuery(SysFiles.class)
                 .eq(SysFiles::getTenantId, context.tenantId())
                 .eq(SysFiles::getDeleteFlag, 0)
@@ -917,7 +918,6 @@ public class SysFilesServiceImpl extends BaseServiceImpl<SysFilesMapper, SysFile
                 .orderByDesc(SysFiles::getCreateTime);
         Page<SysFiles> page = new Page<>(pageReq.getPageNum(), pageReq.getPageSize());
         Page<SysFiles> result = baseMapper.selectPage(page, wrapper);
-        int inheritedRank = resolvePermissionRank(parent, context);
         boolean inheritedDownload = inheritedRank >= permissionRank(PERMISSION_DOWNLOAD)
                 && !FLAG_NO.equals(parent.getEnableDown());
         boolean inheritedUpdate = inheritedRank >= permissionRank(PERMISSION_UPDATE)
@@ -980,11 +980,11 @@ public class SysFilesServiceImpl extends BaseServiceImpl<SysFilesMapper, SysFile
         String parentId = trimToNull(pageReq.getParentId());
         if (StringUtils.hasText(parentId)) {
             SysFiles parent = getActiveFile(parentId);
-            assertCanViewDocument(parent, context);
             if (isPersonalSharedFolder(parent, context.username())) {
                 return pagePersonalSharedFolderChildren(context, pageReq, parentId);
             }
-            return pageSharedFolderChildren(context, pageReq, parent);
+            int inheritedRank = resolveSharedDocumentPermissionRank(parent, context);
+            return pageSharedFolderChildren(context, pageReq, parent, inheritedRank);
         }
 
         List<SysFiles> personalFolders = selectPersonalSharedFolders(context, null);
@@ -1999,6 +1999,17 @@ public class SysFilesServiceImpl extends BaseServiceImpl<SysFilesMapper, SysFile
     /**
      * 共享权限继承父级文件夹，保证被共享文件夹下的子文件无需逐条写 ACL。
      */
+    private int resolveSharedDocumentPermissionRank(SysFiles file, UserAccessContext context) {
+        if (Objects.equals(file.getCreateBy(), context.username())) {
+            return permissionRank(PERMISSION_MANAGE);
+        }
+        int rank = resolvePermissionRank(file, context);
+        if (rank < permissionRank(PERMISSION_READ)) {
+            throw new IllegalArgumentException("无权访问该文档");
+        }
+        return rank;
+    }
+
     private int resolvePermissionRank(SysFiles file, UserAccessContext context) {
         int directRank = maxAclRank(file.getId(), context);
         if (directRank > 0) {
@@ -2198,6 +2209,7 @@ public class SysFilesServiceImpl extends BaseServiceImpl<SysFilesMapper, SysFile
             int guard = 0;
             while (StringUtils.hasText(currentId) && guard++ < 20 && visibleIds.add(currentId)) {
                 SysDepart depart = sysDepartMapper.selectOne(Wrappers.lambdaQuery(SysDepart.class)
+                        .select(SysDepart::getId, SysDepart::getParentId)
                         .eq(SysDepart::getId, currentId)
                         .eq(SysDepart::getTenantId, tenantId)
                         .eq(SysDepart::getDeleteFlag, 0)
