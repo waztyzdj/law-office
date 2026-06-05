@@ -561,36 +561,6 @@ onBeforeUnmount(() => {
         :body-style="{ padding: '16px' }"
         @mousedown.capture="deactivateTreeShortcut"
       >
-        <DocumentHeaderToolbar
-          :can-create="canCreateCurrentScope"
-          :can-go-back="canGoBack"
-          :can-go-parent="canGoParent"
-          :can-upload="canUploadCurrentScope"
-          :current-folder-title="currentFolderTitle"
-          :current-scope-title="currentScopeTitle"
-          :data-count="dataSource.length"
-          :is-global-search="isGlobalSearch"
-          :keyword="keyword"
-          :moving="moving"
-          :parent-stack="parentStack"
-          :scope="scope"
-          :sort-label="currentDocumentSortLabel"
-          :sort-options="documentSortOptions"
-          :sort-state="documentSortState"
-          :uploading="uploading"
-          :view-mode="documentViewMode"
-          @change-sort-field="handleChangeDocumentSortField"
-          @change-sort-order="handleChangeDocumentSortOrder"
-          @clear-trash="handleClearTrash"
-          @create-folder="handleCreateFolder()"
-          @go-back="handleGoBack"
-          @go-breadcrumb="handleGoBreadcrumb"
-          @go-parent="handleGoParent"
-          @go-root="handleGoRoot"
-          @upload="handleUploadClick"
-          @view-mode-change="handleChangeDocumentViewMode"
-        />
-
         <DocumentExplorer
           :current-folder="currentFolder"
           :data-source="dataSource"
@@ -619,7 +589,39 @@ onBeforeUnmount(() => {
           @paste="handlePaste"
           @sort-change="handleChangeDocumentSort"
           @upload="handleUploadClick"
-        />
+        >
+          <template #header>
+            <DocumentHeaderToolbar
+              :can-create="canCreateCurrentScope"
+              :can-go-back="canGoBack"
+              :can-go-parent="canGoParent"
+              :can-upload="canUploadCurrentScope"
+              :current-folder-title="currentFolderTitle"
+              :current-scope-title="currentScopeTitle"
+              :data-count="dataSource.length"
+              :is-global-search="isGlobalSearch"
+              :keyword="keyword"
+              :moving="moving"
+              :parent-stack="parentStack"
+              :scope="scope"
+              :sort-label="currentDocumentSortLabel"
+              :sort-options="documentSortOptions"
+              :sort-state="documentSortState"
+              :uploading="uploading"
+              :view-mode="documentViewMode"
+              @change-sort-field="handleChangeDocumentSortField"
+              @change-sort-order="handleChangeDocumentSortOrder"
+              @clear-trash="handleClearTrash"
+              @create-folder="handleCreateFolder()"
+              @go-back="handleGoBack"
+              @go-breadcrumb="handleGoBreadcrumb"
+              @go-parent="handleGoParent"
+              @go-root="handleGoRoot"
+              @upload="handleUploadClick"
+              @view-mode-change="handleChangeDocumentViewMode"
+            />
+          </template>
+        </DocumentExplorer>
       </Card>
     </div>
 

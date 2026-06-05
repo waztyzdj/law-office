@@ -412,8 +412,9 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div class="document-explorer">
-    <Dropdown :trigger="['contextmenu']">
+  <Dropdown :trigger="['contextmenu']">
+    <div class="document-explorer">
+      <slot name="header"></slot>
       <div
         :ref="setExplorerBodyRef"
         class="document-explorer__body"
@@ -440,8 +441,22 @@ onBeforeUnmount(() => {
         </Spin>
         <DocumentSelectionBox :style="selectionBoxStyle" :visible="selecting" />
       </div>
+    </div>
       <template #overlay>
         <Menu>
+          <Menu.Item v-if="canShowBodyWriteActions && canPaste" @click="$emit('paste')">
+            <IconifyIcon class="document-menu-icon" icon="lucide:clipboard-paste" />
+            粘贴
+          </Menu.Item>
+          <Menu.Item v-if="canShowBodyWriteActions && canUploadInScope" @click="$emit('upload')">
+            <IconifyIcon class="document-menu-icon" icon="lucide:upload" />
+            上传文件
+          </Menu.Item>
+          <Menu.Item v-if="canShowBodyWriteActions && canCreateInScope" @click="$emit('createFolder')">
+            <IconifyIcon class="document-menu-icon" icon="lucide:folder-plus" />
+            新建文件夹
+          </Menu.Item>
+          <Menu.Divider v-if="hasBodyWriteActions" />
           <Menu.SubMenu key="sort-context">
             <template #title>
               <IconifyIcon class="document-menu-icon" icon="lucide:arrow-up-down" />
@@ -480,23 +495,9 @@ onBeforeUnmount(() => {
               降序
             </Menu.Item>
           </Menu.SubMenu>
-          <Menu.Divider v-if="hasBodyWriteActions" />
-          <Menu.Item v-if="canShowBodyWriteActions && canPaste" @click="$emit('paste')">
-            <IconifyIcon class="document-menu-icon" icon="lucide:clipboard-paste" />
-            粘贴
-          </Menu.Item>
-          <Menu.Item v-if="canShowBodyWriteActions && canUploadInScope" @click="$emit('upload')">
-            <IconifyIcon class="document-menu-icon" icon="lucide:upload" />
-            上传文件
-          </Menu.Item>
-          <Menu.Item v-if="canShowBodyWriteActions && canCreateInScope" @click="$emit('createFolder')">
-            <IconifyIcon class="document-menu-icon" icon="lucide:folder-plus" />
-            新建文件夹
-          </Menu.Item>
         </Menu>
       </template>
-    </Dropdown>
-  </div>
+  </Dropdown>
 </template>
 
 <style scoped>
@@ -524,6 +525,7 @@ onBeforeUnmount(() => {
 }
 
 .document-explorer {
+  position: relative;
   display: flex;
   overflow: hidden;
   min-height: 0;
