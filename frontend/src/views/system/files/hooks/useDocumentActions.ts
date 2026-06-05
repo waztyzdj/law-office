@@ -103,7 +103,10 @@ export function useDocumentActions(options: UseDocumentActionsOptions) {
       !clipboard ||
       clipboard.ids.length === 0 ||
       options.isGlobalSearch.value ||
-      options.scope.value === 'trash'
+      options.scope.value === 'trash' ||
+      options.scope.value === 'business' ||
+      options.scope.value === 'sharedByMe' ||
+      options.scope.value === 'starred'
     ) {
       return false;
     }
@@ -126,7 +129,11 @@ export function useDocumentActions(options: UseDocumentActionsOptions) {
   }
 
   function handleCreateFolder(parentId = options.currentParentId.value) {
-    if (options.scope.value === 'trash' || !options.canCreateCurrentScope.value) {
+    if (
+      options.scope.value === 'trash' ||
+      options.scope.value === 'business' ||
+      !options.canCreateCurrentScope.value
+    ) {
       return;
     }
     inlineEditor.value = {
@@ -526,7 +533,7 @@ export function useDocumentActions(options: UseDocumentActionsOptions) {
   }
 
   async function handleMove(sourceId: string, targetParentId?: string) {
-    if (!sourceId || moving.value || options.scope.value === 'trash') {
+    if (!sourceId || moving.value || options.scope.value === 'trash' || options.scope.value === 'business') {
       return;
     }
     moving.value = true;
@@ -546,7 +553,7 @@ export function useDocumentActions(options: UseDocumentActionsOptions) {
 
   async function handleBatchMove(sourceIds: string[], targetParentId?: string) {
     const ids = Array.from(new Set(sourceIds.filter(Boolean)));
-    if (ids.length === 0 || moving.value || options.scope.value === 'trash') {
+    if (ids.length === 0 || moving.value || options.scope.value === 'trash' || options.scope.value === 'business') {
       return;
     }
     moving.value = true;
@@ -570,7 +577,7 @@ export function useDocumentActions(options: UseDocumentActionsOptions) {
     targetParentId?: string,
   ) {
     const ids = Array.from(new Set(sourceIds.filter(Boolean)));
-    if (ids.length === 0 || moving.value || options.scope.value === 'trash') {
+    if (ids.length === 0 || moving.value || options.scope.value === 'trash' || options.scope.value === 'business') {
       return;
     }
     moving.value = true;

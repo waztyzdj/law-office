@@ -18,8 +18,6 @@ import DocumentOnlyOfficePreviewModal from './components/DocumentOnlyOfficePrevi
 import DocumentShareDrawer from './components/DocumentShareDrawer.vue';
 import DocumentTreePanel from './components/DocumentTreePanel.vue';
 import {
-  BUSINESS_RECORD_VIEW_STORE_TYPE,
-  BUSINESS_VIEW_STORE_TYPE,
   DOCUMENT_UPLOAD_ACCEPT,
 } from './constants';
 import {
@@ -150,6 +148,7 @@ const {
   findFolderByKey,
   findScopeOption,
   getActiveSelectedTreeKey,
+  getRootKeyFromFolderNodeKey,
   getSelectedTreeKey,
   getTreeNodeIcon,
   handleTreeExpand,
@@ -192,6 +191,7 @@ const isSharedInboxScope = computed(
   () => scope.value === 'shared' && !activeScopeOption.value?.shareTargetType,
 );
 const isSharedReadonlyScope = computed(() => scope.value === 'shared');
+const isReadonlyCollectionScope = computed(() => scope.value === 'sharedByMe' || scope.value === 'starred');
 const isBusinessScope = computed(() => scope.value === 'business');
 const documentActionContext = computed(() => ({
   personalizeShared: isSharedInboxScope.value,
@@ -215,10 +215,9 @@ const canCreateCurrentScope = computed(
   () =>
     !isGlobalSearch.value &&
     !isSharedReadonlyScope.value &&
+    !isReadonlyCollectionScope.value &&
+    !isBusinessScope.value &&
     (canManageCurrentScope.value ||
-      (isBusinessScope.value && canCreateInsideFolder(currentFolder.value)) ||
-      scope.value === 'sharedByMe' ||
-      (scope.value === 'starred' && Boolean(currentFolder.value?.ownerFlag)) ||
       (isSharedInboxScope.value &&
         (!currentFolder.value ||
           (Boolean(currentFolder.value.ownerFlag) &&
@@ -229,11 +228,10 @@ const canUploadCurrentScope = computed(
   () =>
     !isGlobalSearch.value &&
     !isSharedReadonlyScope.value &&
+    !isReadonlyCollectionScope.value &&
     !isBusinessScope.value &&
     !isSharedInboxScope.value &&
     (canManageCurrentScope.value ||
-      scope.value === 'sharedByMe' ||
-      (scope.value === 'starred' && Boolean(currentFolder.value?.ownerFlag)) ||
       (Boolean(activeSharedTarget.value) && (!currentFolder.value || Boolean(currentFolder.value.ownerFlag)))),
 );
 const currentScopeTitle = computed(
@@ -248,15 +246,9 @@ const inlineFileName = computed({
 });
 
 function canManageFolder(record?: DocumentFileInfo) {
-  if (isBusinessScope.value) {
-    return (
-      Boolean(record?.id) &&
-      Boolean(record?.ownerFlag) &&
-      record?.storeType === BUSINESS_VIEW_STORE_TYPE
-    );
-  }
   return (
     scope.value !== 'trash' &&
+    scope.value !== 'business' &&
     Boolean(record?.id) &&
     Boolean(record?.ownerFlag)
   );
@@ -265,12 +257,6 @@ function canManageFolder(record?: DocumentFileInfo) {
 function canCreateInsideFolder(record?: DocumentFileInfo) {
   if (!record?.id || record.izFolder !== '1') {
     return false;
-  }
-  if (isBusinessScope.value) {
-    return (
-      record.storeType === BUSINESS_RECORD_VIEW_STORE_TYPE ||
-      (Boolean(record.ownerFlag) && record.storeType === BUSINESS_VIEW_STORE_TYPE)
-    );
   }
   return canManageFolder(record);
 }
@@ -407,6 +393,8 @@ const documentTreeInteractions = useDocumentTreeInteractions({
   findCachedPath,
   findFolderByKey,
   getActiveSelectedTreeKey,
+  getRootKeyFromFolderNodeKey,
+  getScopeByRootKey: (rootKey) => findScopeOption(rootKey)?.scope,
   handleBatchAction,
   handleCreateFolder,
   handleDeleteFolder,
@@ -414,7 +402,6 @@ const documentTreeInteractions = useDocumentTreeInteractions({
   handleRenameFolder,
   handleTreeMove,
   inlineEditor,
-  isBusinessScope,
   isSharedInboxScope,
   loadData,
   loading,
@@ -440,6 +427,11 @@ function canManageTreeFolder(key: string) {
 
 function canShowTreeContextMenu(key: string) {
   return documentTreeInteractions.canShowTreeContextMenu(key);
+}
+
+function getTreeNodeScope(key: string) {
+  const rootKey = getRootKeyFromFolderNodeKey(key);
+  return findScopeOption(rootKey)?.scope || scope.value;
 }
 
 function deactivateTreeShortcut() {
@@ -518,6 +510,7 @@ onBeforeUnmount(() => {
           :get-tree-deletable-records="getTreeDeletableRecords"
           :get-tree-downloadable-records="getTreeDownloadableRecords"
           :get-tree-node-icon="getTreeNodeIcon"
+          :get-tree-node-scope="getTreeNodeScope"
           :inline-file-name="inlineFileName"
           :is-editing-tree-node="isEditingTreeNode"
           :keyword="keyword"

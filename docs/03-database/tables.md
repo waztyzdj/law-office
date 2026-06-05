@@ -97,7 +97,7 @@
 - `url`
 - `file_size`
 - `file_type`
-- `store_type`：文件上传或虚拟整理类型，文档中心使用 `shared_view` 表示“共享给我”个人整理文件夹，`shared_by_me` 表示“我的共享”整理文件夹，`business_view` 表示“业务文档”个人整理文件夹，`business_module_view` 和 `business_record_view` 表示业务文档接口返回的虚拟业务模块/业务数据目录。
+- `store_type`：文件上传或虚拟整理类型，文档中心使用 `shared_view` 表示“共享给我”个人整理文件夹，`shared_by_me` 表示“我的共享”整理文件夹，`business_module_view` 和 `business_record_view` 表示业务文档接口返回的虚拟业务模块/业务数据目录；历史数据中可能存在的 `business_view` 表示旧版“业务文档”个人整理文件夹，仅兼容只读展示。
 - `parent_id`
 - `tenant_id`
 - `iz_folder`
@@ -142,9 +142,9 @@
 重点字段：
 
 - `file_id`：文件 ID。
-- `biz_type`：业务类型；文档中心内部使用 `document_shared:<userId>` 记录“共享给我”个人归类，使用 `document_business:<userId>` 记录“业务文档”个人归类。
+- `biz_type`：业务类型；文档中心内部使用 `document_shared:<userId>` 记录“共享给我”个人归类；历史数据中可能存在 `document_business:<userId>` 业务文档个人归类，仅兼容只读展示。
 - `biz_id`：业务数据 ID；文档中心个人归类场景下为目标整理文件夹 ID。
-- `relation_type`：关系类型，`1` 表示业务附件，`2` 表示“共享给我”个人整理，`3` 表示“业务文档”个人整理。
+- `relation_type`：关系类型，`1` 表示业务附件，`2` 表示“共享给我”个人整理；历史数据中可能存在 `3` 表示旧版“业务文档”个人整理。
 - `tenant_id`：租户 ID。
 
 ## `sys_log`

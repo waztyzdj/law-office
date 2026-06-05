@@ -35,7 +35,10 @@ import {
   canPreviewItem as canPreviewDocumentItem,
   canViewHistoryItem as canViewDocumentHistory,
   compareDocuments,
-  isSharedReadonlyScope,
+  isActualSharedItem,
+  isActualStarredItem,
+  isReadonlyBrowseScope,
+  isReadonlyCollectionScope,
 } from './documentExplorerUtils';
 
 interface Props {
@@ -97,7 +100,7 @@ const actionContext = computed(() => ({
 
 const canCreateInScope = computed(() => props.canCreate);
 const canUploadInScope = computed(() => props.canUpload);
-const canShowBodyWriteActions = computed(() => !isSharedReadonlyScope(props.scope));
+const canShowBodyWriteActions = computed(() => !isReadonlyBrowseScope(props.scope));
 const hasBodyWriteActions = computed(
   () =>
     canShowBodyWriteActions.value &&
@@ -200,7 +203,19 @@ function canDropOnFolder(target: DocumentFileInfo) {
 }
 
 function canShowItemActionMenu(record: DocumentFileInfo) {
-  return !(isSharedReadonlyScope(props.scope) && record.izFolder === '1');
+  if (props.scope === 'shared') {
+    return record.izFolder !== '1';
+  }
+  if (props.scope === 'business') {
+    return record.izFolder !== '1';
+  }
+  if (props.scope === 'starred') {
+    return record.izFolder !== '1' || isActualStarredItem(record);
+  }
+  if (props.scope === 'sharedByMe') {
+    return record.izFolder !== '1' || isActualSharedItem(record);
+  }
+  return !isReadonlyCollectionScope(props.scope);
 }
 
 function handleOpen(record: DocumentFileInfo) {

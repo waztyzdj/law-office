@@ -461,27 +461,16 @@ public class SysFilesServiceImpl extends BaseServiceImpl<SysFilesMapper, SysFile
         String scope = normalizeScope(req.getScope());
         boolean sharedInbox = isSharedInboxRequest(req, scope);
         boolean businessScope = SCOPE_BUSINESS.equals(scope);
+        if (businessScope) {
+            throw new IllegalArgumentException("业务文档只允许查看，不支持新建文件夹");
+        }
         String parentId = trimToNull(req.getParentId());
         String storeType = sharedInbox
                 ? SHARED_VIEW_STORE_TYPE
-                : (businessScope
-                ? BUSINESS_VIEW_STORE_TYPE
-                : (SCOPE_SHARED_BY_ME.equals(scope) ? SHARED_BY_ME_STORE_TYPE : DOCUMENT_STORE_TYPE));
-        if (businessScope && (!StringUtils.hasText(parentId) || isBusinessModuleVirtualId(parentId))) {
-            throw new IllegalArgumentException("业务文档文件夹只能建在具体业务数据目录下");
-        }
-        if (businessScope && isBusinessRecordVirtualId(parentId)) {
-            BusinessRecordNode recordNode = parseBusinessRecordNode(parentId);
-            if (!hasAccessibleBusinessRecord(recordNode, context)) {
-                throw new IllegalArgumentException("无权在该业务数据下创建整理文件夹");
-            }
-            storeType = BUSINESS_VIEW_STORE_TYPE;
-        } else if (StringUtils.hasText(parentId)) {
+                : (SCOPE_SHARED_BY_ME.equals(scope) ? SHARED_BY_ME_STORE_TYPE : DOCUMENT_STORE_TYPE);
+        if (StringUtils.hasText(parentId)) {
             SysFiles parent = getActiveFile(parentId);
             assertOwner(parent, username);
-            if (businessScope && !BUSINESS_VIEW_STORE_TYPE.equals(parent.getStoreType())) {
-                throw new IllegalArgumentException("业务文档归类文件夹只能建在业务文档目录下");
-            }
             if (!FLAG_YES.equals(parent.getIzFolder())) {
                 throw new IllegalArgumentException("父级必须是文件夹");
             }
@@ -521,9 +510,7 @@ public class SysFilesServiceImpl extends BaseServiceImpl<SysFilesMapper, SysFile
     public DocumentFileVO renameDocument(String username, DocumentRenameReq req) {
         SysFiles file = getActiveFile(req.getId());
         assertOwner(file, username);
-        if (hasActiveBusinessRelation(file.getId(), file.getTenantId()) && !isBusinessFolder(file, username)) {
-            throw new IllegalArgumentException("业务文档名称需在业务模块中维护");
-        }
+        assertNotBusinessReadonlyDocument(file);
         file.setFileName(trimToNull(req.getFileName()));
         fillUpdate(file, username);
         baseMapper.updateById(file);
@@ -538,8 +525,9 @@ public class SysFilesServiceImpl extends BaseServiceImpl<SysFilesMapper, SysFile
         String parentId = trimToNull(req.getParentId());
         String scope = normalizeScope(req.getScope());
         if (SCOPE_BUSINESS.equals(scope)) {
-            return moveBusinessDocument(context, file, parentId);
+            throw new IllegalArgumentException("业务文档只允许查看，不支持移动或归类");
         }
+        assertNotBusinessReadonlyDocument(file);
         if (isSharedInboxRequest(req, scope) && !Objects.equals(file.getCreateBy(), username)) {
             moveSharedInboxPlacement(context, file, parentId);
             return buildDocumentVO(file, context);
@@ -605,6 +593,7 @@ public class SysFilesServiceImpl extends BaseServiceImpl<SysFilesMapper, SysFile
             if (Objects.equals(source.getId(), copyTarget.parentId())) {
                 throw new IllegalArgumentException("不能复制到自身下");
             }
+            assertNotBusinessReadonlyDocument(source);
             if (StringUtils.hasText(copyTarget.parentId())) {
                 validateNotMoveToDescendant(source.getId(), copyTarget.parentId());
             }
@@ -690,6 +679,7 @@ public class SysFilesServiceImpl extends BaseServiceImpl<SysFilesMapper, SysFile
     public DocumentFileVO toggleDocumentStar(String username, String fileId) {
         SysFiles file = getActiveFile(fileId);
         assertOwner(file, username);
+        assertNotBusinessReadonlyDocument(file);
         file.setIzStar(FLAG_YES.equals(file.getIzStar()) ? FLAG_NO : FLAG_YES);
         fillUpdate(file, username);
         baseMapper.updateById(file);
@@ -704,6 +694,7 @@ public class SysFilesServiceImpl extends BaseServiceImpl<SysFilesMapper, SysFile
         }
         SysFiles file = getActiveFile(req.getFileId());
         assertOwner(file, username);
+        assertNotBusinessReadonlyDocument(file);
         String tenantId = requireTenantId();
         LocalDateTime now = LocalDateTime.now();
 
@@ -818,6 +809,7 @@ public class SysFilesServiceImpl extends BaseServiceImpl<SysFilesMapper, SysFile
     @Transactional(readOnly = true)
     public DocumentFileVO checkDocumentEdit(String fileId, String username) {
         DocumentReadAccess access = checkDocumentReadAccess(fileId, username);
+        assertNotBusinessReadonlyDocument(access.file());
         if (!canUpdate(access.file(), access.context())) {
             throw new IllegalArgumentException("无权编辑该文档");
         }
@@ -835,6 +827,7 @@ public class SysFilesServiceImpl extends BaseServiceImpl<SysFilesMapper, SysFile
             boolean touchUpdateTime) {
         DocumentReadAccess access = checkDocumentReadAccess(fileId, username);
         SysFiles file = access.file();
+        assertNotBusinessReadonlyDocument(file);
         if (!canUpdate(file, access.context())) {
             throw new IllegalArgumentException("无权保存该文档");
         }
@@ -2338,94 +2331,6 @@ public class SysFilesServiceImpl extends BaseServiceImpl<SysFilesMapper, SysFile
         upsertPersonalSharedPlacement(context, file.getId(), parentId);
     }
 
-    private DocumentFileVO moveBusinessDocument(UserAccessContext context, SysFiles file, String parentId) {
-        if (Objects.equals(file.getId(), parentId)) {
-            throw new IllegalArgumentException("不能移动到自身下");
-        }
-        if (isBusinessFolder(file, context.username())) {
-            moveBusinessFolder(context, file, parentId);
-            return buildDocumentVO(file, context);
-        }
-        if (!hasBusinessDocumentAccess(file, context)) {
-            throw new IllegalArgumentException("无权归类该业务文档");
-        }
-        moveBusinessPlacement(context, file, parentId);
-        return buildDocumentVO(file, context);
-    }
-
-    private void moveBusinessFolder(UserAccessContext context, SysFiles folder, String parentId) {
-        if (!StringUtils.hasText(parentId) || isBusinessModuleVirtualId(parentId)) {
-            throw new IllegalArgumentException("业务文档文件夹只能移动到具体业务数据目录下");
-        }
-        if (isBusinessRecordVirtualId(parentId)) {
-            BusinessRecordNode recordNode = parseBusinessRecordNode(parentId);
-            if (!hasAccessibleBusinessRecord(recordNode, context)) {
-                throw new IllegalArgumentException("无权移动到该业务数据目录下");
-            }
-        } else {
-            SysFiles parent = getActiveFile(parentId);
-            if (!isBusinessFolder(parent, context.username())) {
-                throw new IllegalArgumentException("业务文档文件夹只能移动到业务文档目录下");
-            }
-            validateNotMoveToDescendant(folder.getId(), parentId);
-        }
-        updateDocumentParent(folder, parentId, context.username());
-    }
-
-    private void moveBusinessPlacement(UserAccessContext context, SysFiles file, String parentId) {
-        if (!StringUtils.hasText(parentId)) {
-            clearPersonalBusinessPlacement(context, file.getId());
-            return;
-        }
-        if (isBusinessRecordVirtualId(parentId)) {
-            BusinessRecordNode recordNode = parseBusinessRecordNode(parentId);
-            if (!hasAccessibleBusinessRecordFile(file.getId(), recordNode, context)) {
-                throw new IllegalArgumentException("业务文档只能移动到其关联的业务数据目录下");
-            }
-            clearPersonalBusinessPlacement(context, file.getId());
-            return;
-        }
-        if (isBusinessModuleVirtualId(parentId)) {
-            throw new IllegalArgumentException("业务文档只能归类到具体业务数据或整理文件夹下");
-        }
-        SysFiles parent = getActiveFile(parentId);
-        if (!isBusinessFolder(parent, context.username())) {
-            throw new IllegalArgumentException("业务文档只能归类到业务文档文件夹");
-        }
-        upsertPersonalBusinessPlacement(context, file.getId(), parentId);
-    }
-
-    private void clearPersonalBusinessPlacement(UserAccessContext context, String fileId) {
-        List<SysFileRelation> relations = fileRelationMapper.selectList(Wrappers.lambdaQuery(SysFileRelation.class)
-                .eq(SysFileRelation::getTenantId, context.tenantId())
-                .eq(SysFileRelation::getBizType, personalBusinessRelationBizType(context))
-                .eq(SysFileRelation::getFileId, fileId)
-                .eq(SysFileRelation::getDeleteFlag, 0));
-        for (SysFileRelation relation : relations) {
-            EntityFillUtils.fillDeleteFields(relation, context.username());
-            fileRelationMapper.updateById(relation);
-        }
-    }
-
-    /**
-     * 业务文档归类同样是用户自己的视图，不改变业务附件和业务数据的绑定关系。
-     */
-    private void upsertPersonalBusinessPlacement(UserAccessContext context, String fileId, String parentId) {
-        clearPersonalBusinessPlacement(context, fileId);
-        SysFileRelation relation = new SysFileRelation();
-        relation.setId(newId());
-        relation.setTenantId(context.tenantId());
-        relation.setFileId(fileId);
-        relation.setBizType(personalBusinessRelationBizType(context));
-        relation.setBizId(parentId);
-        relation.setRelationType(PERSONAL_BUSINESS_RELATION_TYPE);
-        relation.setSortOrder(0);
-        relation.setCreateBy(context.username());
-        relation.setCreateTime(LocalDateTime.now());
-        relation.setDeleteFlag(0);
-        fileRelationMapper.insert(relation);
-    }
-
     private void clearPersonalSharedPlacement(UserAccessContext context, String fileId) {
         List<SysFileRelation> relations = fileRelationMapper.selectList(Wrappers.lambdaQuery(SysFileRelation.class)
                 .eq(SysFileRelation::getTenantId, context.tenantId())
@@ -2517,6 +2422,19 @@ public class SysFilesServiceImpl extends BaseServiceImpl<SysFilesMapper, SysFile
     private void assertOwner(SysFiles file, String username) {
         if (!StringUtils.hasText(username) || file == null || !Objects.equals(file.getCreateBy(), username)) {
             throw new IllegalArgumentException("无权管理该文档");
+        }
+    }
+
+    /**
+     * 业务文档在文档中心只承担聚合查看入口，生命周期和内容维护必须回到对应业务模块处理。
+     */
+    private void assertNotBusinessReadonlyDocument(SysFiles file) {
+        if (file == null) {
+            return;
+        }
+        if (BUSINESS_VIEW_STORE_TYPE.equals(file.getStoreType())
+                || hasActiveBusinessRelation(file.getId(), file.getTenantId())) {
+            throw new IllegalArgumentException("业务文档只允许查看，请在业务模块中维护");
         }
     }
 

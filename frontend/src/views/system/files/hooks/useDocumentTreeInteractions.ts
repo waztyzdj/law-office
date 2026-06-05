@@ -8,13 +8,12 @@ import { message } from 'ant-design-vue';
 
 import {
   canMove as canMoveDocument,
+  isActualSharedItem,
+  isActualStarredItem,
+  isReadonlyBrowseScope,
   isSharedReadonlyScope,
   isVirtualBusinessItem,
 } from '../components/documentExplorerUtils';
-import {
-  BUSINESS_RECORD_VIEW_STORE_TYPE,
-  BUSINESS_VIEW_STORE_TYPE,
-} from '../constants';
 import {
   getScopeRootKey,
   isScopeRootKey,
@@ -39,6 +38,8 @@ interface UseDocumentTreeInteractionsOptions {
   expandPathKeys: (path: DocumentFileInfo[]) => void;
   findCachedPath: (key: string) => CachedFolderPath | undefined;
   findFolderByKey: (key: string) => DocumentFileInfo | undefined;
+  getRootKeyFromFolderNodeKey: (key: string) => string;
+  getScopeByRootKey: (rootKey: string) => DocumentScope | undefined;
   getActiveSelectedTreeKey: () => string;
   handleBatchAction: (event: DocumentBatchAction, records: DocumentFileInfo[]) => void;
   handleCreateFolder: (parentId?: string) => void;
@@ -51,7 +52,6 @@ interface UseDocumentTreeInteractionsOptions {
     targetParentId?: string,
   ) => void;
   inlineEditor: Ref<InlineEditorState | undefined>;
-  isBusinessScope: ComputedRef<boolean>;
   isSharedInboxScope: ComputedRef<boolean>;
   loadData: () => Promise<void>;
   loading: Ref<boolean>;
@@ -83,17 +83,24 @@ export function useDocumentTreeInteractions(options: UseDocumentTreeInteractions
     treeShortcutActive.value = false;
   }
 
-  function isSharedByMeTreeReadonly() {
-    return options.scope.value === 'sharedByMe';
+  function getTreeNodeScope(key: string) {
+    return options.getScopeByRootKey(options.getRootKeyFromFolderNodeKey(key)) || options.scope.value;
+  }
+
+  function isReadonlyBrowseTree(key?: string) {
+    return isReadonlyBrowseScope(key ? getTreeNodeScope(key) : options.scope.value);
   }
 
   function canShowSharedByMeShareMenu(key: string) {
-    const record = options.findFolderByKey(key);
-    return Boolean(record?.id && record.ownerFlag && record.sharedFlag);
+    return isActualSharedItem(options.findFolderByKey(key));
+  }
+
+  function canShowStarredMenu(key: string) {
+    return isActualStarredItem(options.findFolderByKey(key));
   }
 
   function canManageTreeFolder(key: string) {
-    if (isSharedByMeTreeReadonly()) {
+    if (isReadonlyBrowseTree(key)) {
       return false;
     }
     const record = options.findFolderByKey(key);
@@ -101,18 +108,22 @@ export function useDocumentTreeInteractions(options: UseDocumentTreeInteractions
   }
 
   function canCreateInTreeFolder(key: string) {
-    if (isSharedByMeTreeReadonly()) {
+    if (isReadonlyBrowseTree(key)) {
       return false;
     }
     return !isScopeRootKey(key) && options.canCreateInsideFolder(options.findFolderByKey(key));
   }
 
   function canShowTreeContextMenu(key: string) {
-    if (isSharedReadonlyScope(options.scope.value)) {
+    const nodeScope = getTreeNodeScope(key);
+    if (nodeScope === 'business' || isSharedReadonlyScope(nodeScope)) {
       return false;
     }
-    if (isSharedByMeTreeReadonly()) {
+    if (nodeScope === 'sharedByMe') {
       return canShowSharedByMeShareMenu(key);
+    }
+    if (nodeScope === 'starred') {
+      return canShowStarredMenu(key);
     }
     return canManageTreeFolder(key) || canCreateInTreeFolder(key);
   }
@@ -122,7 +133,7 @@ export function useDocumentTreeInteractions(options: UseDocumentTreeInteractions
   }
 
   function getTreeCopyableRecords(record?: DocumentFileInfo) {
-    if (isSharedReadonlyScope(options.scope.value)) {
+    if (isReadonlyBrowseScope(options.scope.value)) {
       return [];
     }
     return getTreeContextRecords(record).filter(
@@ -131,7 +142,7 @@ export function useDocumentTreeInteractions(options: UseDocumentTreeInteractions
   }
 
   function getTreeCuttableRecords(record?: DocumentFileInfo) {
-    if (isSharedReadonlyScope(options.scope.value)) {
+    if (isReadonlyBrowseScope(options.scope.value)) {
       return [];
     }
     return getTreeContextRecords(record).filter((item) =>
@@ -144,7 +155,7 @@ export function useDocumentTreeInteractions(options: UseDocumentTreeInteractions
   }
 
   function getTreeDeletableRecords(record?: DocumentFileInfo) {
-    if (isSharedReadonlyScope(options.scope.value)) {
+    if (isReadonlyBrowseScope(options.scope.value)) {
       return [];
     }
     return getTreeContextRecords(record).filter(
@@ -155,13 +166,13 @@ export function useDocumentTreeInteractions(options: UseDocumentTreeInteractions
   function canDropToTreeTarget(key: string) {
     if (
       options.scope.value === 'trash' ||
-      isSharedReadonlyScope(options.scope.value) ||
-      isSharedByMeTreeReadonly()
+      isReadonlyBrowseScope(options.scope.value) ||
+      isReadonlyBrowseTree(key)
     ) {
       return false;
     }
     if (isScopeRootKey(key)) {
-      return !options.isBusinessScope.value && key === getScopeRootKey(options.activeRootKey.value);
+      return key === getScopeRootKey(options.activeRootKey.value);
     }
     const target = options.findFolderByKey(key);
     if (!target?.id) {
@@ -169,12 +180,6 @@ export function useDocumentTreeInteractions(options: UseDocumentTreeInteractions
     }
     if (options.isSharedInboxScope.value) {
       return Boolean(target.ownerFlag) && target.storeType === 'shared_view';
-    }
-    if (options.isBusinessScope.value) {
-      return (
-        target.storeType === BUSINESS_RECORD_VIEW_STORE_TYPE ||
-        (Boolean(target.ownerFlag) && target.storeType === BUSINESS_VIEW_STORE_TYPE)
-      );
     }
     return Boolean(target.ownerFlag);
   }
@@ -234,7 +239,7 @@ export function useDocumentTreeInteractions(options: UseDocumentTreeInteractions
       options.loading.value ||
       options.moving.value ||
       options.treeLoading.value ||
-      isSharedByMeTreeReadonly() ||
+      isReadonlyBrowseTree() ||
       isEditableShortcutTarget(event.target)
     ) {
       return;
@@ -333,7 +338,8 @@ export function useDocumentTreeInteractions(options: UseDocumentTreeInteractions
     if (
       sourceIds.length === 0 ||
       options.scope.value === 'trash' ||
-      isSharedReadonlyScope(options.scope.value)
+      isReadonlyBrowseScope(options.scope.value) ||
+      isReadonlyBrowseTree(targetKey)
     ) {
       return;
     }
@@ -382,7 +388,8 @@ export function useDocumentTreeInteractions(options: UseDocumentTreeInteractions
     if (
       !isDocumentDrag(event) ||
       options.scope.value === 'trash' ||
-      isSharedReadonlyScope(options.scope.value)
+      isReadonlyBrowseScope(options.scope.value) ||
+      isReadonlyBrowseTree(targetKey)
     ) {
       return;
     }

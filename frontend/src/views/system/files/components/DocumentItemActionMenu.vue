@@ -8,6 +8,13 @@ import { IconifyIcon } from '@vben/icons';
 
 import { Menu } from 'ant-design-vue';
 
+import {
+  isActualSharedItem,
+  isActualStarredItem,
+  isReadonlyBrowseScope,
+  isReadonlyCollectionScope,
+} from './documentExplorerUtils';
+
 interface Props {
   canEdit?: boolean;
   canEditContent?: boolean;
@@ -19,7 +26,6 @@ interface Props {
   contextDownloadableCount?: number;
   record?: DocumentFileInfo;
   scope: DocumentScope;
-  shareOnly?: boolean;
   singleContext?: boolean;
 }
 
@@ -42,7 +48,6 @@ const props = withDefaults(defineProps<Props>(), {
   contextCuttableCount: 0,
   contextDeletableCount: 0,
   contextDownloadableCount: 0,
-  shareOnly: false,
   singleContext: true,
 });
 
@@ -52,8 +57,22 @@ const emit = defineEmits<{
 }>();
 
 const batchItems = computed<ActionMenuItem[]>(() => {
-  if (props.scope === 'trash' || props.scope === 'shared' || props.shareOnly) {
+  if (props.scope === 'trash') {
     return [];
+  }
+  if (isReadonlyBrowseScope(props.scope)) {
+    if (props.singleContext) {
+      return [];
+    }
+    return [
+      {
+        batchAction: 'download',
+        disabled: props.contextDownloadableCount === 0,
+        icon: 'lucide:download',
+        key: 'download',
+        label: '下载',
+      },
+    ];
   }
   const items: ActionMenuItem[] = [
     {
@@ -90,8 +109,36 @@ const singleItems = computed<ActionMenuItem[]>(() => {
   if (!props.singleContext) {
     return [];
   }
-  if (props.scope === 'shared') {
+  if (isReadonlyBrowseScope(props.scope)) {
     if (props.record?.izFolder === '1') {
+      if (props.scope === 'starred' && isActualStarredItem(props.record)) {
+        return [
+          {
+            action: 'star',
+            danger: true,
+            icon: 'lucide:star',
+            key: 'star',
+            label: '取消收藏',
+          },
+        ];
+      }
+      if (props.scope === 'sharedByMe' && isActualSharedItem(props.record)) {
+        return [
+          {
+            action: 'share',
+            icon: 'lucide:share-2',
+            key: 'share',
+            label: '查看共享',
+          },
+          {
+            action: 'cancelShare',
+            danger: true,
+            icon: 'lucide:share-2',
+            key: 'cancel-share',
+            label: '取消共享',
+          },
+        ];
+      }
       return [];
     }
     const items: ActionMenuItem[] = [];
@@ -109,27 +156,31 @@ const singleItems = computed<ActionMenuItem[]>(() => {
         label: '下载',
       });
     }
-    return items;
-  }
-  if (props.shareOnly) {
-    if (!props.canEdit || !props.record?.sharedFlag) {
-      return [];
+    if (props.scope === 'starred' && isActualStarredItem(props.record)) {
+      items.push({
+        action: 'star',
+        danger: true,
+        icon: 'lucide:star',
+        key: 'star',
+        label: '取消收藏',
+      });
     }
-    return [
-      {
+    if (props.scope === 'sharedByMe' && isActualSharedItem(props.record)) {
+      items.push({
         action: 'share',
         icon: 'lucide:share-2',
         key: 'share',
         label: '查看共享',
-      },
-      {
+      });
+      items.push({
         action: 'cancelShare',
         danger: true,
         icon: 'lucide:share-2',
         key: 'cancel-share',
-        label: '删除共享',
-      },
-    ];
+        label: '取消共享',
+      });
+    }
+    return items;
   }
   const items: ActionMenuItem[] = [];
   if (props.canPreview) {
@@ -162,7 +213,7 @@ const singleItems = computed<ActionMenuItem[]>(() => {
 });
 
 const showDeleteItem = computed(() =>
-  !props.shareOnly &&
+  !isReadonlyCollectionScope(props.scope) &&
   props.scope !== 'shared' &&
   props.scope !== 'trash' &&
   props.scope !== 'business',

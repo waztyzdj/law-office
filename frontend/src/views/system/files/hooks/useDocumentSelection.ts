@@ -5,7 +5,7 @@ import type { DocumentBatchAction, InlineEditorState } from '../types';
 import { computed, ref } from 'vue';
 
 import {
-  isSharedReadonlyScope,
+  isReadonlyBrowseScope,
   isVirtualBusinessItem,
 } from '../components/documentExplorerUtils';
 
@@ -202,7 +202,7 @@ export function useDocumentSelection(options: UseDocumentSelectionOptions) {
   }
 
   function getContextDeletableRecords(record: DocumentFileInfo) {
-    if (isSharedReadonlyScope(options.scope.value)) {
+    if (isReadonlyBrowseScope(options.scope.value)) {
       return [];
     }
     return getContextRecords(record).filter(
@@ -211,14 +211,14 @@ export function useDocumentSelection(options: UseDocumentSelectionOptions) {
   }
 
   function getContextCuttableRecords(record: DocumentFileInfo) {
-    if (isSharedReadonlyScope(options.scope.value)) {
+    if (isReadonlyBrowseScope(options.scope.value)) {
       return [];
     }
     return getContextRecords(record).filter((item) => options.canMove(item));
   }
 
   function getContextCopyableRecords(record: DocumentFileInfo) {
-    if (isSharedReadonlyScope(options.scope.value)) {
+    if (isReadonlyBrowseScope(options.scope.value)) {
       return [];
     }
     return getContextRecords(record).filter(
@@ -262,7 +262,7 @@ export function useDocumentSelection(options: UseDocumentSelectionOptions) {
     }
     const key = event.key.toLowerCase();
     if (key === 'delete' || (event.metaKey && key === 'backspace')) {
-      if (isSharedReadonlyScope(options.scope.value)) {
+      if (isReadonlyBrowseScope(options.scope.value)) {
         return;
       }
       const records = selectedRecords.value.filter(
@@ -280,7 +280,7 @@ export function useDocumentSelection(options: UseDocumentSelectionOptions) {
       return;
     }
     if (key === 'x') {
-      if (isSharedReadonlyScope(options.scope.value)) {
+      if (isReadonlyBrowseScope(options.scope.value)) {
         return;
       }
       const records = selectedRecords.value.filter((item) => options.canMove(item));
@@ -292,7 +292,7 @@ export function useDocumentSelection(options: UseDocumentSelectionOptions) {
       return;
     }
     if (key === 'c') {
-      if (isSharedReadonlyScope(options.scope.value)) {
+      if (isReadonlyBrowseScope(options.scope.value)) {
         return;
       }
       const records = selectedRecords.value.filter(

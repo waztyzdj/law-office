@@ -22,6 +22,7 @@ interface Props {
   canShowTreeContextMenu: (key: string) => boolean;
   expandedKeys: string[];
   findFolderByKey: (key: string) => DocumentFileInfo | undefined;
+  getTreeNodeScope: (key: string) => DocumentScope;
   getTreeCopyableRecords: (record?: DocumentFileInfo) => DocumentFileInfo[];
   getTreeCuttableRecords: (record?: DocumentFileInfo) => DocumentFileInfo[];
   getTreeDeletableRecords: (record?: DocumentFileInfo) => DocumentFileInfo[];
@@ -80,6 +81,22 @@ function handleAction(event: string, record?: DocumentFileInfo) {
   }
   emit('action', event, record);
 }
+
+function isReadonlyTreeScope(key: string) {
+  return ['business', 'shared', 'sharedByMe', 'starred'].includes(props.getTreeNodeScope(key));
+}
+
+function getTreeCopyableCount(key: string) {
+  return isReadonlyTreeScope(key) ? 0 : props.getTreeCopyableRecords(props.findFolderByKey(key)).length;
+}
+
+function getTreeCuttableCount(key: string) {
+  return isReadonlyTreeScope(key) ? 0 : props.getTreeCuttableRecords(props.findFolderByKey(key)).length;
+}
+
+function getTreeDeletableCount(key: string) {
+  return isReadonlyTreeScope(key) ? 0 : props.getTreeDeletableRecords(props.findFolderByKey(key)).length;
+}
 </script>
 
 <template>
@@ -133,14 +150,13 @@ function handleAction(event: string, record?: DocumentFileInfo) {
             </span>
             <template #overlay>
               <DocumentItemActionMenu
-                :can-edit="scope === 'sharedByMe' || canManageTreeFolder(String(key))"
-                :context-copyable-count="getTreeCopyableRecords(findFolderByKey(String(key))).length"
-                :context-cuttable-count="getTreeCuttableRecords(findFolderByKey(String(key))).length"
-                :context-deletable-count="getTreeDeletableRecords(findFolderByKey(String(key))).length"
+                :can-edit="canManageTreeFolder(String(key))"
+                :context-copyable-count="getTreeCopyableCount(String(key))"
+                :context-cuttable-count="getTreeCuttableCount(String(key))"
+                :context-deletable-count="getTreeDeletableCount(String(key))"
                 :context-downloadable-count="getTreeDownloadableRecords(findFolderByKey(String(key))).length"
                 :record="findFolderByKey(String(key))"
-                :share-only="scope === 'sharedByMe'"
-                :scope="scope"
+                :scope="getTreeNodeScope(String(key))"
                 @action="handleAction($event, findFolderByKey(String(key)))"
                 @batch-action="emit('batchAction', $event, findFolderByKey(String(key)))"
               />

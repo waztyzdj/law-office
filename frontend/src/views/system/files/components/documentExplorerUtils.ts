@@ -3,7 +3,6 @@ import type { DocumentFileInfo, DocumentScope } from '#/api/system/document';
 import {
   BUSINESS_MODULE_VIEW_STORE_TYPE,
   BUSINESS_RECORD_VIEW_STORE_TYPE,
-  BUSINESS_VIEW_STORE_TYPE,
   IMAGE_PREVIEW_EXTENSIONS,
   ONLYOFFICE_EDIT_EXTENSIONS,
   ONLYOFFICE_PREVIEW_EXTENSIONS,
@@ -18,6 +17,22 @@ export interface DocumentExplorerActionContext {
 
 export function isSharedReadonlyScope(scope: DocumentScope) {
   return scope === 'shared';
+}
+
+export function isReadonlyCollectionScope(scope: DocumentScope) {
+  return scope === 'sharedByMe' || scope === 'starred';
+}
+
+export function isReadonlyBrowseScope(scope: DocumentScope) {
+  return scope === 'business' || isSharedReadonlyScope(scope) || isReadonlyCollectionScope(scope);
+}
+
+export function isActualStarredItem(record?: DocumentFileInfo) {
+  return record?.izStar === '1';
+}
+
+export function isActualSharedItem(record?: DocumentFileInfo) {
+  return Boolean(record?.id && record.ownerFlag && record.sharedFlag);
 }
 
 export const documentListColumns: Array<{
@@ -164,13 +179,8 @@ export function isImageFile(record: DocumentFileInfo) {
 }
 
 export function canMove(record: DocumentFileInfo, context: DocumentExplorerActionContext) {
-  if (isSharedReadonlyScope(context.scope)) {
+  if (isReadonlyBrowseScope(context.scope)) {
     return false;
-  }
-  if (context.scope === 'business') {
-    return record.izFolder === '1'
-      ? canEditItem(record, context)
-      : Boolean(record.id);
   }
   return (
     context.scope !== 'trash' &&
@@ -180,31 +190,18 @@ export function canMove(record: DocumentFileInfo, context: DocumentExplorerActio
 }
 
 export function canEditItem(record: DocumentFileInfo, context: DocumentExplorerActionContext) {
-  if (isSharedReadonlyScope(context.scope)) {
+  if (isReadonlyBrowseScope(context.scope)) {
     return false;
-  }
-  if (context.scope === 'business') {
-    return (
-      Boolean(record.ownerFlag) &&
-      record.izFolder === '1' &&
-      record.storeType === BUSINESS_VIEW_STORE_TYPE
-    );
   }
   return context.scope !== 'trash' && Boolean(record.ownerFlag);
 }
 
 export function canCreateFolderInItem(record: DocumentFileInfo, context: DocumentExplorerActionContext) {
-  if (isSharedReadonlyScope(context.scope)) {
+  if (isReadonlyBrowseScope(context.scope)) {
     return false;
   }
   if (record.izFolder !== '1' || !record.id) {
     return false;
-  }
-  if (context.scope === 'business') {
-    return (
-      record.storeType === BUSINESS_RECORD_VIEW_STORE_TYPE ||
-      (Boolean(record.ownerFlag) && record.storeType === BUSINESS_VIEW_STORE_TYPE)
-    );
   }
   return canEditItem(record, context);
 }
@@ -220,6 +217,9 @@ export function canPreviewItem(record: DocumentFileInfo, context: DocumentExplor
 }
 
 export function canEditContentItem(record: DocumentFileInfo, context: DocumentExplorerActionContext) {
+  if (context.scope === 'business') {
+    return false;
+  }
   const extension = getFileExtension(record);
   return (
     context.scope !== 'trash' &&
@@ -231,7 +231,7 @@ export function canEditContentItem(record: DocumentFileInfo, context: DocumentEx
 }
 
 export function canViewHistoryItem(record: DocumentFileInfo, context: DocumentExplorerActionContext) {
-  if (isSharedReadonlyScope(context.scope)) {
+  if (isReadonlyBrowseScope(context.scope)) {
     return false;
   }
   const extension = getFileExtension(record);
@@ -244,7 +244,7 @@ export function canViewHistoryItem(record: DocumentFileInfo, context: DocumentEx
 }
 
 export function canDropOnFolder(target: DocumentFileInfo, context: DocumentExplorerActionContext) {
-  if (isSharedReadonlyScope(context.scope)) {
+  if (isReadonlyBrowseScope(context.scope)) {
     return false;
   }
   if (context.scope === 'trash' || target.izFolder !== '1' || !target.id) {
@@ -252,12 +252,6 @@ export function canDropOnFolder(target: DocumentFileInfo, context: DocumentExplo
   }
   if (context.personalizeShared) {
     return Boolean(target.ownerFlag) && target.storeType === 'shared_view';
-  }
-  if (context.scope === 'business') {
-    return (
-      target.storeType === BUSINESS_RECORD_VIEW_STORE_TYPE ||
-      (Boolean(target.ownerFlag) && target.storeType === BUSINESS_VIEW_STORE_TYPE)
-    );
   }
   return Boolean(target.ownerFlag);
 }
