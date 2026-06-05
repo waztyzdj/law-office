@@ -24,6 +24,7 @@ interface Props {
   contextCuttableCount?: number;
   contextDeletableCount?: number;
   contextDownloadableCount?: number;
+  contextRestorableCount?: number;
   record?: DocumentFileInfo;
   scope: DocumentScope;
   singleContext?: boolean;
@@ -48,6 +49,7 @@ const props = withDefaults(defineProps<Props>(), {
   contextCuttableCount: 0,
   contextDeletableCount: 0,
   contextDownloadableCount: 0,
+  contextRestorableCount: 0,
   singleContext: true,
 });
 
@@ -58,7 +60,25 @@ const emit = defineEmits<{
 
 const batchItems = computed<ActionMenuItem[]>(() => {
   if (props.scope === 'trash') {
-    return [];
+    if (props.singleContext) {
+      return [];
+    }
+    return [
+      {
+        batchAction: 'download',
+        disabled: props.contextDownloadableCount === 0,
+        icon: 'lucide:download',
+        key: 'download',
+        label: '下载',
+      },
+      {
+        batchAction: 'restore',
+        disabled: props.contextRestorableCount === 0,
+        icon: 'lucide:rotate-ccw',
+        key: 'restore',
+        label: '恢复',
+      },
+    ];
   }
   if (isReadonlyBrowseScope(props.scope)) {
     if (props.singleContext) {
@@ -108,6 +128,36 @@ const batchItems = computed<ActionMenuItem[]>(() => {
 const singleItems = computed<ActionMenuItem[]>(() => {
   if (!props.singleContext) {
     return [];
+  }
+  if (props.scope === 'trash') {
+    const items: ActionMenuItem[] = [];
+    if (props.record?.izFolder !== '1') {
+      if (props.canPreview) {
+        items.push({ action: 'preview', icon: 'lucide:eye', key: 'preview', label: '预览' });
+      }
+      if (props.contextDownloadableCount > 0) {
+        items.push({
+          batchAction: 'download',
+          icon: 'lucide:download',
+          key: 'download',
+          label: '下载',
+        });
+      }
+    }
+    items.push({
+      action: 'restore',
+      icon: 'lucide:rotate-ccw',
+      key: 'restore',
+      label: '恢复',
+    });
+    items.push({
+      action: 'purge',
+      danger: true,
+      icon: 'lucide:trash-2',
+      key: 'purge',
+      label: '彻底删除',
+    });
+    return items;
   }
   if (isReadonlyBrowseScope(props.scope)) {
     if (props.record?.izFolder === '1') {

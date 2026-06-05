@@ -642,6 +642,20 @@ public class SysFilesServiceImpl extends BaseServiceImpl<SysFilesMapper, SysFile
 
     @Override
     @Transactional(rollbackFor = Exception.class)
+    public List<DocumentFileVO> batchRestoreDocuments(String username, DocumentBatchDeleteReq req) {
+        List<String> ids = normalizeDocumentIds(req == null ? null : req.getIds());
+        if (ids.isEmpty()) {
+            throw new IllegalArgumentException("文件ID不能为空");
+        }
+        List<DocumentFileVO> restoredFiles = new ArrayList<>();
+        for (String id : ids) {
+            restoredFiles.add(restoreDocument(username, id));
+        }
+        return restoredFiles;
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
     public void purgeDocument(String username, String fileId) {
         SysFiles file = getFileIncludingDeleted(fileId);
         assertOwner(file, username);
@@ -775,7 +789,7 @@ public class SysFilesServiceImpl extends BaseServiceImpl<SysFilesMapper, SysFile
     @Override
     @Transactional(rollbackFor = Exception.class)
     public DocumentFileVO checkDocumentDownload(String fileId, String username) {
-        SysFiles file = getActiveFile(fileId);
+        SysFiles file = getReadableDocumentFile(fileId, username);
         UserAccessContext context = buildUserAccessContext(username, requireTenantId());
         if (FLAG_YES.equals(file.getIzFolder())) {
             throw new IllegalArgumentException("文件夹不能下载");
@@ -809,6 +823,9 @@ public class SysFilesServiceImpl extends BaseServiceImpl<SysFilesMapper, SysFile
     @Transactional(readOnly = true)
     public DocumentFileVO checkDocumentEdit(String fileId, String username) {
         DocumentReadAccess access = checkDocumentReadAccess(fileId, username);
+        if (Objects.equals(access.file().getDeleteFlag(), 1)) {
+            throw new IllegalArgumentException("回收站中的文档不允许编辑");
+        }
         assertNotBusinessReadonlyDocument(access.file());
         if (!canUpdate(access.file(), access.context())) {
             throw new IllegalArgumentException("无权编辑该文档");
@@ -827,6 +844,9 @@ public class SysFilesServiceImpl extends BaseServiceImpl<SysFilesMapper, SysFile
             boolean touchUpdateTime) {
         DocumentReadAccess access = checkDocumentReadAccess(fileId, username);
         SysFiles file = access.file();
+        if (Objects.equals(file.getDeleteFlag(), 1)) {
+            throw new IllegalArgumentException("回收站中的文档不允许编辑");
+        }
         assertNotBusinessReadonlyDocument(file);
         if (!canUpdate(file, access.context())) {
             throw new IllegalArgumentException("无权保存该文档");
@@ -846,13 +866,24 @@ public class SysFilesServiceImpl extends BaseServiceImpl<SysFilesMapper, SysFile
     }
 
     private DocumentReadAccess checkDocumentReadAccess(String fileId, String username) {
-        SysFiles file = getActiveFile(fileId);
+        SysFiles file = getReadableDocumentFile(fileId, username);
         UserAccessContext context = buildUserAccessContext(username, requireTenantId());
         if (FLAG_YES.equals(file.getIzFolder())) {
             throw new IllegalArgumentException("文件夹不能预览");
         }
         assertCanViewDocument(file, context);
         return new DocumentReadAccess(file, context);
+    }
+
+    private SysFiles getReadableDocumentFile(String fileId, String username) {
+        SysFiles file = getFileIncludingDeleted(fileId);
+        if (file == null) {
+            throw new IllegalArgumentException("文件不存在或已删除");
+        }
+        if (Objects.equals(file.getDeleteFlag(), 1)) {
+            assertOwner(file, username);
+        }
+        return file;
     }
 
     private PageVO<DocumentFileVO> pageDocumentChildrenByParent(

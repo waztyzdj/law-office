@@ -122,6 +122,11 @@ public interface ISysFilesService extends IBaseService<SysFiles, SysFilesVO> {
     DocumentFileVO restoreDocument(String username, String fileId);
 
     /**
+     * 批量从回收站恢复本人拥有的文档。任一文档校验失败时整体回滚。
+     */
+    List<DocumentFileVO> batchRestoreDocuments(String username, DocumentBatchDeleteReq req);
+
+    /**
      * 从回收站彻底删除本人拥有的文档。
      */
     void purgeDocument(String username, String fileId);

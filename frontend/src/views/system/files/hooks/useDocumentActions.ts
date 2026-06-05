@@ -19,6 +19,7 @@ import { Modal, message } from 'ant-design-vue';
 import {
   batchDeleteDocuments,
   batchMoveDocuments,
+  batchRestoreDocuments,
   clearDocumentTrash,
   copyDocuments,
   createDocumentFolder,
@@ -428,6 +429,24 @@ export function useDocumentActions(options: UseDocumentActionsOptions) {
     }
   }
 
+  function handleBatchRestore(records: DocumentFileInfo[]) {
+    const ids = Array.from(new Set(records.map((record) => record.id || '').filter(Boolean)));
+    if (ids.length === 0) {
+      return;
+    }
+    Modal.confirm({
+      cancelText: '取消',
+      content: `确认恢复选中的 ${ids.length} 个文档吗？`,
+      okText: '恢复',
+      title: '确认恢复',
+      async onOk() {
+        await batchRestoreDocuments(ids);
+        message.success(`已恢复 ${ids.length} 个文档`);
+        await options.reloadAll();
+      },
+    });
+  }
+
   async function writeDocumentClipboardText(records: DocumentFileInfo[]) {
     const text = records
       .map((record) => record.fileName)
@@ -468,6 +487,10 @@ export function useDocumentActions(options: UseDocumentActionsOptions) {
   function handleBatchAction(event: DocumentBatchAction, records: DocumentFileInfo[]) {
     if (event === 'download') {
       void handleBatchDownload(records);
+      return;
+    }
+    if (event === 'restore') {
+      handleBatchRestore(records);
       return;
     }
     if (event === 'delete') {

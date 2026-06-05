@@ -40,7 +40,7 @@ export interface DocumentNavigationLocation {
   rootKey: string;
 }
 
-export type DocumentBatchAction = 'copy' | 'cut' | 'delete' | 'download';
+export type DocumentBatchAction = 'copy' | 'cut' | 'delete' | 'download' | 'restore';
 export type DocumentViewMode = 'grid' | 'list';
 
 export interface DocumentContentViewProps {
@@ -55,6 +55,7 @@ export interface DocumentContentViewProps {
   getContextCuttableRecords: (record: DocumentFileInfo) => DocumentFileInfo[];
   getContextDeletableRecords: (record: DocumentFileInfo) => DocumentFileInfo[];
   getContextDownloadRecords: (record: DocumentFileInfo) => DocumentFileInfo[];
+  getContextRestorableRecords: (record: DocumentFileInfo) => DocumentFileInfo[];
   imageThumbnailUrl: (record: DocumentFileInfo) => string | undefined;
   inlineEditor?: InlineEditorState;
   isCutting: (record: DocumentFileInfo) => boolean;

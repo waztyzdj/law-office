@@ -207,6 +207,9 @@ function canDropOnFolder(target: DocumentFileInfo) {
 }
 
 function canShowItemActionMenu(record: DocumentFileInfo) {
+  if (props.scope === 'trash') {
+    return Boolean(record.id);
+  }
   if (props.scope === 'shared') {
     return record.izFolder !== '1';
   }
@@ -280,6 +283,7 @@ const {
   getContextCuttableRecords,
   getContextDeletableRecords,
   getContextDownloadRecords,
+  getContextRestorableRecords,
   handleBodyClick,
   handleContextSelect,
   handleItemClick,
@@ -350,6 +354,7 @@ const contentViewProps = computed<DocumentContentViewProps>(() => ({
   getContextCuttableRecords,
   getContextDeletableRecords,
   getContextDownloadRecords,
+  getContextRestorableRecords,
   imageThumbnailUrl,
   inlineEditor: props.inlineEditor,
   isCutting,

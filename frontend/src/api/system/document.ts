@@ -162,6 +162,9 @@ export const batchDeleteDocuments = (ids: string[]) =>
 export const restoreDocument = (fileId: string) =>
   requestClient.post<DocumentFileInfo>(`/files/document/restore/${fileId}`);
 
+export const batchRestoreDocuments = (ids: string[]) =>
+  requestClient.post<DocumentFileInfo[]>('/files/document/batch-restore', { ids });
+
 export const purgeDocument = (fileId: string) =>
   requestClient.post<void>(`/files/document/purge/${fileId}`);
 

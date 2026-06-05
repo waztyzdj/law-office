@@ -26,6 +26,7 @@ interface Props
     | 'getContextCuttableRecords'
     | 'getContextDeletableRecords'
     | 'getContextDownloadRecords'
+    | 'getContextRestorableRecords'
     | 'isSingleContext'
 > {
   disabled?: boolean;
@@ -91,6 +92,7 @@ function handleBatchAction(event: DocumentBatchAction) {
         :context-cuttable-count="getContextCuttableRecords(record).length"
         :context-deletable-count="getContextDeletableRecords(record).length"
         :context-downloadable-count="getContextDownloadRecords(record).length"
+        :context-restorable-count="getContextRestorableRecords(record).length"
         :record="record"
         :scope="scope"
         :single-context="singleContext"

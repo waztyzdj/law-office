@@ -161,6 +161,15 @@ public class SysFilesController extends BaseController<ISysFilesService, SysFile
         return BaseResult.success(baseService.restoreDocument(getUsername(request), fileId));
     }
 
+    @PostMapping("/document/batch-restore")
+    @Operation(summary = "批量恢复文档", description = "批量从回收站恢复本人拥有的文档，任一失败则整体回滚")
+    @AutoLog(value = "批量恢复文档", logType = LogType.OPERATION, operateType = OperateType.SAVE)
+    public BaseResult<List<DocumentFileVO>> batchRestoreDocuments(
+            @Valid @RequestBody DocumentBatchDeleteReq req,
+            HttpServletRequest request) {
+        return BaseResult.success(baseService.batchRestoreDocuments(getUsername(request), req));
+    }
+
     @PostMapping("/document/purge/{fileId}")
     @Operation(summary = "彻底删除文档", description = "从回收站彻底删除本人拥有的文档")
     @AutoLog(value = "彻底删除文档", logType = LogType.OPERATION, operateType = OperateType.DELETE)

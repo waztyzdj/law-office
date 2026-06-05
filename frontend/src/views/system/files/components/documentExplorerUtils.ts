@@ -206,10 +206,9 @@ export function canCreateFolderInItem(record: DocumentFileInfo, context: Documen
   return canEditItem(record, context);
 }
 
-export function canPreviewItem(record: DocumentFileInfo, context: DocumentExplorerActionContext) {
+export function canPreviewItem(record: DocumentFileInfo, _context: DocumentExplorerActionContext) {
   const extension = getFileExtension(record);
   return (
-    context.scope !== 'trash' &&
     record.izFolder !== '1' &&
     Boolean(record.id) &&
     (ONLYOFFICE_PREVIEW_EXTENSIONS.has(extension) || isImageFile(record))

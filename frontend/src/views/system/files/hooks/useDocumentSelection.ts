@@ -204,6 +204,13 @@ export function useDocumentSelection(options: UseDocumentSelectionOptions) {
     return getContextRecords(record).filter((item) => item.canDownload && item.izFolder !== '1');
   }
 
+  function getContextRestorableRecords(record: DocumentFileInfo) {
+    if (options.scope.value !== 'trash') {
+      return [];
+    }
+    return getContextRecords(record).filter((item) => item.id);
+  }
+
   function getContextDeletableRecords(record: DocumentFileInfo) {
     if (isReadonlyBrowseScope(options.scope.value)) {
       return [];
@@ -237,6 +244,8 @@ export function useDocumentSelection(options: UseDocumentSelectionOptions) {
     const records =
       event === 'download'
         ? getContextDownloadRecords(record)
+        : event === 'restore'
+          ? getContextRestorableRecords(record)
         : event === 'delete'
           ? getContextDeletableRecords(record)
           : event === 'cut'
@@ -508,6 +517,7 @@ export function useDocumentSelection(options: UseDocumentSelectionOptions) {
     getContextCuttableRecords,
     getContextDeletableRecords,
     getContextDownloadRecords,
+    getContextRestorableRecords,
     handleBodyClick,
     handleContextSelect,
     handleItemClick,
