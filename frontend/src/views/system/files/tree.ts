@@ -143,11 +143,10 @@ export function updateFolderTreeNodes(
 ): FolderTreeNode[] {
   return nodes.map((node) => {
     if (node.key === targetKey) {
-      const nextChildren = mergeFolderTreeNodes(children, node.children || []);
       return {
         ...node,
-        children: nextChildren.length > 0 ? nextChildren : undefined,
-        isLeaf: nextChildren.length === 0,
+        children: children.length > 0 ? children : undefined,
+        isLeaf: children.length === 0,
       };
     }
     if (!node.children?.length) {

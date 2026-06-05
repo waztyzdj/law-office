@@ -40,12 +40,15 @@ interface UseDocumentTreeInteractionsOptions {
   findFolderByKey: (key: string) => DocumentFileInfo | undefined;
   getActiveSelectedTreeKey: () => string;
   handleBatchAction: (event: DocumentBatchAction, records: DocumentFileInfo[]) => void;
-  handleBatchMove: (sourceIds: string[], targetParentId?: string) => void;
   handleCreateFolder: (parentId?: string) => void;
   handleDeleteFolder: (record?: DocumentFileInfo) => void;
-  handleMove: (sourceId: string, targetParentId?: string) => void;
   handlePasteToTreeFolder: (record?: DocumentFileInfo) => void;
   handleRenameFolder: (record?: DocumentFileInfo) => void;
+  handleTreeMove: (
+    sourceIds: string[],
+    sourceParentIds: Array<string | undefined>,
+    targetParentId?: string,
+  ) => void;
   inlineEditor: Ref<InlineEditorState | undefined>;
   isBusinessScope: ComputedRef<boolean>;
   isSharedInboxScope: ComputedRef<boolean>;
@@ -268,6 +271,24 @@ export function useDocumentTreeInteractions(options: UseDocumentTreeInteractions
     return sourceId ? [sourceId] : [];
   }
 
+  function getDragSourceParentIds(event: DragEvent) {
+    const rawParentIds = event.dataTransfer?.getData('application/x-document-source-parent-ids');
+    if (!rawParentIds) {
+      return [];
+    }
+    try {
+      const parsed = JSON.parse(rawParentIds);
+      if (Array.isArray(parsed)) {
+        return parsed
+          .filter((parentId): parentId is string | null => typeof parentId === 'string' || parentId === null)
+          .map((parentId) => parentId ?? undefined);
+      }
+    } catch {
+      return [];
+    }
+    return [];
+  }
+
   function handleDropToTree(event: DragEvent, targetKey: string) {
     event.preventDefault();
     const targetFolder = isScopeRootKey(targetKey) ? undefined : options.findFolderByKey(targetKey);
@@ -286,15 +307,12 @@ export function useDocumentTreeInteractions(options: UseDocumentTreeInteractions
       message.warning('不能移动到自身或子文件夹');
       return;
     }
-    if (sourceIds.length === 1) {
-      const sourceId = sourceIds[0];
-      if (!sourceId) {
-        return;
-      }
-      options.handleMove(sourceId, targetParentId);
-      return;
-    }
-    options.handleBatchMove(sourceIds, targetParentId);
+    const sourceParentIds = getDragSourceParentIds(event);
+    options.handleTreeMove(
+      sourceIds,
+      sourceParentIds.length > 0 ? sourceParentIds : [options.parentStack.value.at(-1)?.id],
+      targetParentId,
+    );
   }
 
   function handleTreeDragStart(event: DragEvent, key: string) {
@@ -304,6 +322,11 @@ export function useDocumentTreeInteractions(options: UseDocumentTreeInteractions
       return;
     }
     event.dataTransfer?.setData('application/x-document-id', folder.id);
+    event.dataTransfer?.setData('application/x-document-ids', JSON.stringify([folder.id]));
+    event.dataTransfer?.setData(
+      'application/x-document-source-parent-ids',
+      JSON.stringify([folder.parentId || null]),
+    );
     event.dataTransfer?.setData('text/plain', folder.fileName || '');
     if (event.dataTransfer) {
       event.dataTransfer.effectAllowed = 'move';

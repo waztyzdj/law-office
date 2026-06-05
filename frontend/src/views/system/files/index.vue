@@ -354,6 +354,14 @@ function handlePasteToTreeFolder(record?: DocumentFileInfo) {
   void documentActions.handlePasteToTreeFolder(record);
 }
 
+function handleTreeMove(
+  sourceIds: string[],
+  sourceParentIds: Array<string | undefined>,
+  targetParentId?: string,
+) {
+  void documentActions.handleTreeMove(sourceIds, sourceParentIds, targetParentId);
+}
+
 function handleRenameFolder(record?: DocumentFileInfo) {
   documentActions.handleRenameFolder(record);
 }
@@ -388,12 +396,11 @@ const documentTreeInteractions = useDocumentTreeInteractions({
   findFolderByKey,
   getActiveSelectedTreeKey,
   handleBatchAction,
-  handleBatchMove,
   handleCreateFolder,
   handleDeleteFolder,
-  handleMove,
   handlePasteToTreeFolder,
   handleRenameFolder,
+  handleTreeMove,
   inlineEditor,
   isBusinessScope,
   isSharedInboxScope,

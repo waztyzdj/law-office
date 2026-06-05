@@ -93,6 +93,7 @@ export function useDocumentActions(options: UseDocumentActionsOptions) {
   const documentClipboard = ref<{
     ids: string[];
     mode: Extract<DocumentBatchAction, 'copy' | 'cut'>;
+    sourceParentIds?: Array<string | undefined>;
   }>();
 
   const canPasteCurrentScope = computed(() => {
@@ -114,6 +115,14 @@ export function useDocumentActions(options: UseDocumentActionsOptions) {
   const cuttingDocumentIds = computed(() =>
     documentClipboard.value?.mode === 'cut' ? documentClipboard.value.ids : [],
   );
+
+  async function refreshDocumentArea(parentIds: Array<string | undefined> = [options.currentParentId.value]) {
+    const uniqueParentIds = Array.from(new Set(parentIds));
+    await Promise.all([
+      options.loadData(),
+      ...uniqueParentIds.map((parentId) => options.refreshFolderTreeChildren(parentId)),
+    ]);
+  }
 
   function handleCreateFolder(parentId = options.currentParentId.value) {
     if (options.scope.value === 'trash' || !options.canCreateCurrentScope.value) {
@@ -432,6 +441,9 @@ export function useDocumentActions(options: UseDocumentActionsOptions) {
     documentClipboard.value = {
       ids: uniqueRecords.map((record) => record.id || ''),
       mode,
+      sourceParentIds: mode === 'cut'
+        ? uniqueRecords.map((record) => record.parentId || options.currentParentId.value)
+        : undefined,
     };
     const clipboard = documentClipboard.value;
     void writeDocumentClipboardText(uniqueRecords);
@@ -544,6 +556,46 @@ export function useDocumentActions(options: UseDocumentActionsOptions) {
     }
   }
 
+  async function handleMoveWithLocalRefresh(
+    sourceIds: string[],
+    sourceParentIds: Array<string | undefined>,
+    targetParentId?: string,
+  ) {
+    const ids = Array.from(new Set(sourceIds.filter(Boolean)));
+    if (ids.length === 0 || moving.value || options.scope.value === 'trash') {
+      return;
+    }
+    moving.value = true;
+    try {
+      await batchMoveDocuments({
+        ids,
+        parentId: targetParentId,
+        scope: options.scope.value,
+        shareTargetType: options.activeScopeOption.value?.shareTargetType,
+      });
+      message.success(`已移动 ${ids.length} 项`);
+      await refreshDocumentArea([...sourceParentIds, targetParentId]);
+    } finally {
+      moving.value = false;
+    }
+  }
+
+  async function handlePasteMove(sourceIds: string[], targetParentId?: string) {
+    await handleMoveWithLocalRefresh(
+      sourceIds,
+      documentClipboard.value?.sourceParentIds || [],
+      targetParentId,
+    );
+  }
+
+  async function handleTreeMove(
+    sourceIds: string[],
+    sourceParentIds: Array<string | undefined>,
+    targetParentId?: string,
+  ) {
+    await handleMoveWithLocalRefresh(sourceIds, sourceParentIds, targetParentId);
+  }
+
   async function handlePaste() {
     const clipboard = documentClipboard.value;
     if (!clipboard || clipboard.ids.length === 0 || moving.value || !canPasteCurrentScope.value) {
@@ -551,7 +603,7 @@ export function useDocumentActions(options: UseDocumentActionsOptions) {
     }
     const targetParentId = options.currentParentId.value;
     if (clipboard.mode === 'cut') {
-      await handleBatchMove(clipboard.ids, targetParentId);
+      await handlePasteMove(clipboard.ids, targetParentId);
       documentClipboard.value = undefined;
       return;
     }
@@ -567,7 +619,7 @@ export function useDocumentActions(options: UseDocumentActionsOptions) {
         await shareRootFolderIfNeeded(copiedFile, targetParentId);
       }
       message.success(`已粘贴 ${copiedFiles.length} 项`);
-      await options.reloadAll();
+      await refreshDocumentArea([targetParentId]);
     } finally {
       moving.value = false;
     }
@@ -586,7 +638,7 @@ export function useDocumentActions(options: UseDocumentActionsOptions) {
       return;
     }
     if (clipboard.mode === 'cut') {
-      await handleBatchMove(clipboard.ids, record.id);
+      await handlePasteMove(clipboard.ids, record.id);
       documentClipboard.value = undefined;
       return;
     }
@@ -602,7 +654,7 @@ export function useDocumentActions(options: UseDocumentActionsOptions) {
         await shareRootFolderIfNeeded(copiedFile, record.id);
       }
       message.success(`已粘贴 ${copiedFiles.length} 项`);
-      await options.reloadAll();
+      await refreshDocumentArea([record.id]);
     } finally {
       moving.value = false;
     }
@@ -700,6 +752,7 @@ export function useDocumentActions(options: UseDocumentActionsOptions) {
     handlePaste,
     handlePasteToTreeFolder,
     handleRenameFolder,
+    handleTreeMove,
     handleUploadClick,
     inlineEditor,
     moving,
