@@ -22,6 +22,10 @@ interface UseDocumentDataLoaderOptions {
   reloadCachedFolderTrees: () => Promise<void>;
 }
 
+interface FetchDocumentsOptions {
+  folderOnly?: boolean;
+}
+
 export function useDocumentDataLoader(options: UseDocumentDataLoaderOptions) {
   const currentDeparts = ref<CurrentUserOrganization['departs']>([]);
   const currentTenant = ref<CurrentUserTenant>();
@@ -35,6 +39,7 @@ export function useDocumentDataLoader(options: UseDocumentDataLoaderOptions) {
     parentId?: string,
     searchKeyword?: string,
     option: ScopeOption | undefined = options.getActiveScopeOption(),
+    fetchOptions: FetchDocumentsOptions = {},
   ) {
     const records: DocumentFileInfo[] = [];
     let pageNum = 1;
@@ -44,6 +49,7 @@ export function useDocumentDataLoader(options: UseDocumentDataLoaderOptions) {
 
     do {
       const result = await pageDocuments({
+        folderOnly: fetchOptions.folderOnly || undefined,
         keyword: normalizedKeyword || undefined,
         pageNum,
         pageSize: PAGE_SIZE,

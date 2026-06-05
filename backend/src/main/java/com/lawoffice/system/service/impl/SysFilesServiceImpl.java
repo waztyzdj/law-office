@@ -380,9 +380,7 @@ public class SysFilesServiceImpl extends BaseServiceImpl<SysFilesMapper, SysFile
 
         Page<SysFiles> page = new Page<>(pageReq.getPageNum(), pageReq.getPageSize());
         Page<SysFiles> result = baseMapper.selectPage(page, wrapper);
-        List<DocumentFileVO> records = result.getRecords().stream()
-                .map(file -> buildDocumentVO(file, context))
-                .toList();
+        List<DocumentFileVO> records = buildDocumentVOList(result.getRecords(), context);
         fillFolderChildFlags(records, context);
         return new PageVO<>(records, result.getTotal(), result.getCurrent(), result.getSize());
     }
@@ -900,9 +898,7 @@ public class SysFilesServiceImpl extends BaseServiceImpl<SysFilesMapper, SysFile
                 .orderByDesc(SysFiles::getCreateTime);
         Page<SysFiles> page = new Page<>(pageReq.getPageNum(), pageReq.getPageSize());
         Page<SysFiles> result = baseMapper.selectPage(page, wrapper);
-        List<DocumentFileVO> records = result.getRecords().stream()
-                .map(file -> buildDocumentVO(file, context))
-                .toList();
+        List<DocumentFileVO> records = buildDocumentVOList(result.getRecords(), context);
         fillFolderChildFlags(records, context);
         return new PageVO<>(records, result.getTotal(), result.getCurrent(), result.getSize());
     }
@@ -955,9 +951,7 @@ public class SysFilesServiceImpl extends BaseServiceImpl<SysFilesMapper, SysFile
                     .orderByDesc(SysFiles::getCreateTime);
             Page<SysFiles> page = new Page<>(pageReq.getPageNum(), pageReq.getPageSize());
             Page<SysFiles> result = baseMapper.selectPage(page, wrapper);
-            List<DocumentFileVO> records = result.getRecords().stream()
-                    .map(file -> buildDocumentVO(file, context))
-                    .toList();
+            List<DocumentFileVO> records = buildDocumentVOList(result.getRecords(), context);
             fillFolderChildFlags(records, context);
             return new PageVO<>(records, result.getTotal(), result.getCurrent(), result.getSize());
         }
@@ -999,7 +993,7 @@ public class SysFilesServiceImpl extends BaseServiceImpl<SysFilesMapper, SysFile
         fileIds = fileIds.stream()
                 .filter(fileId -> !placedFileIds.contains(fileId))
                 .toList();
-        List<SysFiles> sharedFiles = selectActiveFilesByIds(context, fileIds);
+        List<SysFiles> sharedFiles = selectActiveFilesByIds(context, fileIds, pageReq.getFolderOnly());
         return pageCombinedDocuments(context, pageReq, personalFolders, sharedFiles);
     }
 
@@ -1008,7 +1002,7 @@ public class SysFilesServiceImpl extends BaseServiceImpl<SysFilesMapper, SysFile
         List<SysFiles> sharedByMeFolders = selectSharedByMeFolders(context, null);
         List<SysFiles> sharedFiles = sharedIds.isEmpty()
                 ? Collections.emptyList()
-                : selectActiveFilesByIds(context, sharedIds);
+                : selectActiveFilesByIds(context, sharedIds, pageReq.getFolderOnly());
         return pageCombinedDocuments(context, pageReq, sharedByMeFolders, sharedFiles);
     }
 
@@ -1086,7 +1080,7 @@ public class SysFilesServiceImpl extends BaseServiceImpl<SysFilesMapper, SysFile
                 .filter(fileId -> !placedFileIds.contains(fileId))
                 .distinct()
                 .toList();
-        List<SysFiles> businessFiles = selectActiveFilesByIds(context, fileIds);
+        List<SysFiles> businessFiles = selectActiveFilesByIds(context, fileIds, pageReq.getFolderOnly());
         return pageCombinedDocuments(context, pageReq, personalFolders, businessFiles);
     }
 
@@ -1106,7 +1100,7 @@ public class SysFilesServiceImpl extends BaseServiceImpl<SysFilesMapper, SysFile
                 .filter(StringUtils::hasText)
                 .distinct()
                 .toList();
-        List<SysFiles> businessFiles = selectActiveFilesByIds(context, fileIds).stream()
+        List<SysFiles> businessFiles = selectActiveFilesByIds(context, fileIds, pageReq.getFolderOnly()).stream()
                 .filter(file -> hasBusinessDocumentAccess(file, context))
                 .toList();
         return pageCombinedDocuments(context, pageReq, personalFolders, businessFiles);
@@ -1128,7 +1122,7 @@ public class SysFilesServiceImpl extends BaseServiceImpl<SysFilesMapper, SysFile
                 .filter(StringUtils::hasText)
                 .distinct()
                 .toList();
-        List<SysFiles> sharedFiles = selectActiveFilesByIds(context, fileIds).stream()
+        List<SysFiles> sharedFiles = selectActiveFilesByIds(context, fileIds, pageReq.getFolderOnly()).stream()
                 .filter(file -> {
                     try {
                         assertCanViewDocument(file, context);
@@ -1174,9 +1168,7 @@ public class SysFilesServiceImpl extends BaseServiceImpl<SysFilesMapper, SysFile
         long size = pageReq.getPageSize();
         int fromIndex = (int) Math.min(Math.max(current - 1, 0) * size, total);
         int toIndex = (int) Math.min(fromIndex + size, total);
-        List<DocumentFileVO> records = combined.subList(fromIndex, toIndex).stream()
-                .map(file -> buildDocumentVO(file, context))
-                .toList();
+        List<DocumentFileVO> records = buildDocumentVOList(combined.subList(fromIndex, toIndex), context);
         fillFolderChildFlags(records, context);
         return new PageVO<>(records, total, current, size);
     }
@@ -1195,6 +1187,9 @@ public class SysFilesServiceImpl extends BaseServiceImpl<SysFilesMapper, SysFile
     }
 
     private boolean matchesDocumentFilters(SysFiles file, DocumentPageReq req) {
+        if (Boolean.TRUE.equals(req.getFolderOnly()) && !FLAG_YES.equals(file.getIzFolder())) {
+            return false;
+        }
         if (StringUtils.hasText(req.getKeyword())
                 && !String.valueOf(file.getFileName()).contains(req.getKeyword().trim())) {
             return false;
@@ -1249,13 +1244,21 @@ public class SysFilesServiceImpl extends BaseServiceImpl<SysFilesMapper, SysFile
     }
 
     private List<SysFiles> selectActiveFilesByIds(UserAccessContext context, List<String> fileIds) {
+        return selectActiveFilesByIds(context, fileIds, false);
+    }
+
+    private List<SysFiles> selectActiveFilesByIds(UserAccessContext context, List<String> fileIds, Boolean folderOnly) {
         if (fileIds.isEmpty()) {
             return Collections.emptyList();
         }
-        return baseMapper.selectList(Wrappers.lambdaQuery(SysFiles.class)
+        LambdaQueryWrapper<SysFiles> wrapper = Wrappers.lambdaQuery(SysFiles.class)
                 .eq(SysFiles::getTenantId, context.tenantId())
                 .eq(SysFiles::getDeleteFlag, 0)
-                .in(SysFiles::getId, fileIds));
+                .in(SysFiles::getId, fileIds);
+        if (Boolean.TRUE.equals(folderOnly)) {
+            wrapper.eq(SysFiles::getIzFolder, FLAG_YES);
+        }
+        return baseMapper.selectList(wrapper);
     }
 
     private void applyDocumentScope(
@@ -1333,6 +1336,9 @@ public class SysFilesServiceImpl extends BaseServiceImpl<SysFilesMapper, SysFile
     }
 
     private void applyDocumentFilters(LambdaQueryWrapper<SysFiles> wrapper, DocumentPageReq req) {
+        if (Boolean.TRUE.equals(req.getFolderOnly())) {
+            wrapper.eq(SysFiles::getIzFolder, FLAG_YES);
+        }
         if (StringUtils.hasText(req.getKeyword())) {
             wrapper.like(SysFiles::getFileName, req.getKeyword().trim());
         }
@@ -1741,24 +1747,31 @@ public class SysFilesServiceImpl extends BaseServiceImpl<SysFilesMapper, SysFile
     }
 
     private List<String> findFileIdsSharedByOwner(UserAccessContext context) {
-        List<SysFiles> ownedFiles = baseMapper.selectList(Wrappers.lambdaQuery(SysFiles.class)
-                .select(SysFiles::getId)
-                .eq(SysFiles::getTenantId, context.tenantId())
-                .eq(SysFiles::getCreateBy, context.username())
-                .eq(SysFiles::getDeleteFlag, 0));
-        if (ownedFiles.isEmpty()) {
-            return Collections.emptyList();
-        }
-        List<String> ownedIds = ownedFiles.stream().map(SysFiles::getId).toList();
-        return fileAclMapper.selectList(Wrappers.lambdaQuery(SysFileAcl.class)
+        List<String> sharedFileIds = fileAclMapper.selectList(Wrappers.lambdaQuery(SysFileAcl.class)
                         .select(SysFileAcl::getFileId)
                         .eq(SysFileAcl::getTenantId, context.tenantId())
-                        .eq(SysFileAcl::getDeleteFlag, 0)
-                        .in(SysFileAcl::getFileId, ownedIds))
+                        .eq(SysFileAcl::getCreateBy, context.username())
+                        .eq(SysFileAcl::getDeleteFlag, 0))
                 .stream()
                 .map(SysFileAcl::getFileId)
                 .filter(StringUtils::hasText)
                 .distinct()
+                .toList();
+        if (sharedFileIds.isEmpty()) {
+            return Collections.emptyList();
+        }
+        Set<String> ownedFileIds = baseMapper.selectList(Wrappers.lambdaQuery(SysFiles.class)
+                        .select(SysFiles::getId)
+                        .eq(SysFiles::getTenantId, context.tenantId())
+                        .eq(SysFiles::getCreateBy, context.username())
+                        .eq(SysFiles::getDeleteFlag, 0)
+                        .in(SysFiles::getId, sharedFileIds))
+                .stream()
+                .map(SysFiles::getId)
+                .filter(StringUtils::hasText)
+                .collect(Collectors.toSet());
+        return sharedFileIds.stream()
+                .filter(ownedFileIds::contains)
                 .toList();
     }
 
@@ -1790,9 +1803,44 @@ public class SysFilesServiceImpl extends BaseServiceImpl<SysFilesMapper, SysFile
         throw new IllegalArgumentException("无权浏览该共享文件夹");
     }
 
+    private List<DocumentFileVO> buildDocumentVOList(List<SysFiles> files, UserAccessContext context) {
+        Set<String> sharedFileIds = findActiveAclFileIds(files.stream()
+                .map(SysFiles::getId)
+                .filter(StringUtils::hasText)
+                .toList(), context.tenantId());
+        return files.stream()
+                .map(file -> buildDocumentVO(file, context, sharedFileIds))
+                .toList();
+    }
+
+    private Set<String> findActiveAclFileIds(Collection<String> fileIds, String tenantId) {
+        if (fileIds.isEmpty()) {
+            return Collections.emptySet();
+        }
+        return fileAclMapper.selectList(Wrappers.lambdaQuery(SysFileAcl.class)
+                        .select(SysFileAcl::getFileId)
+                        .eq(SysFileAcl::getTenantId, tenantId)
+                        .eq(SysFileAcl::getDeleteFlag, 0)
+                        .in(SysFileAcl::getFileId, fileIds))
+                .stream()
+                .map(SysFileAcl::getFileId)
+                .filter(StringUtils::hasText)
+                .collect(Collectors.toSet());
+    }
+
     private DocumentFileVO buildDocumentVO(SysFiles file, UserAccessContext context) {
+        Set<String> sharedFileIds = StringUtils.hasText(file.getId()) && hasActiveAcl(file.getId(), context.tenantId())
+                ? Set.of(file.getId())
+                : Collections.emptySet();
+        return buildDocumentVO(file, context, sharedFileIds);
+    }
+
+    private DocumentFileVO buildDocumentVO(
+            SysFiles file,
+            UserAccessContext context,
+            Set<String> sharedFileIds) {
         DocumentFileVO vo = buildBaseDocumentVO(file, context);
-        vo.setSharedFlag(hasActiveAcl(file.getId(), context.tenantId()));
+        vo.setSharedFlag(sharedFileIds.contains(file.getId()));
         vo.setCanManage(vo.getOwnerFlag());
         vo.setCanDownload(canDownload(file, context));
         vo.setCanUpdate(canUpdate(file, context));

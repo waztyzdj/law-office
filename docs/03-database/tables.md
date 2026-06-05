@@ -105,6 +105,7 @@
 - `share_perms`
 - `enable_down`
 - `enable_updat`
+- 关键索引：`idx_sf_tenant_parent_active_folder_time` 支撑文档中心按目录加载子级、左侧树只加载文件夹和列表默认排序；`idx_sf_tenant_owner_active_parent` 支撑本人目录、回收站和按所有者确认文件归属；`idx_sf_tenant_owner_store_parent_active` 支撑共享给我、我的共享、业务文档等个人整理文件夹查询。
 
 ## `sys_file_version`
 
@@ -134,6 +135,7 @@
 - `permission`：授权权限，取值 `read`、`download`、`update`、`manage`。
 - `expire_time`：授权过期时间。
 - `tenant_id`：租户 ID。
+- 关键索引：`idx_sfa_tenant_target` 支撑共享给我、租户共享、部门共享等按授权目标查询；`idx_sfa_tenant_file` 支撑按文件批量判断是否已共享；`idx_sfa_tenant_creator_active_file` 支撑我的共享按创建人查询共享记录。
 
 ## `sys_file_relation`
 

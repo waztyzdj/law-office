@@ -29,6 +29,7 @@ interface UseDocumentTreeOptions {
     parentId?: string,
     searchKeyword?: string,
     option?: ScopeOption,
+    fetchOptions?: { folderOnly?: boolean },
   ) => Promise<DocumentFileInfo[]>;
   scopeOptions: ComputedRef<ScopeOption[]>;
 }
@@ -123,7 +124,7 @@ export function useDocumentTree(options: UseDocumentTreeOptions) {
     option: ScopeOption | undefined = findScopeOption(options.activeRootKey.value),
     rootKey = options.activeRootKey.value,
   ): Promise<FolderTreeNode[]> {
-    const children = await options.fetchDocuments(parentId, undefined, option);
+    const children = await options.fetchDocuments(parentId, undefined, option, { folderOnly: true });
     const records = children.filter((item) => item.izFolder === '1' && item.id);
     return records.map((record) => buildFolderTreeNode(record, rootKey));
   }

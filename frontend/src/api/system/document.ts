@@ -43,6 +43,7 @@ export interface DocumentFileInfo {
 
 export interface DocumentPageReq extends BasePageReq {
   fileType?: string;
+  folderOnly?: boolean;
   keyword?: string;
   parentId?: string;
   scope?: DocumentScope;
