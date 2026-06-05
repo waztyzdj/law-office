@@ -76,6 +76,7 @@ interface UseDocumentActionsOptions {
   reloadAll: () => Promise<void>;
   reloadTrashData: () => Promise<void>;
   refreshFolderTreeChildren: (parentId?: string) => Promise<void>;
+  resetCurrentRootNavigation: () => void;
   selectFolderTreeParent: (parentId?: string) => void;
   isGlobalSearch: ComputedRef<boolean>;
   scope: ComputedRef<DocumentScope>;
@@ -310,6 +311,13 @@ export function useDocumentActions(options: UseDocumentActionsOptions) {
     options.shareDrawerRef.value?.open({ record });
   }
 
+  async function refreshAfterCancelShare() {
+    if (options.scope.value === 'sharedByMe') {
+      options.resetCurrentRootNavigation();
+    }
+    await options.reloadAll();
+  }
+
   function handleCancelShare(record: DocumentFileInfo) {
     if (!record.id || !record.sharedFlag || !record.ownerFlag) {
       return;
@@ -328,7 +336,7 @@ export function useDocumentActions(options: UseDocumentActionsOptions) {
           targets: [],
         });
         message.success('共享已取消');
-        await options.reloadAll();
+        await refreshAfterCancelShare();
       },
     });
   }

@@ -77,6 +77,7 @@ defineExpose<DocumentContentViewExpose>({
       v-for="item in items"
       :key="item.id"
       mode="context"
+      :disabled="!canShowItemActionMenu(item)"
       :can-edit-content-item="canEditContentItem"
       :can-edit-item="canEditItem"
       :can-preview-item="canPreviewItem"
@@ -149,6 +150,7 @@ defineExpose<DocumentContentViewExpose>({
         </div>
         <div class="document-list__cell document-list__cell--actions">
           <DocumentItemActionDropdown
+            :disabled="!canShowItemActionMenu(item)"
             :can-edit-content-item="canEditContentItem"
             :can-edit-item="canEditItem"
             :can-preview-item="canPreviewItem"
@@ -163,7 +165,13 @@ defineExpose<DocumentContentViewExpose>({
             @action="$emit('action', $event, item)"
             @batch-action="$emit('contextBatchAction', $event, item)"
           >
-            <Button class="document-list-row__more" size="small" type="text" @click.stop>
+            <Button
+              v-if="scope !== 'shared' && canShowItemActionMenu(item)"
+              class="document-list-row__more"
+              size="small"
+              type="text"
+              @click.stop
+            >
               <IconifyIcon icon="lucide:more-vertical" />
             </Button>
           </DocumentItemActionDropdown>

@@ -211,6 +211,13 @@ export function useDocumentNavigation(options: UseDocumentNavigationOptions) {
     options.resetAndLoad();
   }
 
+  function resetCurrentRootNavigation() {
+    const tree = getTreeOptions();
+    parentStack.value = [];
+    tree.selectedTreeKeys.value = [getScopeRootKey(activeRootKey.value)];
+    options.cancelInlineEditor();
+  }
+
   function handleGoBreadcrumb(index: number) {
     const tree = getTreeOptions();
     if (index === parentStack.value.length - 1) {
@@ -235,6 +242,7 @@ export function useDocumentNavigation(options: UseDocumentNavigationOptions) {
     handleGoRoot,
     handleOpenFolder,
     handleSelectTree,
+    resetCurrentRootNavigation,
     parentStack,
     pushNavigationHistory,
     setTreeNavigationOptions,

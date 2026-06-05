@@ -47,6 +47,7 @@ export interface DocumentContentViewProps {
   canEditContentItem: (record: DocumentFileInfo) => boolean;
   canEditItem: (record: DocumentFileInfo) => boolean;
   canMove: (record: DocumentFileInfo) => boolean;
+  canShowItemActionMenu: (record: DocumentFileInfo) => boolean;
   canPreviewItem: (record: DocumentFileInfo) => boolean;
   canViewHistoryItem: (record: DocumentFileInfo) => boolean;
   creatingHere?: boolean;

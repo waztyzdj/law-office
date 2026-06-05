@@ -85,6 +85,7 @@ const {
   handleSelectTree,
   parentStack,
   pushNavigationHistory,
+  resetCurrentRootNavigation,
   setTreeNavigationOptions,
   updateNavigationFolderRecord,
 } = useDocumentNavigation({
@@ -190,6 +191,7 @@ const canManageCurrentScope = computed(() => scope.value === 'my');
 const isSharedInboxScope = computed(
   () => scope.value === 'shared' && !activeScopeOption.value?.shareTargetType,
 );
+const isSharedReadonlyScope = computed(() => scope.value === 'shared');
 const isBusinessScope = computed(() => scope.value === 'business');
 const documentActionContext = computed(() => ({
   personalizeShared: isSharedInboxScope.value,
@@ -212,6 +214,7 @@ const activeSharedTarget = computed(() => {
 const canCreateCurrentScope = computed(
   () =>
     !isGlobalSearch.value &&
+    !isSharedReadonlyScope.value &&
     (canManageCurrentScope.value ||
       (isBusinessScope.value && canCreateInsideFolder(currentFolder.value)) ||
       scope.value === 'sharedByMe' ||
@@ -225,6 +228,7 @@ const canCreateCurrentScope = computed(
 const canUploadCurrentScope = computed(
   () =>
     !isGlobalSearch.value &&
+    !isSharedReadonlyScope.value &&
     !isBusinessScope.value &&
     !isSharedInboxScope.value &&
     (canManageCurrentScope.value ||
@@ -291,6 +295,7 @@ const documentActions = useDocumentActions({
     await Promise.all([loadData(), reloadCachedFolderTrees()]);
   },
   refreshFolderTreeChildren,
+  resetCurrentRootNavigation,
   selectFolderTreeParent,
   scope,
   shareDrawerRef,
@@ -383,6 +388,13 @@ function rememberDocumentClipboard(
 
 function submitInlineName() {
   void documentActions.submitInlineName();
+}
+
+async function reloadAfterCancelShare() {
+  if (scope.value === 'sharedByMe') {
+    resetCurrentRootNavigation();
+  }
+  await reloadAll();
 }
 
 const documentTreeInteractions = useDocumentTreeInteractions({
@@ -605,7 +617,11 @@ onBeforeUnmount(() => {
       type="file"
       @change="handleFilesSelected"
     />
-    <DocumentShareDrawer ref="shareDrawerRef" @success="reloadAll" />
+    <DocumentShareDrawer
+      ref="shareDrawerRef"
+      @cancel-share="reloadAfterCancelShare"
+      @success="reloadAll"
+    />
     <DocumentHistoryModal
       ref="historyModalRef"
       @preview="(version) => previewModalRef?.openHistoryVersion(version)"

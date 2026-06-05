@@ -27,13 +27,15 @@ interface Props
     | 'getContextDeletableRecords'
     | 'getContextDownloadRecords'
     | 'isSingleContext'
-  > {
+> {
+  disabled?: boolean;
   mode?: 'button' | 'context';
   record: DocumentFileInfo;
   scope: DocumentScope;
 }
 
 const props = withDefaults(defineProps<Props>(), {
+  disabled: false,
   mode: 'button',
 });
 
@@ -44,9 +46,9 @@ const emit = defineEmits<{
 
 const dropdownId = Symbol('document-item-action-dropdown');
 const isContextMode = computed(() => props.mode === 'context');
-const dropdownTrigger = computed<DropdownProps['trigger']>(() => [
-  isContextMode.value ? 'contextmenu' : 'click',
-]);
+const dropdownTrigger = computed<DropdownProps['trigger']>(() =>
+  props.disabled ? [] : [isContextMode.value ? 'contextmenu' : 'click'],
+);
 const singleContext = computed(() =>
   isContextMode.value ? props.isSingleContext(props.record) : true,
 );
@@ -75,7 +77,8 @@ function handleBatchAction(event: DocumentBatchAction) {
 </script>
 
 <template>
-  <Dropdown v-model:open="dropdownOpen" :trigger="dropdownTrigger">
+  <slot v-if="disabled"></slot>
+  <Dropdown v-else v-model:open="dropdownOpen" :trigger="dropdownTrigger">
     <slot></slot>
 
     <template #overlay>

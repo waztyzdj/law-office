@@ -19,6 +19,7 @@ interface Props {
   contextDownloadableCount?: number;
   record?: DocumentFileInfo;
   scope: DocumentScope;
+  shareOnly?: boolean;
   singleContext?: boolean;
 }
 
@@ -41,6 +42,7 @@ const props = withDefaults(defineProps<Props>(), {
   contextCuttableCount: 0,
   contextDeletableCount: 0,
   contextDownloadableCount: 0,
+  shareOnly: false,
   singleContext: true,
 });
 
@@ -50,7 +52,7 @@ const emit = defineEmits<{
 }>();
 
 const batchItems = computed<ActionMenuItem[]>(() => {
-  if (props.scope === 'trash') {
+  if (props.scope === 'trash' || props.scope === 'shared' || props.shareOnly) {
     return [];
   }
   const items: ActionMenuItem[] = [
@@ -88,6 +90,47 @@ const singleItems = computed<ActionMenuItem[]>(() => {
   if (!props.singleContext) {
     return [];
   }
+  if (props.scope === 'shared') {
+    if (props.record?.izFolder === '1') {
+      return [];
+    }
+    const items: ActionMenuItem[] = [];
+    if (props.canPreview) {
+      items.push({ action: 'preview', icon: 'lucide:eye', key: 'preview', label: '预览' });
+    }
+    if (props.canEditContent) {
+      items.push({ action: 'edit', icon: 'lucide:file-pen-line', key: 'edit', label: '在线编辑' });
+    }
+    if (props.contextDownloadableCount > 0) {
+      items.push({
+        batchAction: 'download',
+        icon: 'lucide:download',
+        key: 'download',
+        label: '下载',
+      });
+    }
+    return items;
+  }
+  if (props.shareOnly) {
+    if (!props.canEdit || !props.record?.sharedFlag) {
+      return [];
+    }
+    return [
+      {
+        action: 'share',
+        icon: 'lucide:share-2',
+        key: 'share',
+        label: '查看共享',
+      },
+      {
+        action: 'cancelShare',
+        danger: true,
+        icon: 'lucide:share-2',
+        key: 'cancel-share',
+        label: '删除共享',
+      },
+    ];
+  }
   const items: ActionMenuItem[] = [];
   if (props.canPreview) {
     items.push({ action: 'preview', icon: 'lucide:eye', key: 'preview', label: '预览' });
@@ -119,7 +162,10 @@ const singleItems = computed<ActionMenuItem[]>(() => {
 });
 
 const showDeleteItem = computed(() =>
-  props.scope !== 'trash' && props.scope !== 'business',
+  !props.shareOnly &&
+  props.scope !== 'shared' &&
+  props.scope !== 'trash' &&
+  props.scope !== 'business',
 );
 
 function handleClick(item: ActionMenuItem) {

@@ -35,6 +35,7 @@ import {
   canPreviewItem as canPreviewDocumentItem,
   canViewHistoryItem as canViewDocumentHistory,
   compareDocuments,
+  isSharedReadonlyScope,
 } from './documentExplorerUtils';
 
 interface Props {
@@ -96,6 +97,12 @@ const actionContext = computed(() => ({
 
 const canCreateInScope = computed(() => props.canCreate);
 const canUploadInScope = computed(() => props.canUpload);
+const canShowBodyWriteActions = computed(() => !isSharedReadonlyScope(props.scope));
+const hasBodyWriteActions = computed(
+  () =>
+    canShowBodyWriteActions.value &&
+    (props.canPaste || canUploadInScope.value || canCreateInScope.value),
+);
 const currentFolderId = computed(() => props.currentFolder?.id || '');
 const creatingHere = computed(
   () =>
@@ -190,6 +197,10 @@ function canViewHistoryItem(record: DocumentFileInfo) {
 
 function canDropOnFolder(target: DocumentFileInfo) {
   return canDropOnDocumentFolder(target, actionContext.value);
+}
+
+function canShowItemActionMenu(record: DocumentFileInfo) {
+  return !(isSharedReadonlyScope(props.scope) && record.izFolder === '1');
 }
 
 function handleOpen(record: DocumentFileInfo) {
@@ -308,6 +319,7 @@ const contentViewProps = computed<DocumentContentViewProps>(() => ({
   canEditContentItem,
   canEditItem,
   canMove,
+  canShowItemActionMenu,
   canPreviewItem,
   canViewHistoryItem,
   creatingHere: creatingHere.value,
@@ -422,16 +434,16 @@ onBeforeUnmount(() => {
               降序
             </Menu.Item>
           </Menu.SubMenu>
-          <Menu.Divider />
-          <Menu.Item v-if="canPaste" @click="$emit('paste')">
+          <Menu.Divider v-if="hasBodyWriteActions" />
+          <Menu.Item v-if="canShowBodyWriteActions && canPaste" @click="$emit('paste')">
             <IconifyIcon class="document-menu-icon" icon="lucide:clipboard-paste" />
             粘贴
           </Menu.Item>
-          <Menu.Item v-if="canUploadInScope" @click="$emit('upload')">
+          <Menu.Item v-if="canShowBodyWriteActions && canUploadInScope" @click="$emit('upload')">
             <IconifyIcon class="document-menu-icon" icon="lucide:upload" />
             上传文件
           </Menu.Item>
-          <Menu.Item v-if="canCreateInScope" @click="$emit('createFolder')">
+          <Menu.Item v-if="canShowBodyWriteActions && canCreateInScope" @click="$emit('createFolder')">
             <IconifyIcon class="document-menu-icon" icon="lucide:folder-plus" />
             新建文件夹
           </Menu.Item>

@@ -8,6 +8,7 @@ import { message } from 'ant-design-vue';
 
 import {
   canMove as canMoveDocument,
+  isSharedReadonlyScope,
   isVirtualBusinessItem,
 } from '../components/documentExplorerUtils';
 import {
@@ -82,16 +83,37 @@ export function useDocumentTreeInteractions(options: UseDocumentTreeInteractions
     treeShortcutActive.value = false;
   }
 
+  function isSharedByMeTreeReadonly() {
+    return options.scope.value === 'sharedByMe';
+  }
+
+  function canShowSharedByMeShareMenu(key: string) {
+    const record = options.findFolderByKey(key);
+    return Boolean(record?.id && record.ownerFlag && record.sharedFlag);
+  }
+
   function canManageTreeFolder(key: string) {
+    if (isSharedByMeTreeReadonly()) {
+      return false;
+    }
     const record = options.findFolderByKey(key);
     return !isScopeRootKey(key) && record?.izFolder === '1' && options.canManageFolder(record);
   }
 
   function canCreateInTreeFolder(key: string) {
+    if (isSharedByMeTreeReadonly()) {
+      return false;
+    }
     return !isScopeRootKey(key) && options.canCreateInsideFolder(options.findFolderByKey(key));
   }
 
   function canShowTreeContextMenu(key: string) {
+    if (isSharedReadonlyScope(options.scope.value)) {
+      return false;
+    }
+    if (isSharedByMeTreeReadonly()) {
+      return canShowSharedByMeShareMenu(key);
+    }
     return canManageTreeFolder(key) || canCreateInTreeFolder(key);
   }
 
@@ -100,12 +122,18 @@ export function useDocumentTreeInteractions(options: UseDocumentTreeInteractions
   }
 
   function getTreeCopyableRecords(record?: DocumentFileInfo) {
+    if (isSharedReadonlyScope(options.scope.value)) {
+      return [];
+    }
     return getTreeContextRecords(record).filter(
       (item) => item.id && options.scope.value !== 'trash' && !isVirtualBusinessItem(item),
     );
   }
 
   function getTreeCuttableRecords(record?: DocumentFileInfo) {
+    if (isSharedReadonlyScope(options.scope.value)) {
+      return [];
+    }
     return getTreeContextRecords(record).filter((item) =>
       canMoveDocument(item, options.documentActionContext.value),
     );
@@ -116,13 +144,20 @@ export function useDocumentTreeInteractions(options: UseDocumentTreeInteractions
   }
 
   function getTreeDeletableRecords(record?: DocumentFileInfo) {
+    if (isSharedReadonlyScope(options.scope.value)) {
+      return [];
+    }
     return getTreeContextRecords(record).filter(
       (item) => options.canManageFolder(item) && options.scope.value !== 'trash' && options.scope.value !== 'business',
     );
   }
 
   function canDropToTreeTarget(key: string) {
-    if (options.scope.value === 'trash') {
+    if (
+      options.scope.value === 'trash' ||
+      isSharedReadonlyScope(options.scope.value) ||
+      isSharedByMeTreeReadonly()
+    ) {
       return false;
     }
     if (isScopeRootKey(key)) {
@@ -199,6 +234,7 @@ export function useDocumentTreeInteractions(options: UseDocumentTreeInteractions
       options.loading.value ||
       options.moving.value ||
       options.treeLoading.value ||
+      isSharedByMeTreeReadonly() ||
       isEditableShortcutTarget(event.target)
     ) {
       return;
@@ -294,7 +330,11 @@ export function useDocumentTreeInteractions(options: UseDocumentTreeInteractions
     const targetFolder = isScopeRootKey(targetKey) ? undefined : options.findFolderByKey(targetKey);
     const targetParentId = isScopeRootKey(targetKey) ? undefined : targetFolder?.id;
     const sourceIds = getDragSourceIds(event).filter((sourceId) => sourceId !== targetParentId);
-    if (sourceIds.length === 0 || options.scope.value === 'trash') {
+    if (
+      sourceIds.length === 0 ||
+      options.scope.value === 'trash' ||
+      isSharedReadonlyScope(options.scope.value)
+    ) {
       return;
     }
     if (!canDropToTreeTarget(targetKey)) {
@@ -339,7 +379,11 @@ export function useDocumentTreeInteractions(options: UseDocumentTreeInteractions
   }
 
   function handleTreeDragOver(event: DragEvent, targetKey: string) {
-    if (!isDocumentDrag(event) || options.scope.value === 'trash') {
+    if (
+      !isDocumentDrag(event) ||
+      options.scope.value === 'trash' ||
+      isSharedReadonlyScope(options.scope.value)
+    ) {
       return;
     }
     if (!canDropToTreeTarget(targetKey)) {

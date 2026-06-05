@@ -16,6 +16,10 @@ export interface DocumentExplorerActionContext {
   scope: DocumentScope;
 }
 
+export function isSharedReadonlyScope(scope: DocumentScope) {
+  return scope === 'shared';
+}
+
 export const documentListColumns: Array<{
   className: string;
   field: DocumentSortField;
@@ -160,6 +164,9 @@ export function isImageFile(record: DocumentFileInfo) {
 }
 
 export function canMove(record: DocumentFileInfo, context: DocumentExplorerActionContext) {
+  if (isSharedReadonlyScope(context.scope)) {
+    return false;
+  }
   if (context.scope === 'business') {
     return record.izFolder === '1'
       ? canEditItem(record, context)
@@ -173,6 +180,9 @@ export function canMove(record: DocumentFileInfo, context: DocumentExplorerActio
 }
 
 export function canEditItem(record: DocumentFileInfo, context: DocumentExplorerActionContext) {
+  if (isSharedReadonlyScope(context.scope)) {
+    return false;
+  }
   if (context.scope === 'business') {
     return (
       Boolean(record.ownerFlag) &&
@@ -184,6 +194,9 @@ export function canEditItem(record: DocumentFileInfo, context: DocumentExplorerA
 }
 
 export function canCreateFolderInItem(record: DocumentFileInfo, context: DocumentExplorerActionContext) {
+  if (isSharedReadonlyScope(context.scope)) {
+    return false;
+  }
   if (record.izFolder !== '1' || !record.id) {
     return false;
   }
@@ -218,6 +231,9 @@ export function canEditContentItem(record: DocumentFileInfo, context: DocumentEx
 }
 
 export function canViewHistoryItem(record: DocumentFileInfo, context: DocumentExplorerActionContext) {
+  if (isSharedReadonlyScope(context.scope)) {
+    return false;
+  }
   const extension = getFileExtension(record);
   return (
     context.scope !== 'trash' &&
@@ -228,6 +244,9 @@ export function canViewHistoryItem(record: DocumentFileInfo, context: DocumentEx
 }
 
 export function canDropOnFolder(target: DocumentFileInfo, context: DocumentExplorerActionContext) {
+  if (isSharedReadonlyScope(context.scope)) {
+    return false;
+  }
   if (context.scope === 'trash' || target.izFolder !== '1' || !target.id) {
     return false;
   }

@@ -63,6 +63,7 @@ interface OpenPayload {
 }
 
 const emit = defineEmits<{
+  cancelShare: [];
   success: [];
 }>();
 
@@ -315,7 +316,11 @@ async function handleSubmit() {
       targets,
     });
     message.success('共享已保存');
-    emit('success');
+    if (targets.length === 0) {
+      emit('cancelShare');
+    } else {
+      emit('success');
+    }
     drawerApi.close();
   } finally {
     drawerApi.unlock();
@@ -350,7 +355,7 @@ function handleCancelShare() {
         });
         clearShareSelection();
         message.success('共享已取消');
-        emit('success');
+        emit('cancelShare');
         drawerApi.close();
       } finally {
         drawerApi.unlock();

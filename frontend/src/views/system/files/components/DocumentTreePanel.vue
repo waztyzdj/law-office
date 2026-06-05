@@ -133,12 +133,13 @@ function handleAction(event: string, record?: DocumentFileInfo) {
             </span>
             <template #overlay>
               <DocumentItemActionMenu
-                :can-edit="canManageTreeFolder(String(key))"
+                :can-edit="scope === 'sharedByMe' || canManageTreeFolder(String(key))"
                 :context-copyable-count="getTreeCopyableRecords(findFolderByKey(String(key))).length"
                 :context-cuttable-count="getTreeCuttableRecords(findFolderByKey(String(key))).length"
                 :context-deletable-count="getTreeDeletableRecords(findFolderByKey(String(key))).length"
                 :context-downloadable-count="getTreeDownloadableRecords(findFolderByKey(String(key))).length"
                 :record="findFolderByKey(String(key))"
+                :share-only="scope === 'sharedByMe'"
                 :scope="scope"
                 @action="handleAction($event, findFolderByKey(String(key)))"
                 @batch-action="emit('batchAction', $event, findFolderByKey(String(key)))"

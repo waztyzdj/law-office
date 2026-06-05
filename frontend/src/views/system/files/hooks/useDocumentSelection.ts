@@ -4,7 +4,10 @@ import type { DocumentBatchAction, InlineEditorState } from '../types';
 
 import { computed, ref } from 'vue';
 
-import { isVirtualBusinessItem } from '../components/documentExplorerUtils';
+import {
+  isSharedReadonlyScope,
+  isVirtualBusinessItem,
+} from '../components/documentExplorerUtils';
 
 interface SelectionBoxState {
   currentX: number;
@@ -199,16 +202,25 @@ export function useDocumentSelection(options: UseDocumentSelectionOptions) {
   }
 
   function getContextDeletableRecords(record: DocumentFileInfo) {
+    if (isSharedReadonlyScope(options.scope.value)) {
+      return [];
+    }
     return getContextRecords(record).filter(
       (item) => options.canEditItem(item) && options.scope.value !== 'trash' && options.scope.value !== 'business',
     );
   }
 
   function getContextCuttableRecords(record: DocumentFileInfo) {
+    if (isSharedReadonlyScope(options.scope.value)) {
+      return [];
+    }
     return getContextRecords(record).filter((item) => options.canMove(item));
   }
 
   function getContextCopyableRecords(record: DocumentFileInfo) {
+    if (isSharedReadonlyScope(options.scope.value)) {
+      return [];
+    }
     return getContextRecords(record).filter(
       (item) => item.id && options.scope.value !== 'trash' && !isVirtualBusinessItem(item),
     );
@@ -250,6 +262,9 @@ export function useDocumentSelection(options: UseDocumentSelectionOptions) {
     }
     const key = event.key.toLowerCase();
     if (key === 'delete' || (event.metaKey && key === 'backspace')) {
+      if (isSharedReadonlyScope(options.scope.value)) {
+        return;
+      }
       const records = selectedRecords.value.filter(
         (item) => options.canEditItem(item) && options.scope.value !== 'trash' && options.scope.value !== 'business',
       );
@@ -265,6 +280,9 @@ export function useDocumentSelection(options: UseDocumentSelectionOptions) {
       return;
     }
     if (key === 'x') {
+      if (isSharedReadonlyScope(options.scope.value)) {
+        return;
+      }
       const records = selectedRecords.value.filter((item) => options.canMove(item));
       if (records.length === 0) {
         return;
@@ -274,6 +292,9 @@ export function useDocumentSelection(options: UseDocumentSelectionOptions) {
       return;
     }
     if (key === 'c') {
+      if (isSharedReadonlyScope(options.scope.value)) {
+        return;
+      }
       const records = selectedRecords.value.filter(
         (item) => item.id && options.scope.value !== 'trash' && !isVirtualBusinessItem(item),
       );
