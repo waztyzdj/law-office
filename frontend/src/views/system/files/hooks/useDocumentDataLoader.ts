@@ -7,7 +7,7 @@ import type { ScopeOption } from '../types';
 
 import { ref } from 'vue';
 
-import { pageDocuments } from '#/api/system/document';
+import { pageDocuments, prefetchDocumentTree } from '#/api/system/document';
 import {
   getCurrentUserOrganization,
   getCurrentUserTenantOptions,
@@ -65,6 +65,24 @@ export function useDocumentDataLoader(options: UseDocumentDataLoaderOptions) {
     } while (records.length < total && pageNum < 20);
 
     return records;
+  }
+
+  async function prefetchFolderTree(
+    parentIds: string[],
+    option: ScopeOption | undefined = options.getActiveScopeOption(),
+  ) {
+    const normalizedParentIds = Array.from(
+      new Set(parentIds.map((id) => id.trim()).filter(Boolean)),
+    );
+    if (normalizedParentIds.length === 0) {
+      return {};
+    }
+    return prefetchDocumentTree({
+      parentIds: normalizedParentIds,
+      scope: option?.scope || options.getScope(),
+      shareTargetId: option?.shareTargetId,
+      shareTargetType: option?.shareTargetType,
+    });
   }
 
   async function loadData() {
@@ -143,6 +161,7 @@ export function useDocumentDataLoader(options: UseDocumentDataLoaderOptions) {
     loadData,
     loading,
     loadShareRootContext,
+    prefetchFolderTree,
     reloadAll,
     resetAndLoad,
   };

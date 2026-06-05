@@ -40,6 +40,7 @@ import com.lawoffice.system.req.DocumentPageReq;
 import com.lawoffice.system.req.DocumentRenameReq;
 import com.lawoffice.system.req.DocumentShareReq;
 import com.lawoffice.system.req.DocumentShareTargetReq;
+import com.lawoffice.system.req.DocumentTreePrefetchReq;
 import com.lawoffice.system.req.DocumentUploadReq;
 import com.lawoffice.system.req.FileRelationReq;
 import com.lawoffice.system.req.FileUploadReq;
@@ -138,6 +139,9 @@ public class SysFilesServiceImpl extends BaseServiceImpl<SysFilesMapper, SysFile
     private static final Set<String> INITIAL_HISTORY_EXTENSIONS = Set.of(
             "doc", "docx", "pdf", "ppt", "pptx", "xls", "xlsx"
     );
+    private static final int TREE_PREFETCH_PARENT_LIMIT = 100;
+    private static final int TREE_PREFETCH_PAGE_SIZE = 500;
+    private static final int TREE_PREFETCH_MAX_PAGE_NUM = 20;
     private static final Set<String> BLOCKED_UPLOAD_CONTENT_TYPES = Set.of(
             "application/bat",
             "application/cmd",
@@ -383,6 +387,58 @@ public class SysFilesServiceImpl extends BaseServiceImpl<SysFilesMapper, SysFile
         List<DocumentFileVO> records = buildDocumentVOList(result.getRecords(), context);
         fillFolderChildFlags(records, context);
         return new PageVO<>(records, result.getTotal(), result.getCurrent(), result.getSize());
+    }
+
+    @Override
+    public Map<String, List<DocumentFileVO>> prefetchDocumentFolderTree(String username, DocumentTreePrefetchReq req) {
+        if (req == null || req.getParentIds() == null || req.getParentIds().isEmpty()) {
+            return Collections.emptyMap();
+        }
+        List<String> parentIds = req.getParentIds().stream()
+                .filter(StringUtils::hasText)
+                .map(String::trim)
+                .distinct()
+                .limit(TREE_PREFETCH_PARENT_LIMIT)
+                .toList();
+        if (parentIds.isEmpty()) {
+            return Collections.emptyMap();
+        }
+        Map<String, List<DocumentFileVO>> result = new LinkedHashMap<>();
+        for (String parentId : parentIds) {
+            result.put(parentId, listDocumentFolderChildrenForTreePrefetch(username, req, parentId));
+        }
+        return result;
+    }
+
+    private List<DocumentFileVO> listDocumentFolderChildrenForTreePrefetch(
+            String username,
+            DocumentTreePrefetchReq req,
+            String parentId) {
+        List<DocumentFileVO> records = new ArrayList<>();
+        int pageNum = 1;
+        long total;
+        do {
+            DocumentPageReq pageReq = new DocumentPageReq();
+            pageReq.setFolderOnly(true);
+            pageReq.setPageNum(pageNum);
+            pageReq.setPageSize(TREE_PREFETCH_PAGE_SIZE);
+            pageReq.setParentId(parentId);
+            pageReq.setScope(req.getScope());
+            pageReq.setShareTargetId(req.getShareTargetId());
+            pageReq.setShareTargetType(req.getShareTargetType());
+
+            PageVO<DocumentFileVO> page = pageDocuments(username, pageReq);
+            List<DocumentFileVO> pageRecords = page.getRecords() == null
+                    ? Collections.emptyList()
+                    : page.getRecords();
+            records.addAll(pageRecords.stream()
+                    .filter(item -> FLAG_YES.equals(item.getIzFolder()))
+                    .filter(item -> StringUtils.hasText(item.getId()))
+                    .toList());
+            total = page.getTotal();
+            pageNum++;
+        } while (records.size() < total && pageNum <= TREE_PREFETCH_MAX_PAGE_NUM);
+        return records;
     }
 
     @Override

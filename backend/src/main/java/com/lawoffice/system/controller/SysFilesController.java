@@ -15,6 +15,7 @@ import com.lawoffice.system.req.DocumentMoveReq;
 import com.lawoffice.system.req.DocumentPageReq;
 import com.lawoffice.system.req.DocumentRenameReq;
 import com.lawoffice.system.req.DocumentShareReq;
+import com.lawoffice.system.req.DocumentTreePrefetchReq;
 import com.lawoffice.system.req.DocumentUploadReq;
 import com.lawoffice.system.req.FileRelationReq;
 import com.lawoffice.system.req.FileUploadReq;
@@ -45,6 +46,7 @@ import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Set;
 
 @RestController
@@ -75,6 +77,14 @@ public class SysFilesController extends BaseController<ISysFilesService, SysFile
             @Valid @RequestBody(required = false) DocumentPageReq req,
             HttpServletRequest request) {
         return BaseResult.success(baseService.pageDocuments(getUsername(request), req));
+    }
+
+    @PostMapping("/document/tree/prefetch")
+    @Operation(summary = "批量预取文档树子目录", description = "按多个父级目录批量查询下一层文件夹，用于树展开时预热缓存")
+    public BaseResult<Map<String, List<DocumentFileVO>>> prefetchDocumentTree(
+            @Valid @RequestBody(required = false) DocumentTreePrefetchReq req,
+            HttpServletRequest request) {
+        return BaseResult.success(baseService.prefetchDocumentFolderTree(getUsername(request), req));
     }
 
     @PostMapping("/document/upload")

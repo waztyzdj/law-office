@@ -27,6 +27,7 @@
 
 - `POST /files/document/page`：分页查询文档，`scope` 支持 `all`、`my`、`business`、`shared`、`sharedByMe`、`starred`、`trash`；`scope=all` 用于全局搜索本人有查询权限的未删除文件，`scope=business` 用于按“业务模块虚拟目录 -> 业务数据虚拟目录 -> 附件/个人整理文件夹”查询当前用户有业务访问权且仍有关联关系的业务文档，`scope=shared` 时可用 `shareTargetType`、`shareTargetId` 过滤租户共享或部门共享，并包含本人共享到该目标的文件；`scope=starred` 根目录返回本人收藏的未删除文件和文件夹，传 `parentId` 时浏览该收藏文件夹的直接子级；`scope=trash` 根目录只返回已删除文件夹树的顶层节点，可传 `parentId` 浏览已删除文件夹的直接子级。
 - `POST /files/document/page` 可传 `folderOnly=true`，用于左侧树等只需要文件夹节点的场景；后端仅返回文件夹并按文件夹子节点计算 `hasChild`，普通右侧列表不传该参数。
+- `POST /files/document/tree/prefetch`：批量预取左侧树多个父级目录的下一层文件夹。请求体为 `{ "parentIds": ["..."], "scope": "my", "shareTargetType": "tenant", "shareTargetId": "..." }`，一次最多处理 100 个父级目录；响应为 `{ [parentId]: DocumentFileVO[] }`。该接口复用文档分页查询的权限和 scope 规则，只用于前端树展开后的下一级缓存预热，不改变树的展开状态。
 - `POST /files/document/upload`：上传文档中心文件。
 - `POST /files/document/folder`：创建文件夹。
 - `POST /files/document/rename`：重命名本人文档。

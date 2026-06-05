@@ -31,6 +31,10 @@ interface UseDocumentTreeOptions {
     option?: ScopeOption,
     fetchOptions?: { folderOnly?: boolean },
   ) => Promise<DocumentFileInfo[]>;
+  prefetchFolderTree?: (
+    parentIds: string[],
+    option?: ScopeOption,
+  ) => Promise<Record<string, DocumentFileInfo[]>>;
   scopeOptions: ComputedRef<ScopeOption[]>;
 }
 
@@ -40,6 +44,7 @@ export function useDocumentTree(options: UseDocumentTreeOptions) {
   const treeRenderKey = ref(0);
   const expandedTreeKeys = ref<string[]>([getScopeRootKey('my')]);
   const selectedTreeKeys = ref<string[]>([getScopeRootKey('my')]);
+  const folderNodeLoadPromises = new Map<string, Promise<FolderTreeNode[]>>();
 
   const treeData = computed<FolderTreeNode[]>(() =>
     options.scopeOptions.value.map((item) => buildScopeTreeNode(item)),
@@ -260,11 +265,101 @@ export function useDocumentTree(options: UseDocumentTreeOptions) {
   async function loadFolderTreeNodeChildren(rootKey: string, parentId: string) {
     const option = findScopeOption(rootKey);
     if (!option?.scope || !shouldRenderFolderTree(option) || option.scope === 'trash') {
-      return;
+      return [];
     }
     const targetKey = getFolderNodeKey(rootKey, parentId);
-    const children = await loadFolderNodes(parentId, option, rootKey);
-    setFolderTreeNodeChildren(rootKey, targetKey, children);
+    const loadingKey = `${rootKey}:${parentId}`;
+    const loadingPromise = folderNodeLoadPromises.get(loadingKey);
+    if (loadingPromise) {
+      return loadingPromise;
+    }
+
+    const promise = (async () => {
+      const children = await loadFolderNodes(parentId, option, rootKey);
+      setFolderTreeNodeChildren(rootKey, targetKey, children);
+      return children;
+    })();
+    folderNodeLoadPromises.set(loadingKey, promise);
+    try {
+      return await promise;
+    } finally {
+      if (folderNodeLoadPromises.get(loadingKey) === promise) {
+        folderNodeLoadPromises.delete(loadingKey);
+      }
+    }
+  }
+
+  async function prefetchFolderTreeNextLevel(rootKey: string, nodes: FolderTreeNode[]) {
+    const option = findScopeOption(rootKey);
+    if (!option?.scope || !shouldRenderFolderTree(option) || option.scope === 'trash') {
+      return;
+    }
+    const loadableParentIds = nodes
+      .filter((node) => node.file?.id && !node.isLeaf && !Array.isArray(node.children))
+      .map((node) => node.file?.id)
+      .filter((id): id is string => Boolean(id));
+    if (loadableParentIds.length === 0) {
+      return;
+    }
+    const pendingParentIds = loadableParentIds.filter(
+      (parentId) => !folderNodeLoadPromises.has(`${rootKey}:${parentId}`),
+    );
+    if (pendingParentIds.length === 0) {
+      return;
+    }
+    if (!options.prefetchFolderTree) {
+      await Promise.allSettled(
+        pendingParentIds.map((parentId) => loadFolderTreeNodeChildren(rootKey, parentId)),
+      );
+      return;
+    }
+
+    const promiseMap = new Map<string, Promise<FolderTreeNode[]>>();
+    const resolveMap = new Map<string, (children: FolderTreeNode[]) => void>();
+    for (const parentId of pendingParentIds) {
+      const loadingKey = `${rootKey}:${parentId}`;
+      const promise = new Promise<FolderTreeNode[]>((resolve) => {
+        resolveMap.set(parentId, resolve);
+      });
+      promiseMap.set(parentId, promise);
+      folderNodeLoadPromises.set(loadingKey, promise);
+    }
+
+    try {
+      const result = await options.prefetchFolderTree(pendingParentIds, option);
+      for (const parentId of pendingParentIds) {
+        const records = result[parentId] || [];
+        const children = records
+          .filter((item) => item.izFolder === '1' && item.id)
+          .map((record) => buildFolderTreeNode(record, rootKey));
+        setFolderTreeNodeChildren(rootKey, getFolderNodeKey(rootKey, parentId), children);
+        resolveMap.get(parentId)?.(children);
+      }
+    } catch {
+      await Promise.allSettled(
+        pendingParentIds.map(async (parentId) => {
+          const loadingKey = `${rootKey}:${parentId}`;
+          const prefetchPromise = promiseMap.get(parentId);
+          if (folderNodeLoadPromises.get(loadingKey) === prefetchPromise) {
+            folderNodeLoadPromises.delete(loadingKey);
+          }
+          try {
+            const children = await loadFolderTreeNodeChildren(rootKey, parentId);
+            resolveMap.get(parentId)?.(children);
+          } catch {
+            resolveMap.get(parentId)?.([]);
+          }
+        }),
+      );
+    } finally {
+      for (const parentId of pendingParentIds) {
+        const loadingKey = `${rootKey}:${parentId}`;
+        const prefetchPromise = promiseMap.get(parentId);
+        if (folderNodeLoadPromises.get(loadingKey) === prefetchPromise) {
+          folderNodeLoadPromises.delete(loadingKey);
+        }
+      }
+    }
   }
 
   async function ensureFolderTreeNodeChildrenLoaded(key: string) {
@@ -277,16 +372,20 @@ export function useDocumentTree(options: UseDocumentTreeOptions) {
       if (!hasLoadedFolderTreeRoot(rootKey)) {
         await loadFolderTree(rootKey, false);
       }
+      void prefetchFolderTreeNextLevel(rootKey, folderTreeCache.value[rootKey] || []);
       return;
     }
     if (!hasLoadedFolderTreeRoot(rootKey)) {
       await loadFolderTree(rootKey, false);
     }
     const node = findFolderTreeNode(folderTreeCache.value[rootKey] || [], key);
-    if (!node?.file?.id || node.isLeaf || Array.isArray(node.children)) {
+    if (!node?.file?.id || node.isLeaf) {
       return;
     }
-    await loadFolderTreeNodeChildren(rootKey, node.file.id);
+    const children = Array.isArray(node.children)
+      ? node.children
+      : await loadFolderTreeNodeChildren(rootKey, node.file.id);
+    void prefetchFolderTreeNextLevel(rootKey, children);
   }
 
   async function ensureFolderTreePathLoaded(rootKey: string, path: DocumentFileInfo[]) {

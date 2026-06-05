@@ -51,6 +51,13 @@ export interface DocumentPageReq extends BasePageReq {
   shareTargetType?: DocumentShareTargetType;
 }
 
+export interface DocumentTreePrefetchReq {
+  parentIds: string[];
+  scope?: DocumentScope;
+  shareTargetId?: string;
+  shareTargetType?: DocumentShareTargetType;
+}
+
 export interface DocumentShareInfo {
   createTime?: string;
   expireTime?: string;
@@ -93,6 +100,12 @@ export const pageDocuments = (params: DocumentPageReq) =>
     records: DocumentFileInfo[];
     total: number;
   }>('/files/document/page', params);
+
+export const prefetchDocumentTree = (params: DocumentTreePrefetchReq) =>
+  requestClient.post<Record<string, DocumentFileInfo[]>>(
+    '/files/document/tree/prefetch',
+    params,
+  );
 
 export const uploadDocument = (
   file: File,

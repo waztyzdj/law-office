@@ -11,6 +11,7 @@ import com.lawoffice.system.req.DocumentMoveReq;
 import com.lawoffice.system.req.DocumentPageReq;
 import com.lawoffice.system.req.DocumentRenameReq;
 import com.lawoffice.system.req.DocumentShareReq;
+import com.lawoffice.system.req.DocumentTreePrefetchReq;
 import com.lawoffice.system.req.DocumentUploadReq;
 import com.lawoffice.system.req.FileRelationReq;
 import com.lawoffice.system.req.FileUploadReq;
@@ -23,6 +24,7 @@ import org.springframework.web.multipart.MultipartFile;
 
 import java.io.InputStream;
 import java.util.List;
+import java.util.Map;
 
 public interface ISysFilesService extends IBaseService<SysFiles, SysFilesVO> {
 
@@ -71,6 +73,11 @@ public interface ISysFilesService extends IBaseService<SysFiles, SysFilesVO> {
      * 范围支持我的文档、业务文档、共享给我、我的共享、租户/部门共享和回收站。
      */
     PageVO<DocumentFileVO> pageDocuments(String username, DocumentPageReq req);
+
+    /**
+     * 批量预取多个父级目录的下一层文件夹，用于前端树展开时预热下一级缓存。
+     */
+    Map<String, List<DocumentFileVO>> prefetchDocumentFolderTree(String username, DocumentTreePrefetchReq req);
 
     /**
      * 上传文档中心文件。

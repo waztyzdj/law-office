@@ -64,6 +64,7 @@ const {
   loadData,
   loading,
   loadShareRootContext,
+  prefetchFolderTree,
   reloadAll,
   resetAndLoad,
 } = useDocumentDataLoader({
@@ -184,6 +185,7 @@ const {
   activeRootKey,
   currentParentId,
   fetchDocuments,
+  prefetchFolderTree,
   scopeOptions,
 });
 setTreeNavigationOptions({
