@@ -50,6 +50,13 @@ const historyModalRef = ref<InstanceType<typeof DocumentHistoryModal>>();
 const imagePreviewModalRef = ref<InstanceType<typeof DocumentImagePreviewModal>>();
 const previewModalRef = ref<InstanceType<typeof DocumentOnlyOfficePreviewModal>>();
 const treeInitialized = ref(false);
+const documentShellRef = ref<HTMLElement>();
+const treePanelWidth = ref(readStoredTreePanelWidth());
+const resizingTreePanel = ref(false);
+const DOCUMENT_TREE_WIDTH_KEY = 'system_files_tree_panel_width';
+const DOCUMENT_TREE_WIDTH_DEFAULT = 260;
+const DOCUMENT_TREE_WIDTH_MIN = 220;
+const DOCUMENT_TREE_WIDTH_MAX = 520;
 async function reloadCachedFolderTreesBridge() {
   await reloadCachedFolderTrees();
 }
@@ -267,6 +274,72 @@ const inlineFileName = computed({
   get: () => inlineEditor.value?.fileName || '',
   set: (value: string) => handleInlineNameChange(value),
 });
+const documentShellStyle = computed(() => ({
+  '--document-tree-width': `${treePanelWidth.value}px`,
+}));
+
+function readStoredTreePanelWidth() {
+  if (typeof window === 'undefined') {
+    return DOCUMENT_TREE_WIDTH_DEFAULT;
+  }
+  const storedValue = Number(window.localStorage.getItem(DOCUMENT_TREE_WIDTH_KEY));
+  return clampTreePanelWidth(Number.isFinite(storedValue) ? storedValue : DOCUMENT_TREE_WIDTH_DEFAULT);
+}
+
+function clampTreePanelWidth(width: number) {
+  return Math.min(DOCUMENT_TREE_WIDTH_MAX, Math.max(DOCUMENT_TREE_WIDTH_MIN, Math.round(width)));
+}
+
+function resolveTreePanelMaxWidth() {
+  const shellWidth = documentShellRef.value?.getBoundingClientRect().width || 0;
+  if (shellWidth <= 0) {
+    return DOCUMENT_TREE_WIDTH_MAX;
+  }
+  return Math.max(DOCUMENT_TREE_WIDTH_MIN, Math.min(DOCUMENT_TREE_WIDTH_MAX, shellWidth - 420));
+}
+
+function updateTreePanelWidth(width: number) {
+  const nextWidth = Math.min(resolveTreePanelMaxWidth(), clampTreePanelWidth(width));
+  treePanelWidth.value = nextWidth;
+  try {
+    window.localStorage.setItem(DOCUMENT_TREE_WIDTH_KEY, String(nextWidth));
+  } catch {
+    // localStorage may be unavailable in private or embedded environments.
+  }
+}
+
+function handleTreeResizePointerMove(event: PointerEvent) {
+  if (!resizingTreePanel.value) {
+    return;
+  }
+  const shellRect = documentShellRef.value?.getBoundingClientRect();
+  if (!shellRect) {
+    return;
+  }
+  updateTreePanelWidth(event.clientX - shellRect.left);
+}
+
+function stopTreeResize() {
+  resizingTreePanel.value = false;
+  window.removeEventListener('pointermove', handleTreeResizePointerMove);
+  window.removeEventListener('pointerup', stopTreeResize);
+}
+
+function handleTreeResizePointerDown(event: PointerEvent) {
+  event.preventDefault();
+  resizingTreePanel.value = true;
+  window.addEventListener('pointermove', handleTreeResizePointerMove);
+  window.addEventListener('pointerup', stopTreeResize, { once: true });
+}
+
+function handleTreeResizeKeydown(event: KeyboardEvent) {
+  if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') {
+    return;
+  }
+  event.preventDefault();
+  const direction = event.key === 'ArrowLeft' ? -1 : 1;
+  updateTreePanelWidth(treePanelWidth.value + direction * 16);
+}
 
 function canManageFolder(record?: DocumentFileInfo) {
   return (
@@ -522,12 +595,18 @@ onMounted(async () => {
 
 onBeforeUnmount(() => {
   window.removeEventListener('keydown', handleTreeShortcutKeydown, true);
+  stopTreeResize();
 });
 </script>
 
 <template>
   <div class="document-center">
-    <div class="document-shell">
+    <div
+      ref="documentShellRef"
+      class="document-shell"
+      :class="{ 'document-shell--resizing': resizingTreePanel }"
+      :style="documentShellStyle"
+    >
       <Card
         class="document-tree-card"
         :body-style="{ padding: '12px' }"
@@ -574,6 +653,20 @@ onBeforeUnmount(() => {
           <Spin />
         </div>
       </Card>
+
+      <div
+        class="document-resize-handle"
+        role="separator"
+        aria-label="调整文档树宽度"
+        :aria-valuemax="DOCUMENT_TREE_WIDTH_MAX"
+        :aria-valuemin="DOCUMENT_TREE_WIDTH_MIN"
+        :aria-valuenow="treePanelWidth"
+        tabindex="0"
+        @keydown="handleTreeResizeKeydown"
+        @pointerdown="handleTreeResizePointerDown"
+      >
+        <span class="document-resize-handle__line"></span>
+      </div>
 
       <Card
         class="document-content-card"
@@ -687,8 +780,13 @@ onBeforeUnmount(() => {
   display: grid;
   min-height: 0;
   flex: 1;
-  grid-template-columns: 260px minmax(0, 1fr);
-  gap: 16px;
+  grid-template-columns: var(--document-tree-width, 260px) 4px minmax(0, 1fr);
+  gap: 6px;
+}
+
+.document-shell--resizing {
+  cursor: col-resize;
+  user-select: none;
 }
 
 .document-tree-card,
@@ -715,6 +813,39 @@ onBeforeUnmount(() => {
   min-height: 0;
   flex: 1;
   flex-direction: column;
+}
+
+.document-resize-handle {
+  position: relative;
+  display: flex;
+  align-items: stretch;
+  justify-content: center;
+  min-height: 0;
+  border-radius: 4px;
+  cursor: col-resize;
+  outline: none;
+  touch-action: none;
+  transition: background-color 0.16s ease;
+}
+
+.document-resize-handle__line {
+  width: 0;
+  height: 100%;
+  border-radius: 999px;
+  background: transparent;
+}
+
+.document-resize-handle:hover,
+.document-resize-handle:focus-visible,
+.document-shell--resizing .document-resize-handle {
+  background: hsl(var(--primary) / 8%);
+}
+
+.document-resize-handle:hover .document-resize-handle__line,
+.document-resize-handle:focus-visible .document-resize-handle__line,
+.document-shell--resizing .document-resize-handle__line {
+  width: 0;
+  background: transparent;
 }
 
 .document-tree-initializing {
@@ -750,10 +881,15 @@ onBeforeUnmount(() => {
 @media (max-width: 900px) {
   .document-shell {
     grid-template-columns: 1fr;
+    gap: 12px;
   }
 
   .document-tree-card {
     max-height: 260px;
+  }
+
+  .document-resize-handle {
+    display: none;
   }
 }
 
