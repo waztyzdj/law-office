@@ -71,6 +71,7 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.HexFormat;
 import java.util.LinkedHashMap;
@@ -116,6 +117,7 @@ public class SysFilesServiceImpl extends BaseServiceImpl<SysFilesMapper, SysFile
     private static final String TARGET_DEPART = "depart";
     private static final String TARGET_ROLE = "role";
     private static final String TARGET_TENANT = "tenant";
+    private static final String ALL_ACLS_CACHE_KEY = "__all__";
     private static final String PERMISSION_READ = "read";
     private static final String PERMISSION_DOWNLOAD = "download";
     private static final String PERMISSION_UPDATE = "update";
@@ -344,9 +346,12 @@ public class SysFilesServiceImpl extends BaseServiceImpl<SysFilesMapper, SysFile
     public PageVO<DocumentFileVO> pageDocuments(String username, DocumentPageReq req) {
         DocumentPageReq pageReq = req == null ? new DocumentPageReq() : req;
         String tenantId = requireTenantId();
-        String scope = normalizeScope(pageReq.getScope());
         UserAccessContext context = buildUserAccessContext(username, tenantId);
+        return pageDocuments(context, pageReq);
+    }
 
+    private PageVO<DocumentFileVO> pageDocuments(UserAccessContext context, DocumentPageReq pageReq) {
+        String scope = normalizeScope(pageReq.getScope());
         if (isSharedInboxRequest(pageReq, scope)) {
             return pageSharedInboxDocuments(context, pageReq);
         }
@@ -376,7 +381,7 @@ public class SysFilesServiceImpl extends BaseServiceImpl<SysFilesMapper, SysFile
         }
 
         LambdaQueryWrapper<SysFiles> wrapper = Wrappers.lambdaQuery(SysFiles.class)
-                .eq(SysFiles::getTenantId, tenantId);
+                .eq(SysFiles::getTenantId, context.tenantId());
         applyDocumentScope(wrapper, context, pageReq, scope);
         applyDocumentFilters(wrapper, pageReq);
         wrapper.orderByDesc(SysFiles::getIzFolder)
@@ -395,6 +400,7 @@ public class SysFilesServiceImpl extends BaseServiceImpl<SysFilesMapper, SysFile
         if (req == null || req.getItems() == null || req.getItems().isEmpty()) {
             return Collections.emptyMap();
         }
+        UserAccessContext context = buildUserAccessContext(username, requireTenantId());
         Map<String, List<DocumentFileVO>> result = new LinkedHashMap<>();
         req.getItems().stream()
                 .filter(Objects::nonNull)
@@ -406,7 +412,7 @@ public class SysFilesServiceImpl extends BaseServiceImpl<SysFilesMapper, SysFile
                         return;
                     }
                     result.put(key, listDocumentFolderChildrenForTree(
-                            username,
+                            context,
                             item.getScope(),
                             item.getShareTargetType(),
                             item.getShareTargetId(),
@@ -429,10 +435,11 @@ public class SysFilesServiceImpl extends BaseServiceImpl<SysFilesMapper, SysFile
         if (parentIds.isEmpty()) {
             return Collections.emptyMap();
         }
+        UserAccessContext context = buildUserAccessContext(username, requireTenantId());
         Map<String, List<DocumentFileVO>> result = new LinkedHashMap<>();
         for (String parentId : parentIds) {
             result.put(parentId, listDocumentFolderChildrenForTree(
-                    username,
+                    context,
                     req.getScope(),
                     req.getShareTargetType(),
                     req.getShareTargetId(),
@@ -442,7 +449,7 @@ public class SysFilesServiceImpl extends BaseServiceImpl<SysFilesMapper, SysFile
     }
 
     private List<DocumentFileVO> listDocumentFolderChildrenForTree(
-            String username,
+            UserAccessContext context,
             String scope,
             String shareTargetType,
             String shareTargetId,
@@ -460,7 +467,7 @@ public class SysFilesServiceImpl extends BaseServiceImpl<SysFilesMapper, SysFile
             pageReq.setShareTargetId(shareTargetId);
             pageReq.setShareTargetType(shareTargetType);
 
-            PageVO<DocumentFileVO> page = pageDocuments(username, pageReq);
+            PageVO<DocumentFileVO> page = pageDocuments(context, pageReq);
             List<DocumentFileVO> pageRecords = page.getRecords() == null
                     ? Collections.emptyList()
                     : page.getRecords();
@@ -1481,7 +1488,10 @@ public class SysFilesServiceImpl extends BaseServiceImpl<SysFilesMapper, SysFile
     }
 
     private List<SysFileRelation> findActiveBusinessRelations(UserAccessContext context) {
-        return fileRelationMapper.selectList(Wrappers.lambdaQuery(SysFileRelation.class)
+        if (context.cache().activeBusinessRelations != null) {
+            return context.cache().activeBusinessRelations;
+        }
+        context.cache().activeBusinessRelations = fileRelationMapper.selectList(Wrappers.lambdaQuery(SysFileRelation.class)
                         .select(
                                 SysFileRelation::getFileId,
                                 SysFileRelation::getBizType,
@@ -1492,6 +1502,7 @@ public class SysFilesServiceImpl extends BaseServiceImpl<SysFilesMapper, SysFile
                 .stream()
                 .filter(this::isBusinessRelation)
                 .toList();
+        return context.cache().activeBusinessRelations;
     }
 
     private List<String> findAccessibleBusinessFileIds(UserAccessContext context) {
@@ -1503,9 +1514,13 @@ public class SysFilesServiceImpl extends BaseServiceImpl<SysFilesMapper, SysFile
     }
 
     private List<SysFileRelation> findAccessibleBusinessRelations(UserAccessContext context) {
+        if (context.cache().accessibleBusinessRelations != null) {
+            return context.cache().accessibleBusinessRelations;
+        }
         List<SysFileRelation> relations = findActiveBusinessRelations(context);
         if (relations.isEmpty()) {
-            return Collections.emptyList();
+            context.cache().accessibleBusinessRelations = Collections.emptyList();
+            return context.cache().accessibleBusinessRelations;
         }
         List<String> fileIds = relations.stream()
                 .map(SysFileRelation::getFileId)
@@ -1515,11 +1530,12 @@ public class SysFilesServiceImpl extends BaseServiceImpl<SysFilesMapper, SysFile
         Map<String, SysFiles> fileMap = selectActiveFilesByIds(context, fileIds).stream()
                 .collect(Collectors.toMap(SysFiles::getId, file -> file, (left, right) -> left));
         Map<String, Set<String>> accessibleBizIds = resolveAccessibleBusinessBizIds(relations, fileMap, context);
-        return relations.stream()
+        context.cache().accessibleBusinessRelations = relations.stream()
                 .filter(relation -> fileMap.containsKey(relation.getFileId()))
                 .filter(relation -> accessibleBizIds.getOrDefault(relation.getBizType(), Collections.emptySet())
                         .contains(relation.getBizId()))
                 .toList();
+        return context.cache().accessibleBusinessRelations;
     }
 
     private Map<String, Set<String>> resolveAccessibleBusinessBizIds(
@@ -1903,7 +1919,7 @@ public class SysFilesServiceImpl extends BaseServiceImpl<SysFilesMapper, SysFile
                 || !Objects.equals(folder.getDeleteFlag(), 0)) {
             throw new IllegalArgumentException("无权浏览该共享文件夹");
         }
-        if (SHARED_BY_ME_STORE_TYPE.equals(folder.getStoreType()) || hasActiveAcl(folder.getId(), context.tenantId())) {
+        if (SHARED_BY_ME_STORE_TYPE.equals(folder.getStoreType()) || hasActiveAcl(folder.getId(), context)) {
             return;
         }
         String parentId = folder.getParentId();
@@ -1916,7 +1932,7 @@ public class SysFilesServiceImpl extends BaseServiceImpl<SysFilesMapper, SysFile
                 break;
             }
             if (SHARED_BY_ME_STORE_TYPE.equals(parent.getStoreType())
-                    || hasActiveAcl(parent.getId(), context.tenantId())) {
+                    || hasActiveAcl(parent.getId(), context)) {
                 return;
             }
             parentId = parent.getParentId();
@@ -1950,7 +1966,7 @@ public class SysFilesServiceImpl extends BaseServiceImpl<SysFilesMapper, SysFile
     }
 
     private DocumentFileVO buildDocumentVO(SysFiles file, UserAccessContext context) {
-        Set<String> sharedFileIds = StringUtils.hasText(file.getId()) && hasActiveAcl(file.getId(), context.tenantId())
+        Set<String> sharedFileIds = StringUtils.hasText(file.getId()) && hasActiveAcl(file.getId(), context)
                 ? Set.of(file.getId())
                 : Collections.emptySet();
         return buildDocumentVO(file, context, sharedFileIds);
@@ -2085,6 +2101,13 @@ public class SysFilesServiceImpl extends BaseServiceImpl<SysFilesMapper, SysFile
                 .eq(SysFileAcl::getDeleteFlag, 0)) > 0;
     }
 
+    private boolean hasActiveAcl(String fileId, UserAccessContext context) {
+        if (!StringUtils.hasText(fileId)) {
+            return false;
+        }
+        return context.cache().activeAclFlags.computeIfAbsent(fileId, id -> hasActiveAcl(id, context.tenantId()));
+    }
+
     private boolean canDownload(SysFiles file, UserAccessContext context) {
         if (Objects.equals(file.getCreateBy(), context.username())) {
             return true;
@@ -2187,6 +2210,20 @@ public class SysFilesServiceImpl extends BaseServiceImpl<SysFilesMapper, SysFile
     }
 
     private List<SysFileAcl> selectActiveAclsForContext(String fileId, UserAccessContext context) {
+        DocumentRequestCache cache = context.cache();
+        if (!StringUtils.hasText(fileId)) {
+            return cache.activeAclsByFileId.computeIfAbsent(ALL_ACLS_CACHE_KEY, key -> queryActiveAclsForContext(null, context));
+        }
+        List<SysFileAcl> allAcls = cache.activeAclsByFileId.get(ALL_ACLS_CACHE_KEY);
+        if (allAcls != null) {
+            return allAcls.stream()
+                    .filter(acl -> Objects.equals(acl.getFileId(), fileId))
+                    .toList();
+        }
+        return cache.activeAclsByFileId.computeIfAbsent(fileId, key -> queryActiveAclsForContext(key, context));
+    }
+
+    private List<SysFileAcl> queryActiveAclsForContext(String fileId, UserAccessContext context) {
         LambdaQueryWrapper<SysFileAcl> wrapper = Wrappers.lambdaQuery(SysFileAcl.class)
                 .eq(SysFileAcl::getTenantId, context.tenantId())
                 .eq(SysFileAcl::getDeleteFlag, 0)
@@ -2320,22 +2357,28 @@ public class SysFilesServiceImpl extends BaseServiceImpl<SysFilesMapper, SysFile
                 .map(UserRole::getRoleId)
                 .filter(StringUtils::hasText)
                 .collect(Collectors.toList());
-        return new UserAccessContext(username, user.getId(), tenantId, departIds, roleIds);
+        return new UserAccessContext(username, user.getId(), tenantId, departIds, roleIds, new DocumentRequestCache());
     }
 
     private List<String> resolveDepartIdsWithAncestors(List<String> departIds, String tenantId) {
+        if (departIds == null || departIds.isEmpty()) {
+            return new ArrayList<>();
+        }
+        Map<String, String> parentIdByDepartId = new HashMap<>();
+        for (SysDepart depart : sysDepartMapper.selectList(Wrappers.lambdaQuery(SysDepart.class)
+                        .select(SysDepart::getId, SysDepart::getParentId)
+                        .eq(SysDepart::getTenantId, tenantId)
+                        .eq(SysDepart::getDeleteFlag, 0))) {
+            if (StringUtils.hasText(depart.getId())) {
+                parentIdByDepartId.put(depart.getId(), depart.getParentId());
+            }
+        }
         LinkedHashSet<String> visibleIds = new LinkedHashSet<>();
         for (String departId : departIds) {
             String currentId = departId;
             int guard = 0;
             while (StringUtils.hasText(currentId) && guard++ < 20 && visibleIds.add(currentId)) {
-                SysDepart depart = sysDepartMapper.selectOne(Wrappers.lambdaQuery(SysDepart.class)
-                        .select(SysDepart::getId, SysDepart::getParentId)
-                        .eq(SysDepart::getId, currentId)
-                        .eq(SysDepart::getTenantId, tenantId)
-                        .eq(SysDepart::getDeleteFlag, 0)
-                        .last("LIMIT 1"));
-                currentId = depart == null ? null : depart.getParentId();
+                currentId = parentIdByDepartId.get(currentId);
             }
         }
         return new ArrayList<>(visibleIds);
@@ -2984,7 +3027,15 @@ public class SysFilesServiceImpl extends BaseServiceImpl<SysFilesMapper, SysFile
             String userId,
             String tenantId,
             List<String> departIds,
-            List<String> roleIds) {
+            List<String> roleIds,
+            DocumentRequestCache cache) {
+    }
+
+    private static final class DocumentRequestCache {
+        private final Map<String, List<SysFileAcl>> activeAclsByFileId = new HashMap<>();
+        private final Map<String, Boolean> activeAclFlags = new HashMap<>();
+        private List<SysFileRelation> activeBusinessRelations;
+        private List<SysFileRelation> accessibleBusinessRelations;
     }
 
     private record CopyTarget(String parentId, String storeType) {

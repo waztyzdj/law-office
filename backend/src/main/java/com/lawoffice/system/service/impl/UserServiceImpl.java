@@ -755,20 +755,27 @@ public class UserServiceImpl extends BaseServiceImpl<UserMapper, User, UserVO> i
     }
 
     private List<String> collectDepartIdsWithAncestors(List<String> departIds, String tenantId) {
+        if (departIds == null || departIds.isEmpty()) {
+            return new ArrayList<>();
+        }
+        LambdaQueryWrapper<SysDepart> wrapper = new LambdaQueryWrapper<>();
+        wrapper.select(SysDepart::getId, SysDepart::getParentId)
+                .eq(SysDepart::getDeleteFlag, 0);
+        if (StringUtils.hasText(tenantId)) {
+            wrapper.eq(SysDepart::getTenantId, tenantId);
+        }
+        Map<String, String> parentIdByDepartId = new HashMap<>();
+        for (SysDepart depart : sysDepartMapper.selectList(wrapper)) {
+            if (StringUtils.hasText(depart.getId())) {
+                parentIdByDepartId.put(depart.getId(), depart.getParentId());
+            }
+        }
         LinkedHashSet<String> visibleIds = new LinkedHashSet<>();
         for (String departId : departIds) {
             String currentId = departId;
             int guard = 0;
             while (StringUtils.hasText(currentId) && guard++ < 20 && visibleIds.add(currentId)) {
-                LambdaQueryWrapper<SysDepart> wrapper = new LambdaQueryWrapper<>();
-                wrapper.eq(SysDepart::getId, currentId)
-                        .eq(SysDepart::getDeleteFlag, 0)
-                        .last("LIMIT 1");
-                if (StringUtils.hasText(tenantId)) {
-                    wrapper.eq(SysDepart::getTenantId, tenantId);
-                }
-                SysDepart depart = sysDepartMapper.selectOne(wrapper);
-                currentId = depart == null ? null : depart.getParentId();
+                currentId = parentIdByDepartId.get(currentId);
             }
         }
         return new ArrayList<>(visibleIds);
@@ -937,41 +944,13 @@ public class UserServiceImpl extends BaseServiceImpl<UserMapper, User, UserVO> i
         userRoleWrapper.eq(UserRole::getUserId, userId)
                 .eq(UserRole::getDeleteFlag, 0);
         List<UserRole> userRoles = userRoleMapper.selectList(userRoleWrapper);
-        List<Permission> departRolePermissions = getUserDepartRolePermissions(userId);
+        List<String> departRoleIds = getUserDepartRoleIds(userId);
 
-        if (userRoles.isEmpty()) {
-            return departRolePermissions;
-        }
-
-        // 2. 获取所有角色的ID
         List<String> roleIds = userRoles.stream()
             .map(UserRole::getRoleId)
             .distinct()
             .collect(Collectors.toList());
-
-        // 3. 根据角色ID查询角色权限关联
-        LambdaQueryWrapper<RolePermission> rolePermWrapper = new LambdaQueryWrapper<>();
-        rolePermWrapper.in(RolePermission::getRoleId, roleIds)
-                .eq(RolePermission::getDeleteFlag, 0);
-        List<RolePermission> rolePermissions = rolePermissionMapper.selectList(rolePermWrapper);
-
-        if (rolePermissions.isEmpty()) {
-            return departRolePermissions;
-        }
-
-        // 4. 获取所有权限ID
-        List<String> permissionIds = rolePermissions.stream()
-            .map(RolePermission::getPermissionId)
-            .distinct()
-            .collect(Collectors.toList());
-
-        // 5. 根据权限ID查询权限详情
-        LambdaQueryWrapper<Permission> permWrapper = new LambdaQueryWrapper<>();
-        permWrapper.in(Permission::getId, permissionIds)
-                   .eq(Permission::getDeleteFlag, 0)
-                   .eq(Permission::getStatus, "1") // 只查询有效的权限
-                   .orderByAsc(Permission::getSortNo);
-        return mergePermissions(permissionMapper.selectList(permWrapper), departRolePermissions);
+        return getPermissionsByRoleIds(roleIds, departRoleIds);
     }
 
     @Override
@@ -1252,9 +1231,16 @@ public class UserServiceImpl extends BaseServiceImpl<UserMapper, User, UserVO> i
         User user = getEnabledUserByUsername(username);
         CurrentUserOrganizationVO vo = new CurrentUserOrganizationVO();
         vo.setDeparts(BeanUtil.copyToList(getUserDeparts(user.getId()), SysDepartVO.class));
-        vo.setRoles(BeanUtil.copyToList(getUserRoles(user.getId()), RoleVO.class));
-        vo.setDepartRoles(BeanUtil.copyToList(getUserDepartRoles(user.getId()), DepartRoleVO.class));
-        List<CurrentUserPermissionSummaryVO> menuPermissions = getUserMenuPermissionSummaries(user.getId(), TenantContextHolder.getCurrentTenantId());
+        List<Role> roles = getUserRoles(user.getId());
+        vo.setRoles(BeanUtil.copyToList(roles, RoleVO.class));
+        List<DepartRole> departRoles = getUserDepartRoles(user.getId());
+        vo.setDepartRoles(BeanUtil.copyToList(departRoles, DepartRoleVO.class));
+        List<Permission> permissions = getUserPermissionsInTenant(
+                user.getId(),
+                TenantContextHolder.getCurrentTenantId(),
+                roles,
+                departRoles);
+        List<CurrentUserPermissionSummaryVO> menuPermissions = buildUserMenuPermissionSummaries(permissions);
         vo.setMenuPermissions(menuPermissions);
         vo.setMenuPermissionCount(countCurrentUserPermissionNodes(menuPermissions));
         return vo;
@@ -1416,7 +1402,11 @@ public class UserServiceImpl extends BaseServiceImpl<UserMapper, User, UserVO> i
      * 查询当前租户下已授权的菜单和权限点树，仅返回中文名称，不暴露权限编码。
      */
     private List<CurrentUserPermissionSummaryVO> getUserMenuPermissionSummaries(String userId, String tenantId) {
-        Map<String, CurrentUserPermissionSummaryVO> nodeMap = getUserPermissionsInTenant(userId, tenantId).stream()
+        return buildUserMenuPermissionSummaries(getUserPermissionsInTenant(userId, tenantId));
+    }
+
+    private List<CurrentUserPermissionSummaryVO> buildUserMenuPermissionSummaries(List<Permission> permissions) {
+        Map<String, CurrentUserPermissionSummaryVO> nodeMap = permissions.stream()
                 .filter(permission -> StringUtils.hasText(permission.getId()))
                 .filter(permission -> StringUtils.hasText(permission.getName()))
                 .collect(Collectors.toMap(
@@ -1464,6 +1454,31 @@ public class UserServiceImpl extends BaseServiceImpl<UserMapper, User, UserVO> i
     private List<Permission> getUserPermissionsInTenant(String userId, String tenantId) {
         List<Permission> permissions = new ArrayList<>();
         permissions.addAll(runWithTenant(tenantId, () -> getUserPermissions(userId)));
+        if (isTenantAdminPermissionsApplied(userId, tenantId)) {
+            permissions.addAll(getRolePermissionsInTenant(tenantId, buildTenantAdminRoleCode(tenantId)));
+        }
+        if (StringUtils.hasText(tenantId) && !SYSTEM_TENANT_ID.equals(tenantId)) {
+            permissions.addAll(runWithTenant(SYSTEM_TENANT_ID, () -> getUserPermissions(userId)));
+        }
+        return distinctAndSortPermissions(permissions);
+    }
+
+    private List<Permission> getUserPermissionsInTenant(
+            String userId,
+            String tenantId,
+            List<Role> tenantRoles,
+            List<DepartRole> tenantDepartRoles) {
+        List<String> roleIds = tenantRoles.stream()
+                .map(Role::getId)
+                .filter(StringUtils::hasText)
+                .distinct()
+                .collect(Collectors.toList());
+        List<String> departRoleIds = tenantDepartRoles.stream()
+                .map(DepartRole::getId)
+                .filter(StringUtils::hasText)
+                .distinct()
+                .collect(Collectors.toList());
+        List<Permission> permissions = new ArrayList<>(getPermissionsByRoleIds(roleIds, departRoleIds));
         if (isTenantAdminPermissionsApplied(userId, tenantId)) {
             permissions.addAll(getRolePermissionsInTenant(tenantId, buildTenantAdminRoleCode(tenantId)));
         }
@@ -1677,6 +1692,41 @@ public class UserServiceImpl extends BaseServiceImpl<UserMapper, User, UserVO> i
         permissions.addAll(rolePermissions);
         permissions.addAll(departRolePermissions);
         return distinctAndSortPermissions(permissions);
+    }
+
+    private List<Permission> getPermissionsByRoleIds(List<String> roleIds, List<String> departRoleIds) {
+        Set<String> permissionIds = new LinkedHashSet<>();
+        List<String> normalizedRoleIds = normalizeIds(roleIds);
+        if (!normalizedRoleIds.isEmpty()) {
+            rolePermissionMapper.selectList(new LambdaQueryWrapper<RolePermission>()
+                            .in(RolePermission::getRoleId, normalizedRoleIds)
+                            .eq(RolePermission::getDeleteFlag, 0))
+                    .stream()
+                    .map(RolePermission::getPermissionId)
+                    .filter(StringUtils::hasText)
+                    .forEach(permissionIds::add);
+        }
+
+        List<String> normalizedDepartRoleIds = normalizeIds(departRoleIds);
+        if (!normalizedDepartRoleIds.isEmpty()) {
+            departRolePermissionMapper.selectList(new LambdaQueryWrapper<DepartRolePermission>()
+                            .in(DepartRolePermission::getRoleId, normalizedDepartRoleIds)
+                            .eq(DepartRolePermission::getDeleteFlag, 0))
+                    .stream()
+                    .map(DepartRolePermission::getPermissionId)
+                    .filter(StringUtils::hasText)
+                    .forEach(permissionIds::add);
+        }
+
+        if (permissionIds.isEmpty()) {
+            return new ArrayList<>();
+        }
+        LambdaQueryWrapper<Permission> wrapper = new LambdaQueryWrapper<>();
+        wrapper.in(Permission::getId, permissionIds)
+                .eq(Permission::getDeleteFlag, 0)
+                .eq(Permission::getStatus, "1")
+                .orderByAsc(Permission::getSortNo);
+        return distinctAndSortPermissions(permissionMapper.selectList(wrapper));
     }
 
     /**
