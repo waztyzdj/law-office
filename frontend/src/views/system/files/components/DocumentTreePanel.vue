@@ -106,6 +106,7 @@ function getTreeDeletableCount(key: string) {
       <Tree
         :key="treeRenderKey"
         :auto-expand-parent="false"
+        expand-action="doubleclick"
         :expanded-keys="expandedKeys"
         block-node
         :selected-keys="selectedKeys"
