@@ -17,6 +17,7 @@ import {
   isScopeRootKey,
   mergeFolderTreeNodes,
   shouldRenderFolderTree,
+  TREE_NODE_KEY_SEPARATOR,
   updateFolderTreeRecord,
   updateFolderTreeNodes,
 } from '../tree';
@@ -39,6 +40,13 @@ interface UseDocumentTreeOptions {
     option?: ScopeOption,
   ) => Promise<Record<string, DocumentFileInfo[]>>;
   scopeOptions: ComputedRef<ScopeOption[]>;
+}
+
+interface TreeExpandInfo {
+  expanded?: boolean;
+  node?: {
+    key?: number | string;
+  };
 }
 
 export function useDocumentTree(options: UseDocumentTreeOptions) {
@@ -110,6 +118,45 @@ export function useDocumentTree(options: UseDocumentTreeOptions) {
       }
     }
     return undefined;
+  }
+
+  function collectFolderNodeKeys(nodes: FolderTreeNode[] = []) {
+    const keys: string[] = [];
+    for (const node of nodes) {
+      keys.push(node.key);
+      if (node.children?.length) {
+        keys.push(...collectFolderNodeKeys(node.children));
+      }
+    }
+    return keys;
+  }
+
+  function collectScopeOptionTreeKeys(option?: ScopeOption) {
+    if (!option?.children?.length) {
+      return [];
+    }
+    const keys: string[] = [];
+    for (const child of option.children) {
+      keys.push(
+        getScopeRootKey(child.key),
+        ...collectFolderNodeKeys(folderTreeCache.value[child.key] || []),
+      );
+      keys.push(...collectScopeOptionTreeKeys(child));
+    }
+    return keys;
+  }
+
+  function collectDescendantExpandedKeys(key: string) {
+    const rootKey = getRootKeyFromFolderNodeKey(key);
+    const nodes = folderTreeCache.value[rootKey] || [];
+    if (isScopeRootKey(key)) {
+      return [
+        ...collectScopeOptionTreeKeys(findScopeOption(rootKey)),
+        ...collectFolderNodeKeys(nodes),
+      ];
+    }
+    const node = findFolderTreeNode(nodes, key);
+    return collectFolderNodeKeys(node?.children || []);
   }
 
   function resolveCachedFolderPath(rootKey: string, path: DocumentFileInfo[]) {
@@ -438,21 +485,33 @@ export function useDocumentTree(options: UseDocumentTreeOptions) {
     return resolveCachedFolderPath(rootKey, path);
   }
 
-  async function handleTreeExpand(keys: unknown[]) {
-    expandedTreeKeys.value = keys.map((key) => String(key));
-    const loadKeys = expandedTreeKeys.value.filter((key) => (
-      isScopeRootKey(key) || getRootKeyFromFolderNodeKey(key)
-    ));
+  function isLoadableTreeKey(key: string) {
+    return isScopeRootKey(key) || key.includes(TREE_NODE_KEY_SEPARATOR);
+  }
+
+  async function handleTreeExpand(keys: unknown[], info?: TreeExpandInfo) {
+    const targetKey = info?.node?.key === undefined ? undefined : String(info.node.key);
+    let nextExpandedKeys = keys.map((key) => String(key));
+    if (targetKey && info?.expanded === false) {
+      const descendantKeys = new Set(collectDescendantExpandedKeys(targetKey));
+      nextExpandedKeys = nextExpandedKeys.filter((key) => !descendantKeys.has(key));
+    }
+    expandedTreeKeys.value = nextExpandedKeys;
+    if (targetKey && info?.expanded === true) {
+      await ensureFolderTreeNodeChildrenLoaded(targetKey);
+      return;
+    }
+    const loadKeys = expandedTreeKeys.value.filter((key) => isLoadableTreeKey(key));
     await Promise.all(loadKeys.map((key) => ensureFolderTreeNodeChildrenLoaded(key)));
   }
 
-  function expandPathKeys(path: DocumentFileInfo[]) {
+  function expandPathKeys(path: DocumentFileInfo[], rootKey = options.activeRootKey.value) {
     const keys = path
       .slice(0, -1)
-      .map((item) => getFolderNodeKey(options.activeRootKey.value, item.id))
+      .map((item) => getFolderNodeKey(rootKey, item.id))
       .filter(Boolean) as string[];
     expandedTreeKeys.value = Array.from(
-      new Set([getScopeRootKey(options.activeRootKey.value), ...expandedTreeKeys.value, ...keys]),
+      new Set([getScopeRootKey(rootKey), ...expandedTreeKeys.value, ...keys]),
     );
   }
 

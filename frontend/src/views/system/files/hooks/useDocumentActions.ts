@@ -353,7 +353,7 @@ export function useDocumentActions(options: UseDocumentActionsOptions) {
           return;
         }
         message.success('已移入回收站');
-        await options.reloadAll();
+        await options.loadData();
       },
     });
   }
@@ -394,7 +394,7 @@ export function useDocumentActions(options: UseDocumentActionsOptions) {
           return;
         }
         message.success('已移入回收站');
-        await options.reloadAll();
+        await options.loadData();
       },
     });
   }
@@ -522,7 +522,7 @@ export function useDocumentActions(options: UseDocumentActionsOptions) {
       async onOk() {
         await clearDocumentTrash();
         message.success('回收站已清空');
-        await options.reloadAll();
+        await options.loadData();
       },
     });
   }

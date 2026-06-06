@@ -643,7 +643,6 @@ onBeforeUnmount(() => {
           @tree-drag-start="handleTreeDragStart"
           @tree-expand="handleTreeExpand"
           @tree-select="handleSelectTree"
-          @update-expanded-keys="expandedTreeKeys = $event"
           @update-keyword="handleKeywordChange"
         />
         <div

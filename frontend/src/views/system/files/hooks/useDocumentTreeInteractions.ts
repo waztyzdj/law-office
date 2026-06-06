@@ -34,7 +34,7 @@ interface UseDocumentTreeInteractionsOptions {
   canManageFolder: (record?: DocumentFileInfo) => boolean;
   documentActionContext: ComputedRef<DocumentActionContext>;
   ensureFolderTreePathLoaded: (rootKey: string, path: DocumentFileInfo[]) => Promise<void>;
-  expandPathKeys: (path: DocumentFileInfo[]) => void;
+  expandPathKeys: (path: DocumentFileInfo[], rootKey?: string) => void;
   findCachedPath: (key: string) => CachedFolderPath | undefined;
   findFolderByKey: (key: string) => DocumentFileInfo | undefined;
   getRootKeyFromFolderNodeKey: (key: string) => string;
@@ -195,7 +195,7 @@ export function useDocumentTreeInteractions(options: UseDocumentTreeInteractions
     options.pushNavigationHistory();
     options.parentStack.value = [...options.parentStack.value, record];
     options.selectedTreeKeys.value = [options.getActiveSelectedTreeKey()];
-    options.expandPathKeys(options.parentStack.value);
+    options.expandPathKeys(options.parentStack.value, options.activeRootKey.value);
     await Promise.all([
       options.loadData(),
       options.ensureFolderTreePathLoaded(options.activeRootKey.value, options.parentStack.value),

@@ -51,9 +51,8 @@ const emit = defineEmits<{
   search: [value: string];
   treeDragOver: [event: DragEvent, key: string];
   treeDragStart: [event: DragEvent, key: string];
-  treeExpand: [keys: Key[]];
+  treeExpand: [keys: Key[], info: { expanded?: boolean; node?: { key?: Key } }];
   treeSelect: [keys: Key[], info: { node?: { key?: Key } }];
-  updateExpandedKeys: [keys: string[]];
   updateKeyword: [value: string];
 }>();
 
@@ -62,13 +61,8 @@ const keywordModel = computed({
   set: (value: string) => emit('updateKeyword', value),
 });
 
-const expandedKeysModel = computed({
-  get: () => props.expandedKeys,
-  set: (keys: Key[]) => emit('updateExpandedKeys', keys.map(String)),
-});
-
-function handleExpand(keys: Key[]) {
-  emit('treeExpand', keys);
+function handleExpand(keys: Key[], info: { expanded?: boolean; node?: { key?: Key } }) {
+  emit('treeExpand', keys, info);
 }
 
 function handleSelect(keys: Key[], info: { node?: { key?: Key } }) {
@@ -111,7 +105,8 @@ function getTreeDeletableCount(key: string) {
     <div class="document-tree-scroll">
       <Tree
         :key="treeRenderKey"
-        v-model:expanded-keys="expandedKeysModel"
+        :auto-expand-parent="false"
+        :expanded-keys="expandedKeys"
         block-node
         :selected-keys="selectedKeys"
         :tree-data="treeData"

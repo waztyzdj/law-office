@@ -26,7 +26,7 @@ interface UseDocumentNavigationOptions {
 interface DocumentNavigationTreeOptions {
   ensureFolderTreePathLoaded: (rootKey: string, path: DocumentFileInfo[]) => Promise<void>;
   expandedTreeKeys: Ref<string[]>;
-  expandPathKeys: (path: DocumentFileInfo[]) => void;
+  expandPathKeys: (path: DocumentFileInfo[], rootKey?: string) => void;
   findCachedPath: (key: string) => CachedFolderPath | undefined;
   findScopeOption: (key: string) => ScopeOption | undefined;
   getActiveSelectedTreeKey: () => string;
@@ -92,7 +92,7 @@ export function useDocumentNavigation(options: UseDocumentNavigationOptions) {
     );
     const resolvedPath = await tree.resolveExistingFolderTreePath(location.rootKey, location.parentStack);
     parentStack.value = resolvedPath;
-    tree.expandPathKeys(resolvedPath);
+    tree.expandPathKeys(resolvedPath, location.rootKey);
     await options.loadData();
     tree.selectedTreeKeys.value = [tree.getSelectedTreeKey(location.rootKey, currentParentId.value)];
   }
@@ -165,7 +165,7 @@ export function useDocumentNavigation(options: UseDocumentNavigationOptions) {
       activeRootKey.value = cachedPath.rootKey;
     }
     parentStack.value = nextLocation.parentStack;
-    tree.expandPathKeys(parentStack.value);
+    tree.expandPathKeys(parentStack.value, nextLocation.rootKey);
     options.resetAndLoad();
   }
 
@@ -178,7 +178,7 @@ export function useDocumentNavigation(options: UseDocumentNavigationOptions) {
     pushNavigationHistory();
     parentStack.value = [...parentStack.value, record];
     tree.selectedTreeKeys.value = [tree.getActiveSelectedTreeKey()];
-    tree.expandPathKeys(parentStack.value);
+    tree.expandPathKeys(parentStack.value, activeRootKey.value);
     await Promise.all([
       options.loadData(),
       tree.ensureFolderTreePathLoaded(activeRootKey.value, parentStack.value),
