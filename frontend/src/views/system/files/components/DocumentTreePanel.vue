@@ -108,7 +108,7 @@ function getTreeDeletableCount(key: string) {
       placeholder="搜索文件名"
       @search="emit('search', $event)"
     />
-    <Spin :spinning="loading">
+    <div class="document-tree-scroll">
       <Tree
         :key="treeRenderKey"
         v-model:expanded-keys="expandedKeysModel"
@@ -187,22 +187,65 @@ function getTreeDeletableCount(key: string) {
           </span>
         </template>
       </Tree>
-    </Spin>
+    </div>
+    <div v-if="loading" class="document-tree-loading">
+      <Spin />
+    </div>
   </div>
 </template>
 
 <style scoped>
 .document-tree-panel {
+  position: relative;
+  width: 100%;
+  height: 100%;
   min-height: 0;
+  min-width: 0;
+  overflow: hidden;
 }
 
 .document-tree-search {
   width: 100%;
+  height: 40px;
   margin-bottom: 12px;
+}
+
+.document-tree-scroll {
+  overflow: scroll;
+  width: 100%;
+  height: calc(100% - 52px);
+  min-height: 0;
+  min-width: 0;
+  scrollbar-gutter: stable;
+}
+
+.document-tree-loading {
+  position: absolute;
+  inset: 52px 0 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: hsl(var(--background) / 60%);
+  pointer-events: none;
+}
+
+.document-tree-panel :deep(.ant-tree) {
+  width: max-content;
+  min-width: 100%;
+}
+
+.document-tree-panel :deep(.ant-tree-list),
+.document-tree-panel :deep(.ant-tree-list-holder),
+.document-tree-panel :deep(.ant-tree-list-holder-inner) {
+  overflow: visible;
+  width: max-content;
+  min-width: 100%;
 }
 
 .document-tree-panel :deep(.ant-tree-treenode) {
   align-items: center;
+  width: max-content;
+  min-width: 100%;
   min-height: 28px;
 }
 
@@ -223,6 +266,7 @@ function getTreeDeletableCount(key: string) {
   display: inline-flex;
   align-items: center;
   cursor: default;
+  width: max-content;
   min-height: 28px;
   line-height: 28px;
 }
@@ -231,7 +275,7 @@ function getTreeDeletableCount(key: string) {
   display: inline-flex;
   align-items: center;
   min-width: 0;
-  width: 100%;
+  width: max-content;
 }
 
 .document-tree-node {
@@ -239,10 +283,8 @@ function getTreeDeletableCount(key: string) {
   align-items: center;
   cursor: default;
   gap: 6px;
-  width: 100%;
+  width: max-content;
   min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
   white-space: nowrap;
 }
 

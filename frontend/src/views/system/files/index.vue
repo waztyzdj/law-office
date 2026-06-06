@@ -580,6 +580,7 @@ onBeforeUnmount(() => {
         @mousedown.capture="deactivateTreeShortcut"
       >
         <DocumentExplorer
+          v-if="treeInitialized"
           :current-folder="currentFolder"
           :data-source="dataSource"
           :inline-editor="inlineEditor"
@@ -640,6 +641,12 @@ onBeforeUnmount(() => {
             />
           </template>
         </DocumentExplorer>
+        <div
+          v-else
+          class="document-tree-initializing"
+        >
+          <Spin />
+        </div>
       </Card>
     </div>
 
@@ -687,6 +694,7 @@ onBeforeUnmount(() => {
 .document-content-card {
   display: flex;
   overflow: hidden;
+  height: 100%;
   min-height: 0;
   flex-direction: column;
 }
@@ -694,6 +702,15 @@ onBeforeUnmount(() => {
 .document-content-card :deep(.ant-card-body) {
   display: flex;
   overflow: hidden;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+}
+
+.document-tree-card :deep(.ant-card-body) {
+  display: flex;
+  overflow: hidden;
+  height: 100%;
   min-height: 0;
   flex: 1;
   flex-direction: column;
@@ -736,7 +753,6 @@ onBeforeUnmount(() => {
 
   .document-tree-card {
     max-height: 260px;
-    overflow: auto;
   }
 }
 
