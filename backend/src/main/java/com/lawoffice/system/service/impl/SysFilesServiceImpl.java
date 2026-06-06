@@ -93,10 +93,12 @@ public class SysFilesServiceImpl extends BaseServiceImpl<SysFilesMapper, SysFile
     private static final String TENANT_SHARED_STORE_TYPE = "tenant_shared";
     private static final String DEPART_SHARED_STORE_TYPE = "depart_shared";
     private static final String SHARED_VIEW_STORE_TYPE = "shared_view";
+    private static final String SHARED_OWNER_VIEW_STORE_TYPE = "shared_owner_view";
     private static final String SHARED_BY_ME_STORE_TYPE = "shared_by_me";
     private static final String BUSINESS_VIEW_STORE_TYPE = "business_view";
     private static final String BUSINESS_MODULE_VIEW_STORE_TYPE = "business_module_view";
     private static final String BUSINESS_RECORD_VIEW_STORE_TYPE = "business_record_view";
+    private static final String SHARED_OWNER_PREFIX = "so:";
     private static final String BUSINESS_MODULE_PREFIX = "bm:";
     private static final String BUSINESS_RECORD_PREFIX = "br:";
     private static final Integer DEFAULT_RELATION_TYPE = 1;
@@ -1110,6 +1112,9 @@ public class SysFilesServiceImpl extends BaseServiceImpl<SysFilesMapper, SysFile
     private PageVO<DocumentFileVO> pageSharedInboxDocuments(UserAccessContext context, DocumentPageReq pageReq) {
         String parentId = trimToNull(pageReq.getParentId());
         if (StringUtils.hasText(parentId)) {
+            if (isSharedOwnerVirtualId(parentId)) {
+                return pageSharedOwnerDocuments(context, pageReq, parseSharedOwner(parentId));
+            }
             SysFiles parent = getActiveFile(parentId);
             if (isPersonalSharedFolder(parent, context.username())) {
                 return pagePersonalSharedFolderChildren(context, pageReq, parentId);
@@ -1124,8 +1129,32 @@ public class SysFilesServiceImpl extends BaseServiceImpl<SysFilesMapper, SysFile
         fileIds = fileIds.stream()
                 .filter(fileId -> !placedFileIds.contains(fileId))
                 .toList();
-        List<SysFiles> sharedFiles = selectActiveFilesByIds(context, fileIds, pageReq.getFolderOnly());
-        return pageCombinedDocuments(context, pageReq, personalFolders, sharedFiles);
+        List<SysFiles> sharedFiles = selectActiveFilesByIds(context, fileIds).stream()
+                .filter(file -> !Objects.equals(file.getCreateBy(), context.username()))
+                .filter(file -> matchesSharedOwnerSourceFilters(file, pageReq))
+                .toList();
+        List<SysFiles> sharedOwnerFolders = buildSharedOwnerFolders(context, sharedFiles);
+        List<SysFiles> folders = new ArrayList<>(personalFolders);
+        folders.addAll(sharedOwnerFolders);
+        return pageCombinedDocuments(context, pageReq, folders, Collections.emptyList());
+    }
+
+    private PageVO<DocumentFileVO> pageSharedOwnerDocuments(
+            UserAccessContext context,
+            DocumentPageReq pageReq,
+            String owner) {
+        if (!StringUtils.hasText(owner)) {
+            return pageCombinedDocuments(context, pageReq, Collections.emptyList(), Collections.emptyList());
+        }
+        Set<String> placedFileIds = findPersonalSharedPlacedFileIds(context);
+        List<String> fileIds = filterSharedRootFileIds(findSharedFileIds(context, pageReq), context).stream()
+                .filter(fileId -> !placedFileIds.contains(fileId))
+                .toList();
+        List<SysFiles> sharedFiles = selectActiveFilesByIds(context, fileIds, pageReq.getFolderOnly()).stream()
+                .filter(file -> !Objects.equals(file.getCreateBy(), context.username()))
+                .filter(file -> Objects.equals(file.getCreateBy(), owner))
+                .toList();
+        return pageCombinedDocuments(context, pageReq, Collections.emptyList(), sharedFiles);
     }
 
     private PageVO<DocumentFileVO> pageSharedByMeDocuments(UserAccessContext context, DocumentPageReq pageReq) {
@@ -1338,6 +1367,18 @@ public class SysFilesServiceImpl extends BaseServiceImpl<SysFilesMapper, SysFile
         if (Boolean.TRUE.equals(req.getFolderOnly()) && !FLAG_YES.equals(file.getIzFolder())) {
             return false;
         }
+        if (isSharedOwnerVirtualFolder(file)) {
+            return true;
+        }
+        if (StringUtils.hasText(req.getKeyword())
+                && !String.valueOf(file.getFileName()).contains(req.getKeyword().trim())) {
+            return false;
+        }
+        return !StringUtils.hasText(req.getFileType())
+                || Objects.equals(file.getFileType(), req.getFileType().trim());
+    }
+
+    private boolean matchesSharedOwnerSourceFilters(SysFiles file, DocumentPageReq req) {
         if (StringUtils.hasText(req.getKeyword())
                 && !String.valueOf(file.getFileName()).contains(req.getKeyword().trim())) {
             return false;
@@ -1796,6 +1837,91 @@ public class SysFilesServiceImpl extends BaseServiceImpl<SysFilesMapper, SysFile
         folder.setEnableUpdat(FLAG_NO);
         folder.setDeleteFlag(0);
         return folder;
+    }
+
+    private List<SysFiles> buildSharedOwnerFolders(UserAccessContext context, List<SysFiles> sharedFiles) {
+        if (sharedFiles.isEmpty()) {
+            return Collections.emptyList();
+        }
+        Map<String, List<SysFiles>> filesByOwner = sharedFiles.stream()
+                .filter(file -> StringUtils.hasText(file.getCreateBy()))
+                .collect(Collectors.groupingBy(
+                        SysFiles::getCreateBy,
+                        LinkedHashMap::new,
+                        Collectors.toList()));
+        Map<String, String> displayNames = resolveUsernameDisplayNames(filesByOwner.keySet());
+        return filesByOwner.entrySet().stream()
+                .map(entry -> buildSharedOwnerVirtualFolder(
+                        context,
+                        entry.getKey(),
+                        displayNames.getOrDefault(entry.getKey(), entry.getKey()),
+                        entry.getValue()))
+                .toList();
+    }
+
+    private SysFiles buildSharedOwnerVirtualFolder(
+            UserAccessContext context,
+            String owner,
+            String ownerDisplayName,
+            List<SysFiles> sharedFiles) {
+        SysFiles folder = new SysFiles();
+        folder.setId(sharedOwnerId(owner));
+        folder.setTenantId(context.tenantId());
+        folder.setFileName(ownerDisplayName + "的共享");
+        folder.setFileType(FOLDER_TYPE);
+        folder.setStoreType(SHARED_OWNER_VIEW_STORE_TYPE);
+        folder.setFileSize(0D);
+        folder.setIzFolder(FLAG_YES);
+        folder.setIzRootFolder(FLAG_YES);
+        folder.setIzStar(FLAG_NO);
+        folder.setDownCount(0);
+        folder.setReadCount(0);
+        folder.setEnableDown(FLAG_NO);
+        folder.setEnableUpdat(FLAG_NO);
+        folder.setCreateBy(owner);
+        LocalDateTime latestTime = sharedFiles.stream()
+                .map(file -> file.getUpdateTime() != null ? file.getUpdateTime() : file.getCreateTime())
+                .filter(Objects::nonNull)
+                .max(LocalDateTime::compareTo)
+                .orElse(null);
+        folder.setCreateTime(latestTime);
+        folder.setUpdateTime(latestTime);
+        folder.setDeleteFlag(0);
+        return folder;
+    }
+
+    private Map<String, String> resolveUsernameDisplayNames(Collection<String> usernames) {
+        List<String> normalizedUsernames = usernames.stream()
+                .filter(StringUtils::hasText)
+                .distinct()
+                .toList();
+        if (normalizedUsernames.isEmpty()) {
+            return Collections.emptyMap();
+        }
+        return userMapper.selectList(Wrappers.lambdaQuery(User.class)
+                        .select(User::getUsername, User::getRealname)
+                        .in(User::getUsername, normalizedUsernames))
+                .stream()
+                .filter(user -> StringUtils.hasText(user.getUsername()))
+                .collect(Collectors.toMap(
+                        User::getUsername,
+                        user -> StringUtils.hasText(user.getRealname()) ? user.getRealname() : user.getUsername(),
+                        (left, right) -> left));
+    }
+
+    private String sharedOwnerId(String owner) {
+        return SHARED_OWNER_PREFIX + owner;
+    }
+
+    private boolean isSharedOwnerVirtualId(String id) {
+        return StringUtils.hasText(id) && id.startsWith(SHARED_OWNER_PREFIX);
+    }
+
+    private String parseSharedOwner(String id) {
+        if (!isSharedOwnerVirtualId(id)) {
+            return null;
+        }
+        return id.substring(SHARED_OWNER_PREFIX.length());
     }
 
     private String resolveBusinessModuleName(String bizType) {
@@ -2493,6 +2619,14 @@ public class SysFilesServiceImpl extends BaseServiceImpl<SysFilesMapper, SysFile
             UserAccessContext context,
             Set<String> sharedFileIds) {
         DocumentFileVO vo = buildBaseDocumentVO(file, context);
+        if (isSharedOwnerVirtualFolder(file)) {
+            vo.setOwnerFlag(false);
+            vo.setSharedFlag(false);
+            vo.setCanManage(false);
+            vo.setCanDownload(false);
+            vo.setCanUpdate(false);
+            return vo;
+        }
         vo.setSharedFlag(sharedFileIds.contains(file.getId()));
         vo.setCanManage(Boolean.TRUE.equals(vo.getOwnerFlag()) || hasSharedSpaceAccess(file, context));
         vo.setCanDownload(canDownload(file, context));
@@ -2569,8 +2703,19 @@ public class SysFilesServiceImpl extends BaseServiceImpl<SysFilesMapper, SysFile
         }
         for (DocumentFileVO folder : folders) {
             folder.setHasChild(parentIdsWithChildren.contains(folder.getId())
+                    || isSharedOwnerVirtualFolder(folder)
                     || hasBusinessVirtualFolderChildren(folder, businessRelations));
         }
+    }
+
+    private boolean isSharedOwnerVirtualFolder(DocumentFileVO folder) {
+        return SHARED_OWNER_VIEW_STORE_TYPE.equals(folder.getStoreType())
+                && isSharedOwnerVirtualId(folder.getId());
+    }
+
+    private boolean isSharedOwnerVirtualFolder(SysFiles folder) {
+        return SHARED_OWNER_VIEW_STORE_TYPE.equals(folder.getStoreType())
+                && isSharedOwnerVirtualId(folder.getId());
     }
 
     private boolean isBusinessVirtualFolder(DocumentFileVO folder) {
