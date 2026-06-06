@@ -52,7 +52,7 @@ export function getScopeRootKey(scopeValue: string) {
 }
 
 export function shouldRenderFolderTree(option?: ScopeOption) {
-  return Boolean(option?.scope);
+  return Boolean(option?.scope && option.shareTargetType !== 'depart');
 }
 
 export function getFolderNodeKey(rootKey: string, fileId?: string) {

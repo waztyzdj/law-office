@@ -506,6 +506,12 @@ export function useDocumentTree(options: UseDocumentTreeOptions) {
   }
 
   function expandPathKeys(path: DocumentFileInfo[], rootKey = options.activeRootKey.value) {
+    if (!shouldRenderFolderTree(findScopeOption(rootKey))) {
+      expandedTreeKeys.value = Array.from(
+        new Set([getScopeRootKey(rootKey), ...expandedTreeKeys.value]),
+      );
+      return;
+    }
     const keys = path
       .slice(0, -1)
       .map((item) => getFolderNodeKey(rootKey, item.id))

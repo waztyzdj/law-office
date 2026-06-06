@@ -138,7 +138,6 @@ export function useDocumentNavigation(options: UseDocumentNavigationOptions) {
         pushNavigationHistory();
       }
       parentStack.value = [];
-      tree.expandedTreeKeys.value = Array.from(new Set([...tree.expandedTreeKeys.value, key]));
       if (nextRootKey !== activeRootKey.value) {
         activeRootKey.value = nextRootKey;
         await Promise.all([options.loadData(), tree.loadFolderTree()]);
