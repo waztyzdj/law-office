@@ -40,6 +40,7 @@ import com.lawoffice.system.req.DocumentPageReq;
 import com.lawoffice.system.req.DocumentRenameReq;
 import com.lawoffice.system.req.DocumentShareReq;
 import com.lawoffice.system.req.DocumentShareTargetReq;
+import com.lawoffice.system.req.DocumentTreeBatchReq;
 import com.lawoffice.system.req.DocumentTreePrefetchReq;
 import com.lawoffice.system.req.DocumentUploadReq;
 import com.lawoffice.system.req.FileRelationReq;
@@ -390,6 +391,31 @@ public class SysFilesServiceImpl extends BaseServiceImpl<SysFilesMapper, SysFile
     }
 
     @Override
+    public Map<String, List<DocumentFileVO>> batchLoadDocumentFolderTree(String username, DocumentTreeBatchReq req) {
+        if (req == null || req.getItems() == null || req.getItems().isEmpty()) {
+            return Collections.emptyMap();
+        }
+        Map<String, List<DocumentFileVO>> result = new LinkedHashMap<>();
+        req.getItems().stream()
+                .filter(Objects::nonNull)
+                .filter(item -> StringUtils.hasText(item.getKey()))
+                .limit(TREE_PREFETCH_PARENT_LIMIT)
+                .forEach(item -> {
+                    String key = item.getKey().trim();
+                    if (result.containsKey(key)) {
+                        return;
+                    }
+                    result.put(key, listDocumentFolderChildrenForTree(
+                            username,
+                            item.getScope(),
+                            item.getShareTargetType(),
+                            item.getShareTargetId(),
+                            item.getParentId()));
+                });
+        return result;
+    }
+
+    @Override
     public Map<String, List<DocumentFileVO>> prefetchDocumentFolderTree(String username, DocumentTreePrefetchReq req) {
         if (req == null || req.getParentIds() == null || req.getParentIds().isEmpty()) {
             return Collections.emptyMap();
@@ -405,14 +431,21 @@ public class SysFilesServiceImpl extends BaseServiceImpl<SysFilesMapper, SysFile
         }
         Map<String, List<DocumentFileVO>> result = new LinkedHashMap<>();
         for (String parentId : parentIds) {
-            result.put(parentId, listDocumentFolderChildrenForTreePrefetch(username, req, parentId));
+            result.put(parentId, listDocumentFolderChildrenForTree(
+                    username,
+                    req.getScope(),
+                    req.getShareTargetType(),
+                    req.getShareTargetId(),
+                    parentId));
         }
         return result;
     }
 
-    private List<DocumentFileVO> listDocumentFolderChildrenForTreePrefetch(
+    private List<DocumentFileVO> listDocumentFolderChildrenForTree(
             String username,
-            DocumentTreePrefetchReq req,
+            String scope,
+            String shareTargetType,
+            String shareTargetId,
             String parentId) {
         List<DocumentFileVO> records = new ArrayList<>();
         int pageNum = 1;
@@ -423,9 +456,9 @@ public class SysFilesServiceImpl extends BaseServiceImpl<SysFilesMapper, SysFile
             pageReq.setPageNum(pageNum);
             pageReq.setPageSize(TREE_PREFETCH_PAGE_SIZE);
             pageReq.setParentId(parentId);
-            pageReq.setScope(req.getScope());
-            pageReq.setShareTargetId(req.getShareTargetId());
-            pageReq.setShareTargetType(req.getShareTargetType());
+            pageReq.setScope(scope);
+            pageReq.setShareTargetId(shareTargetId);
+            pageReq.setShareTargetType(shareTargetType);
 
             PageVO<DocumentFileVO> page = pageDocuments(username, pageReq);
             List<DocumentFileVO> pageRecords = page.getRecords() == null

@@ -58,6 +58,18 @@ export interface DocumentTreePrefetchReq {
   shareTargetType?: DocumentShareTargetType;
 }
 
+export interface DocumentTreeBatchItemReq {
+  key: string;
+  parentId?: string;
+  scope?: DocumentScope;
+  shareTargetId?: string;
+  shareTargetType?: DocumentShareTargetType;
+}
+
+export interface DocumentTreeBatchReq {
+  items: DocumentTreeBatchItemReq[];
+}
+
 export interface DocumentShareInfo {
   createTime?: string;
   expireTime?: string;
@@ -104,6 +116,12 @@ export const pageDocuments = (params: DocumentPageReq) =>
 export const prefetchDocumentTree = (params: DocumentTreePrefetchReq) =>
   requestClient.post<Record<string, DocumentFileInfo[]>>(
     '/files/document/tree/prefetch',
+    params,
+  );
+
+export const batchLoadDocumentTree = (params: DocumentTreeBatchReq) =>
+  requestClient.post<Record<string, DocumentFileInfo[]>>(
+    '/files/document/tree/batch',
     params,
   );
 

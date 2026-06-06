@@ -7,7 +7,11 @@ import type { ScopeOption } from '../types';
 
 import { ref } from 'vue';
 
-import { pageDocuments, prefetchDocumentTree } from '#/api/system/document';
+import {
+  batchLoadDocumentTree,
+  pageDocuments,
+  prefetchDocumentTree,
+} from '#/api/system/document';
 import {
   getCurrentUserOrganization,
   getCurrentUserTenantOptions,
@@ -24,6 +28,12 @@ interface UseDocumentDataLoaderOptions {
 
 interface FetchDocumentsOptions {
   folderOnly?: boolean;
+}
+
+interface BatchLoadFolderTreeItem {
+  key: string;
+  option?: ScopeOption;
+  parentId?: string;
 }
 
 export function useDocumentDataLoader(options: UseDocumentDataLoaderOptions) {
@@ -83,6 +93,22 @@ export function useDocumentDataLoader(options: UseDocumentDataLoaderOptions) {
       shareTargetId: option?.shareTargetId,
       shareTargetType: option?.shareTargetType,
     });
+  }
+
+  async function batchLoadFolderTree(items: BatchLoadFolderTreeItem[]) {
+    const requestItems = items
+      .filter((item) => item.key && item.option?.scope)
+      .map((item) => ({
+        key: item.key,
+        parentId: item.parentId,
+        scope: item.option?.scope,
+        shareTargetId: item.option?.shareTargetId,
+        shareTargetType: item.option?.shareTargetType,
+      }));
+    if (requestItems.length === 0) {
+      return {};
+    }
+    return batchLoadDocumentTree({ items: requestItems });
   }
 
   async function loadData() {
@@ -152,6 +178,7 @@ export function useDocumentDataLoader(options: UseDocumentDataLoaderOptions) {
     currentDeparts,
     currentTenant,
     activeKeyword,
+    batchLoadFolderTree,
     clearSearchKeyword,
     dataSource,
     fetchDocuments,

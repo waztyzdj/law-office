@@ -24,6 +24,9 @@ import type { FolderTreeNode, ScopeOption } from '../types';
 
 interface UseDocumentTreeOptions {
   activeRootKey: Ref<string>;
+  batchLoadFolderTree?: (
+    items: { key: string; option?: ScopeOption; parentId?: string }[],
+  ) => Promise<Record<string, DocumentFileInfo[]>>;
   currentParentId: ComputedRef<string | undefined>;
   fetchDocuments: (
     parentId?: string,
@@ -42,7 +45,7 @@ export function useDocumentTree(options: UseDocumentTreeOptions) {
   const folderTreeCache = ref<Record<string, FolderTreeNode[]>>({});
   const treeLoading = ref(false);
   const treeRenderKey = ref(0);
-  const expandedTreeKeys = ref<string[]>([getScopeRootKey('my')]);
+  const expandedTreeKeys = ref<string[]>([]);
   const selectedTreeKeys = ref<string[]>([getScopeRootKey('my')]);
   const folderNodeLoadPromises = new Map<string, Promise<FolderTreeNode[]>>();
 
@@ -124,14 +127,19 @@ export function useDocumentTree(options: UseDocumentTreeOptions) {
     return resolvedPath;
   }
 
+  function buildFolderTreeNodes(records: DocumentFileInfo[], rootKey: string) {
+    return records
+      .filter((item) => item.izFolder === '1' && item.id)
+      .map((record) => buildFolderTreeNode(record, rootKey));
+  }
+
   async function loadFolderNodes(
     parentId?: string,
     option: ScopeOption | undefined = findScopeOption(options.activeRootKey.value),
     rootKey = options.activeRootKey.value,
   ): Promise<FolderTreeNode[]> {
     const children = await options.fetchDocuments(parentId, undefined, option, { folderOnly: true });
-    const records = children.filter((item) => item.izFolder === '1' && item.id);
-    return records.map((record) => buildFolderTreeNode(record, rootKey));
+    return buildFolderTreeNodes(children, rootKey);
   }
 
   function setFolderTreeCache(rootKey: string, nodes: FolderTreeNode[]) {
@@ -258,7 +266,38 @@ export function useDocumentTree(options: UseDocumentTreeOptions) {
 
   async function loadInitialFolderTrees() {
     const rootKeys = Array.from(new Set(collectScopeRootKeys(options.scopeOptions.value)));
-    await Promise.all(rootKeys.map((rootKey) => loadFolderTree(rootKey, false)));
+    if (!options.batchLoadFolderTree) {
+      await Promise.all(rootKeys.map((rootKey) => loadFolderTree(rootKey, false)));
+      selectedTreeKeys.value = [getActiveSelectedTreeKey()];
+      return;
+    }
+    const loadItems = rootKeys
+      .map((rootKey) => ({
+        key: rootKey,
+        option: findScopeOption(rootKey),
+      }))
+      .filter((item) => (
+        item.option?.scope &&
+        shouldRenderFolderTree(item.option) &&
+        item.option.scope !== 'trash'
+      ));
+    treeLoading.value = true;
+    try {
+      const result = await options.batchLoadFolderTree(loadItems);
+      const nextCache: Record<string, FolderTreeNode[]> = {};
+      for (const rootKey of rootKeys) {
+        const option = findScopeOption(rootKey);
+        nextCache[rootKey] = option?.scope && shouldRenderFolderTree(option) && option.scope !== 'trash'
+          ? buildFolderTreeNodes(result[rootKey] || [], rootKey)
+          : [];
+      }
+      folderTreeCache.value = nextCache;
+      treeRenderKey.value += 1;
+      pruneExpandedTreeKeys();
+      normalizeSelectedTreeKeys();
+    } finally {
+      treeLoading.value = false;
+    }
     selectedTreeKeys.value = [getActiveSelectedTreeKey()];
   }
 
@@ -328,10 +367,7 @@ export function useDocumentTree(options: UseDocumentTreeOptions) {
     try {
       const result = await options.prefetchFolderTree(pendingParentIds, option);
       for (const parentId of pendingParentIds) {
-        const records = result[parentId] || [];
-        const children = records
-          .filter((item) => item.izFolder === '1' && item.id)
-          .map((record) => buildFolderTreeNode(record, rootKey));
+        const children = buildFolderTreeNodes(result[parentId] || [], rootKey);
         setFolderTreeNodeChildren(rootKey, getFolderNodeKey(rootKey, parentId), children);
         resolveMap.get(parentId)?.(children);
       }

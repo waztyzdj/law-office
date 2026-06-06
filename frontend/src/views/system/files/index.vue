@@ -8,6 +8,7 @@ import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 
 import {
   Card,
+  Spin,
 } from 'ant-design-vue';
 
 import DocumentExplorer from './components/DocumentExplorer.vue';
@@ -48,11 +49,13 @@ const shareDrawerRef = ref<InstanceType<typeof DocumentShareDrawer>>();
 const historyModalRef = ref<InstanceType<typeof DocumentHistoryModal>>();
 const imagePreviewModalRef = ref<InstanceType<typeof DocumentImagePreviewModal>>();
 const previewModalRef = ref<InstanceType<typeof DocumentOnlyOfficePreviewModal>>();
+const treeInitialized = ref(false);
 async function reloadCachedFolderTreesBridge() {
   await reloadCachedFolderTrees();
 }
 const {
   activeKeyword,
+  batchLoadFolderTree,
   clearSearchKeyword: clearDocumentSearchKeyword,
   currentDeparts,
   currentTenant,
@@ -183,6 +186,7 @@ const {
   updateCachedFolderTreeRecord,
 } = useDocumentTree({
   activeRootKey,
+  batchLoadFolderTree,
   currentParentId,
   fetchDocuments,
   prefetchFolderTree,
@@ -507,8 +511,12 @@ function isEditingTreeNode(key: string) {
 
 onMounted(async () => {
   window.addEventListener('keydown', handleTreeShortcutKeydown, true);
-  await loadShareRootContext();
-  await Promise.all([loadData(), loadInitialFolderTrees()]);
+  const treeReadyPromise = (async () => {
+    await loadShareRootContext();
+    await loadInitialFolderTrees();
+    treeInitialized.value = true;
+  })();
+  await Promise.all([loadData(), treeReadyPromise]);
 });
 
 onBeforeUnmount(() => {
@@ -524,6 +532,7 @@ onBeforeUnmount(() => {
         :body-style="{ padding: '12px' }"
       >
         <DocumentTreePanel
+          v-if="treeInitialized"
           :can-manage-tree-folder="canManageTreeFolder"
           :can-show-tree-context-menu="canShowTreeContextMenu"
           :expanded-keys="expandedTreeKeys"
@@ -557,6 +566,12 @@ onBeforeUnmount(() => {
           @update-expanded-keys="expandedTreeKeys = $event"
           @update-keyword="handleKeywordChange"
         />
+        <div
+          v-else
+          class="document-tree-initializing"
+        >
+          <Spin />
+        </div>
       </Card>
 
       <Card
@@ -682,6 +697,14 @@ onBeforeUnmount(() => {
   min-height: 0;
   flex: 1;
   flex-direction: column;
+}
+
+.document-tree-initializing {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 220px;
+  height: 100%;
 }
 
 .hidden-file-input {

@@ -15,6 +15,7 @@ import com.lawoffice.system.req.DocumentMoveReq;
 import com.lawoffice.system.req.DocumentPageReq;
 import com.lawoffice.system.req.DocumentRenameReq;
 import com.lawoffice.system.req.DocumentShareReq;
+import com.lawoffice.system.req.DocumentTreeBatchReq;
 import com.lawoffice.system.req.DocumentTreePrefetchReq;
 import com.lawoffice.system.req.DocumentUploadReq;
 import com.lawoffice.system.req.FileRelationReq;
@@ -77,6 +78,14 @@ public class SysFilesController extends BaseController<ISysFilesService, SysFile
             @Valid @RequestBody(required = false) DocumentPageReq req,
             HttpServletRequest request) {
         return BaseResult.success(baseService.pageDocuments(getUsername(request), req));
+    }
+
+    @PostMapping("/document/tree/batch")
+    @Operation(summary = "批量加载文档树节点", description = "一次加载多个树节点的下一层文件夹，用于文档中心左侧树初始化")
+    public BaseResult<Map<String, List<DocumentFileVO>>> batchLoadDocumentTree(
+            @Valid @RequestBody(required = false) DocumentTreeBatchReq req,
+            HttpServletRequest request) {
+        return BaseResult.success(baseService.batchLoadDocumentFolderTree(getUsername(request), req));
     }
 
     @PostMapping("/document/tree/prefetch")

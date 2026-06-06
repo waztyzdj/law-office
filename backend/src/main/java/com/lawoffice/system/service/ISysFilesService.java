@@ -11,6 +11,7 @@ import com.lawoffice.system.req.DocumentMoveReq;
 import com.lawoffice.system.req.DocumentPageReq;
 import com.lawoffice.system.req.DocumentRenameReq;
 import com.lawoffice.system.req.DocumentShareReq;
+import com.lawoffice.system.req.DocumentTreeBatchReq;
 import com.lawoffice.system.req.DocumentTreePrefetchReq;
 import com.lawoffice.system.req.DocumentUploadReq;
 import com.lawoffice.system.req.FileRelationReq;
@@ -73,6 +74,11 @@ public interface ISysFilesService extends IBaseService<SysFiles, SysFilesVO> {
      * 范围支持我的文档、业务文档、共享给我、我的共享、租户/部门共享和回收站。
      */
     PageVO<DocumentFileVO> pageDocuments(String username, DocumentPageReq req);
+
+    /**
+     * 批量加载多个左侧树节点的下一层文件夹，用于初始化时一次性加载多个根分类。
+     */
+    Map<String, List<DocumentFileVO>> batchLoadDocumentFolderTree(String username, DocumentTreeBatchReq req);
 
     /**
      * 批量预取多个父级目录的下一层文件夹，用于前端树展开时预热下一级缓存。
