@@ -24,6 +24,7 @@ import com.lawoffice.system.req.SysFilesReq;
 import com.lawoffice.system.service.ISysFilesService;
 import com.lawoffice.system.vo.DocumentFileVO;
 import com.lawoffice.system.vo.DocumentShareVO;
+import com.lawoffice.system.vo.DocumentStatusVO;
 import com.lawoffice.system.vo.FileRelationVO;
 import com.lawoffice.system.vo.FileUploadVO;
 import com.lawoffice.system.vo.SysFilesVO;
@@ -231,6 +232,14 @@ public class SysFilesController extends BaseController<ISysFilesService, SysFile
             @PathVariable String fileId,
             HttpServletRequest request) {
         return BaseResult.success(baseService.listDocumentShares(getUsername(request), fileId));
+    }
+
+    @GetMapping("/document/status/{fileId}")
+    @Operation(summary = "查询文档状态栏详情", description = "查询文档中心状态栏需要的共享来源、统计信息和业务来源")
+    public BaseResult<DocumentStatusVO> getDocumentStatus(
+            @PathVariable String fileId,
+            HttpServletRequest request) {
+        return BaseResult.success(baseService.getDocumentStatus(getUsername(request), fileId));
     }
 
     @PostMapping("/document/share/revoke/{aclId}")

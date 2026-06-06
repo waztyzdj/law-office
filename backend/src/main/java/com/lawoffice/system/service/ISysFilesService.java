@@ -18,6 +18,7 @@ import com.lawoffice.system.req.FileRelationReq;
 import com.lawoffice.system.req.FileUploadReq;
 import com.lawoffice.system.vo.DocumentFileVO;
 import com.lawoffice.system.vo.DocumentShareVO;
+import com.lawoffice.system.vo.DocumentStatusVO;
 import com.lawoffice.system.vo.FileRelationVO;
 import com.lawoffice.system.vo.FileUploadVO;
 import com.lawoffice.system.vo.SysFilesVO;
@@ -163,6 +164,11 @@ public interface ISysFilesService extends IBaseService<SysFiles, SysFilesVO> {
      * 查询本人文档的共享目标。
      */
     List<DocumentShareVO> listDocumentShares(String username, String fileId);
+
+    /**
+     * 查询文档中心状态栏详情，包含共享来源、统计信息和业务来源。
+     */
+    DocumentStatusVO getDocumentStatus(String username, String fileId);
 
     /**
      * 撤销本人文档的一条共享授权。

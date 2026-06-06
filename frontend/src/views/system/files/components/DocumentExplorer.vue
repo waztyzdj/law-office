@@ -10,6 +10,7 @@ import { Dropdown, Empty, Menu, Spin } from 'ant-design-vue';
 import DocumentGridView from './DocumentGridView.vue';
 import DocumentListView from './DocumentListView.vue';
 import DocumentSelectionBox from './DocumentSelectionBox.vue';
+import DocumentStatusBar from './DocumentStatusBar.vue';
 import {
   DOCUMENT_SORT_OPTIONS as sortOptions,
   type DocumentSortField,
@@ -318,6 +319,7 @@ const {
   selectOnly,
   selectedMovableIds,
   selectedMovableRecords,
+  selectedRecords,
   selecting,
   selectionBoxStyle,
 } = documentSelection;
@@ -448,6 +450,11 @@ onBeforeUnmount(() => {
         </Spin>
         <DocumentSelectionBox :style="selectionBoxStyle" :visible="selecting" />
       </div>
+      <DocumentStatusBar
+        :is-global-search="isGlobalSearch"
+        :scope="scope"
+        :selected-records="selectedRecords"
+      />
     </div>
       <template #overlay>
         <Menu>

@@ -81,6 +81,41 @@ export interface DocumentShareInfo {
   targetType?: DocumentShareTargetType;
 }
 
+export interface DocumentShareSourceInfo {
+  createTime?: string;
+  expireTime?: string;
+  fileId?: string;
+  fileName?: string;
+  inheritedFromFileId?: string;
+  inheritedFromFileName?: string;
+  permission?: DocumentPermission;
+  sharedBy?: string;
+  sourceType?: 'direct' | 'inherited' | 'space' | string;
+  targetId?: string;
+  targetName?: string;
+  targetType?: DocumentShareTargetType;
+}
+
+export interface DocumentFolderStatsInfo {
+  fileCount?: number;
+  folderCount?: number;
+  totalSize?: number;
+}
+
+export interface DocumentStatusInfo {
+  accessShareSource?: DocumentShareSourceInfo;
+  businessBizId?: string;
+  businessBizType?: string;
+  businessModuleName?: string;
+  businessRecordName?: string;
+  deleteBy?: string;
+  directShares?: DocumentShareInfo[];
+  file?: DocumentFileInfo;
+  folderStats?: DocumentFolderStatsInfo;
+  inheritedShareSource?: DocumentShareSourceInfo;
+  originalPath?: string;
+}
+
 export interface DocumentShareTarget {
   permission: DocumentPermission;
   targetId: string;
@@ -224,6 +259,9 @@ export const shareDocument = (data: {
 
 export const listDocumentShares = (fileId: string) =>
   requestClient.get<DocumentShareInfo[]>(`/files/document/shares/${fileId}`);
+
+export const getDocumentStatus = (fileId: string) =>
+  requestClient.get<DocumentStatusInfo>(`/files/document/status/${fileId}`);
 
 export const revokeDocumentShare = (aclId: string) =>
   requestClient.post<void>(`/files/document/share/revoke/${aclId}`);

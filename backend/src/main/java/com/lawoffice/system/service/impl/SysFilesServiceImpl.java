@@ -48,7 +48,10 @@ import com.lawoffice.system.req.FileUploadReq;
 import com.lawoffice.system.service.IBusinessDocumentProvider;
 import com.lawoffice.system.service.ISysFilesService;
 import com.lawoffice.system.vo.DocumentFileVO;
+import com.lawoffice.system.vo.DocumentFolderStatsVO;
 import com.lawoffice.system.vo.DocumentShareVO;
+import com.lawoffice.system.vo.DocumentShareSourceVO;
+import com.lawoffice.system.vo.DocumentStatusVO;
 import com.lawoffice.system.vo.FileRelationVO;
 import com.lawoffice.system.vo.FileUploadVO;
 import com.lawoffice.system.vo.SysFilesVO;
@@ -897,6 +900,36 @@ public class SysFilesServiceImpl extends BaseServiceImpl<SysFilesMapper, SysFile
         return acls.stream()
                 .map(this::buildDocumentShareVO)
                 .toList();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public DocumentStatusVO getDocumentStatus(String username, String fileId) {
+        SysFiles file = getFileIncludingDeleted(fileId);
+        if (file == null) {
+            throw new IllegalArgumentException("文件不存在或已删除");
+        }
+        UserAccessContext context = buildUserAccessContext(username, requireTenantId());
+        if (Objects.equals(file.getDeleteFlag(), 1)) {
+            assertOwner(file, username);
+        } else {
+            assertCanViewDocument(file, context);
+        }
+
+        DocumentStatusVO status = new DocumentStatusVO();
+        status.setFile(buildDocumentVO(file, context));
+        status.setDeleteBy(file.getDeleteBy());
+        status.setOriginalPath(resolveDocumentPath(file));
+        status.setAccessShareSource(resolveAccessShareSource(file, context));
+        status.setInheritedShareSource(resolveInheritedShareSource(file, context));
+        if (canSeeDirectShares(file, context)) {
+            status.setDirectShares(listActiveDirectShareVOs(file.getId(), file.getTenantId()));
+        }
+        if (FLAG_YES.equals(file.getIzFolder())) {
+            status.setFolderStats(calculateFolderStats(file));
+        }
+        fillBusinessStatus(status, file, context);
+        return status;
     }
 
     @Override
@@ -1933,6 +1966,13 @@ public class SysFilesServiceImpl extends BaseServiceImpl<SysFilesMapper, SysFile
                         (left, right) -> left));
     }
 
+    private String resolveUsernameDisplayName(String username) {
+        if (!StringUtils.hasText(username)) {
+            return username;
+        }
+        return resolveUsernameDisplayNames(List.of(username)).getOrDefault(username, username);
+    }
+
     private String sharedOwnerId(String owner) {
         return SHARED_OWNER_PREFIX + owner;
     }
@@ -2798,6 +2838,252 @@ public class SysFilesServiceImpl extends BaseServiceImpl<SysFilesMapper, SysFile
         vo.setUpdateBy(acl.getUpdateBy());
         vo.setUpdateTime(acl.getUpdateTime());
         return vo;
+    }
+
+    private boolean canSeeDirectShares(SysFiles file, UserAccessContext context) {
+        return file != null
+                && (Objects.equals(file.getCreateBy(), context.username())
+                || hasSharedSpaceAccess(file, context));
+    }
+
+    private List<DocumentShareVO> listActiveDirectShareVOs(String fileId, String tenantId) {
+        return listActiveDirectAcls(fileId, tenantId).stream()
+                .map(this::buildDocumentShareVO)
+                .toList();
+    }
+
+    private List<SysFileAcl> listActiveDirectAcls(String fileId, String tenantId) {
+        if (!StringUtils.hasText(fileId)) {
+            return Collections.emptyList();
+        }
+        return fileAclMapper.selectList(Wrappers.lambdaQuery(SysFileAcl.class)
+                .eq(SysFileAcl::getTenantId, tenantId)
+                .eq(SysFileAcl::getFileId, fileId)
+                .eq(SysFileAcl::getDeleteFlag, 0)
+                .and(item -> item.isNull(SysFileAcl::getExpireTime).or().ge(SysFileAcl::getExpireTime, LocalDateTime.now()))
+                .orderByAsc(SysFileAcl::getTargetType, SysFileAcl::getCreateTime));
+    }
+
+    private DocumentShareSourceVO resolveAccessShareSource(SysFiles file, UserAccessContext context) {
+        if (file == null || Objects.equals(file.getCreateBy(), context.username())
+                || Objects.equals(file.getDeleteFlag(), 1)) {
+            return null;
+        }
+        DocumentShareSourceVO sharedSpaceSource = resolveSharedSpaceSource(file, context);
+        if (sharedSpaceSource != null) {
+            return sharedSpaceSource;
+        }
+        return resolveShareSource(file, context, true, true);
+    }
+
+    private DocumentShareSourceVO resolveInheritedShareSource(SysFiles file, UserAccessContext context) {
+        if (file == null || !StringUtils.hasText(file.getParentId()) || Objects.equals(file.getDeleteFlag(), 1)) {
+            return null;
+        }
+        return resolveShareSource(file, context, !canSeeDirectShares(file, context), false);
+    }
+
+    private DocumentShareSourceVO resolveShareSource(
+            SysFiles file,
+            UserAccessContext context,
+            boolean onlyCurrentUserTargets,
+            boolean includeSelf) {
+        String currentId = includeSelf ? file.getId() : file.getParentId();
+        int guard = 0;
+        while (StringUtils.hasText(currentId) && guard++ < 20) {
+            SysFiles sourceFile = getFileIncludingDeleted(currentId);
+            if (sourceFile == null || Objects.equals(sourceFile.getDeleteFlag(), 1)) {
+                return null;
+            }
+            List<SysFileAcl> acls = onlyCurrentUserTargets
+                    ? selectActiveAclsForContext(sourceFile.getId(), context)
+                    : listActiveDirectAcls(sourceFile.getId(), sourceFile.getTenantId());
+            if (!acls.isEmpty()) {
+                SysFileAcl acl = acls.stream()
+                        .max((left, right) -> Integer.compare(
+                                permissionRank(left.getPermission()),
+                                permissionRank(right.getPermission())))
+                        .orElse(acls.get(0));
+                return buildShareSourceVO(file, sourceFile, acl);
+            }
+            currentId = sourceFile.getParentId();
+        }
+        return null;
+    }
+
+    private DocumentShareSourceVO buildShareSourceVO(SysFiles file, SysFiles sourceFile, SysFileAcl acl) {
+        DocumentShareSourceVO source = new DocumentShareSourceVO();
+        boolean inherited = !Objects.equals(file.getId(), sourceFile.getId());
+        source.setSourceType(inherited ? "inherited" : "direct");
+        source.setFileId(sourceFile.getId());
+        source.setFileName(sourceFile.getFileName());
+        source.setSharedBy(resolveUsernameDisplayName(acl.getCreateBy()));
+        source.setTargetType(acl.getTargetType());
+        source.setTargetId(acl.getTargetId());
+        source.setTargetName(resolveTargetName(acl.getTargetType(), acl.getTargetId()));
+        source.setPermission(acl.getPermission());
+        source.setExpireTime(acl.getExpireTime());
+        source.setCreateTime(acl.getCreateTime());
+        if (inherited) {
+            source.setInheritedFromFileId(sourceFile.getId());
+            source.setInheritedFromFileName(sourceFile.getFileName());
+        }
+        return source;
+    }
+
+    private DocumentShareSourceVO resolveSharedSpaceSource(SysFiles file, UserAccessContext context) {
+        if (TENANT_SHARED_STORE_TYPE.equals(file.getStoreType())) {
+            SysFiles root = resolveRootFile(file);
+            DocumentShareSourceVO source = buildSharedSpaceSource(file, root, TARGET_TENANT, context.tenantId());
+            source.setTargetName(resolveTargetName(TARGET_TENANT, context.tenantId()));
+            return source;
+        }
+        if (!DEPART_SHARED_STORE_TYPE.equals(file.getStoreType())) {
+            return null;
+        }
+        SysFiles root = resolveRootFile(file);
+        String departId = resolveDepartSharedRootTarget(root, context);
+        if (!StringUtils.hasText(departId)) {
+            return null;
+        }
+        return buildSharedSpaceSource(file, root, TARGET_DEPART, departId);
+    }
+
+    private DocumentShareSourceVO buildSharedSpaceSource(
+            SysFiles file,
+            SysFiles root,
+            String targetType,
+            String targetId) {
+        DocumentShareSourceVO source = new DocumentShareSourceVO();
+        SysFiles sourceFile = root == null ? file : root;
+        boolean inherited = !Objects.equals(file.getId(), sourceFile.getId());
+        source.setSourceType("space");
+        source.setFileId(sourceFile.getId());
+        source.setFileName(sourceFile.getFileName());
+        source.setSharedBy(resolveUsernameDisplayName(sourceFile.getCreateBy()));
+        source.setTargetType(targetType);
+        source.setTargetId(targetId);
+        source.setTargetName(resolveTargetName(targetType, targetId));
+        if (inherited) {
+            source.setInheritedFromFileId(sourceFile.getId());
+            source.setInheritedFromFileName(sourceFile.getFileName());
+        }
+        return source;
+    }
+
+    private String resolveDepartSharedRootTarget(SysFiles root, UserAccessContext context) {
+        if (root == null) {
+            return null;
+        }
+        List<SysFileRelation> relations = fileRelationMapper.selectList(Wrappers.lambdaQuery(SysFileRelation.class)
+                .eq(SysFileRelation::getTenantId, context.tenantId())
+                .eq(SysFileRelation::getFileId, root.getId())
+                .eq(SysFileRelation::getBizType, DEPART_SHARED_RELATION_BIZ_TYPE)
+                .eq(SysFileRelation::getRelationType, DEPART_SHARED_RELATION_TYPE)
+                .eq(SysFileRelation::getDeleteFlag, 0));
+        return relations.stream()
+                .map(SysFileRelation::getBizId)
+                .filter(context.departIds()::contains)
+                .findFirst()
+                .orElseGet(() -> relations.stream()
+                        .map(SysFileRelation::getBizId)
+                        .filter(StringUtils::hasText)
+                        .findFirst()
+                        .orElse(null));
+    }
+
+    private DocumentFolderStatsVO calculateFolderStats(SysFiles folder) {
+        DocumentFolderStatsVO stats = new DocumentFolderStatsVO();
+        int fileCount = 0;
+        int folderCount = 0;
+        long totalSize = 0L;
+        List<String> cursor = List.of(folder.getId());
+        int guard = 0;
+        while (!cursor.isEmpty() && guard++ < 20) {
+            List<SysFiles> children = baseMapper.selectList(Wrappers.lambdaQuery(SysFiles.class)
+                    .eq(SysFiles::getTenantId, folder.getTenantId())
+                    .eq(SysFiles::getDeleteFlag, folder.getDeleteFlag())
+                    .in(SysFiles::getParentId, cursor));
+            List<String> nextCursor = new ArrayList<>();
+            for (SysFiles child : children) {
+                if (FLAG_YES.equals(child.getIzFolder())) {
+                    folderCount++;
+                    if (StringUtils.hasText(child.getId())) {
+                        nextCursor.add(child.getId());
+                    }
+                } else {
+                    fileCount++;
+                    totalSize += toFileSizeBytes(child);
+                }
+            }
+            cursor = nextCursor;
+        }
+        stats.setFileCount(fileCount);
+        stats.setFolderCount(folderCount);
+        stats.setTotalSize(totalSize);
+        return stats;
+    }
+
+    private long toFileSizeBytes(SysFiles file) {
+        return file.getFileSize() == null ? 0L : Math.round(file.getFileSize() * 1024);
+    }
+
+    private String resolveDocumentPath(SysFiles file) {
+        List<String> names = new ArrayList<>();
+        SysFiles current = file;
+        int guard = 0;
+        while (current != null && guard++ < 20) {
+            if (StringUtils.hasText(current.getFileName())) {
+                names.add(current.getFileName());
+            }
+            current = StringUtils.hasText(current.getParentId())
+                    ? getFileIncludingDeleted(current.getParentId())
+                    : null;
+        }
+        Collections.reverse(names);
+        return String.join(" / ", names);
+    }
+
+    private void fillBusinessStatus(DocumentStatusVO status, SysFiles file, UserAccessContext context) {
+        if (BUSINESS_MODULE_VIEW_STORE_TYPE.equals(file.getStoreType())) {
+            String bizType = parseBusinessModuleBizType(file.getId());
+            status.setBusinessBizType(bizType);
+            status.setBusinessModuleName(resolveBusinessModuleName(bizType));
+            return;
+        }
+        if (BUSINESS_RECORD_VIEW_STORE_TYPE.equals(file.getStoreType())) {
+            BusinessRecordNode recordNode = parseBusinessRecordNode(file.getId());
+            if (recordNode == null) {
+                return;
+            }
+            status.setBusinessBizType(recordNode.bizType());
+            status.setBusinessBizId(recordNode.bizId());
+            status.setBusinessModuleName(resolveBusinessModuleName(recordNode.bizType()));
+            status.setBusinessRecordName(resolveBusinessRecordNames(
+                    recordNode.bizType(),
+                    List.of(recordNode.bizId()),
+                    context).get(recordNode.bizId()));
+            return;
+        }
+        List<SysFileRelation> relations = fileRelationMapper.selectList(Wrappers.lambdaQuery(SysFileRelation.class)
+                        .eq(SysFileRelation::getTenantId, context.tenantId())
+                        .eq(SysFileRelation::getFileId, file.getId())
+                        .eq(SysFileRelation::getDeleteFlag, 0))
+                .stream()
+                .filter(this::isBusinessRelation)
+                .filter(relation -> hasBusinessRelationAccess(relation, file, context))
+                .toList();
+        if (relations.isEmpty()) {
+            return;
+        }
+        SysFileRelation relation = relations.get(0);
+        status.setBusinessBizType(relation.getBizType());
+        status.setBusinessBizId(relation.getBizId());
+        status.setBusinessModuleName(resolveBusinessModuleName(relation.getBizType()));
+        status.setBusinessRecordName(resolveBusinessRecordNames(
+                relation.getBizType(),
+                List.of(relation.getBizId()),
+                context).get(relation.getBizId()));
     }
 
     private boolean hasActiveAcl(String fileId, String tenantId) {
