@@ -11,8 +11,6 @@ import { Menu } from 'ant-design-vue';
 import {
   isActualSharedItem,
   isActualStarredItem,
-  isReadonlyBrowseScope,
-  isReadonlyCollectionScope,
 } from './documentExplorerUtils';
 
 interface Props {
@@ -26,6 +24,7 @@ interface Props {
   contextDownloadableCount?: number;
   contextRestorableCount?: number;
   record?: DocumentFileInfo;
+  readonlyContext?: boolean;
   searchResult?: boolean;
   scope: DocumentScope;
   singleContext?: boolean;
@@ -51,6 +50,7 @@ const props = withDefaults(defineProps<Props>(), {
   contextDeletableCount: 0,
   contextDownloadableCount: 0,
   contextRestorableCount: 0,
+  readonlyContext: false,
   searchResult: false,
   singleContext: true,
 });
@@ -96,7 +96,7 @@ const batchItems = computed<ActionMenuItem[]>(() => {
       },
     ];
   }
-  if (isReadonlyBrowseScope(props.scope)) {
+  if (props.readonlyContext) {
     if (props.singleContext) {
       return [];
     }
@@ -190,7 +190,7 @@ const singleItems = computed<ActionMenuItem[]>(() => {
     });
     return items;
   }
-  if (isReadonlyBrowseScope(props.scope)) {
+  if (props.readonlyContext) {
     if (props.record?.izFolder === '1') {
       if (props.scope === 'starred' && isActualStarredItem(props.record)) {
         return [
@@ -295,8 +295,7 @@ const singleItems = computed<ActionMenuItem[]>(() => {
 
 const showDeleteItem = computed(() =>
   !props.searchResult &&
-  !isReadonlyCollectionScope(props.scope) &&
-  props.scope !== 'shared' &&
+  !props.readonlyContext &&
   props.scope !== 'trash' &&
   props.scope !== 'business',
 );

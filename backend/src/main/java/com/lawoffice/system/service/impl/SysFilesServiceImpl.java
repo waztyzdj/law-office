@@ -90,6 +90,8 @@ public class SysFilesServiceImpl extends BaseServiceImpl<SysFilesMapper, SysFile
 
     private static final String DEFAULT_STORE_TYPE = "minio";
     private static final String DOCUMENT_STORE_TYPE = "manage";
+    private static final String TENANT_SHARED_STORE_TYPE = "tenant_shared";
+    private static final String DEPART_SHARED_STORE_TYPE = "depart_shared";
     private static final String SHARED_VIEW_STORE_TYPE = "shared_view";
     private static final String SHARED_BY_ME_STORE_TYPE = "shared_by_me";
     private static final String BUSINESS_VIEW_STORE_TYPE = "business_view";
@@ -100,9 +102,11 @@ public class SysFilesServiceImpl extends BaseServiceImpl<SysFilesMapper, SysFile
     private static final Integer DEFAULT_RELATION_TYPE = 1;
     private static final String PERSONAL_SHARED_RELATION_PREFIX = "document_shared:";
     private static final String PERSONAL_BUSINESS_RELATION_PREFIX = "document_business:";
+    private static final String DEPART_SHARED_RELATION_BIZ_TYPE = "document_depart_shared";
     private static final Set<String> BUSINESS_DOCUMENT_EXCLUDED_BIZ_TYPES = Set.of("user-avatar");
     private static final Integer PERSONAL_SHARED_RELATION_TYPE = 2;
     private static final Integer PERSONAL_BUSINESS_RELATION_TYPE = 3;
+    private static final Integer DEPART_SHARED_RELATION_TYPE = 4;
     private static final String FOLDER_TYPE = "folder";
     private static final String FLAG_YES = "1";
     private static final String FLAG_NO = "0";
@@ -364,6 +368,10 @@ public class SysFilesServiceImpl extends BaseServiceImpl<SysFilesMapper, SysFile
             return pageTrashDocuments(context, pageReq);
         }
 
+        if (isSharedTargetScope(pageReq, scope)) {
+            return pageSharedTargetDocuments(context, pageReq);
+        }
+
         if (SCOPE_SHARED_BY_ME.equals(scope) && !StringUtils.hasText(pageReq.getParentId())) {
             return pageSharedByMeDocuments(context, pageReq);
         }
@@ -495,10 +503,16 @@ public class SysFilesServiceImpl extends BaseServiceImpl<SysFilesMapper, SysFile
             throw new IllegalArgumentException("共享给我的文件夹不支持上传文件");
         }
         String parentId = trimToNull(req == null ? null : req.getParentId());
-        String storeType = SCOPE_SHARED_BY_ME.equals(scope) ? SHARED_BY_ME_STORE_TYPE : DOCUMENT_STORE_TYPE;
+        SharedTargetContext sharedTarget = resolveSharedTargetContext(
+                context,
+                req == null ? null : req.getShareTargetType(),
+                req == null ? null : req.getShareTargetId(),
+                false);
+        String storeType = resolveDocumentStoreType(scope, sharedTarget);
         if (StringUtils.hasText(parentId)) {
             SysFiles parent = getActiveFile(parentId);
-            assertOwner(parent, username);
+            assertCanManageDocument(parent, context);
+            validateSharedSpaceParent(parent, sharedTarget);
             storeType = StringUtils.hasText(parent.getStoreType()) ? parent.getStoreType() : storeType;
             if (!FLAG_YES.equals(parent.getIzFolder())) {
                 throw new IllegalArgumentException("只能上传到文件夹下");
@@ -537,6 +551,7 @@ public class SysFilesServiceImpl extends BaseServiceImpl<SysFilesMapper, SysFile
             fileEntity.setDeleteFlag(0);
             baseMapper.insert(fileEntity);
             createInitialHistoryVersion(fileEntity, file, username);
+            bindDepartSharedRootIfNeeded(fileEntity, sharedTarget);
             return buildDocumentVO(fileEntity, context);
         } catch (RuntimeException ex) {
             deleteObjectQuietly(objectName);
@@ -559,12 +574,16 @@ public class SysFilesServiceImpl extends BaseServiceImpl<SysFilesMapper, SysFile
             throw new IllegalArgumentException("业务文档只允许查看，不支持新建文件夹");
         }
         String parentId = trimToNull(req.getParentId());
-        String storeType = sharedInbox
-                ? SHARED_VIEW_STORE_TYPE
-                : (SCOPE_SHARED_BY_ME.equals(scope) ? SHARED_BY_ME_STORE_TYPE : DOCUMENT_STORE_TYPE);
+        SharedTargetContext sharedTarget = resolveSharedTargetContext(
+                context,
+                req.getShareTargetType(),
+                req.getShareTargetId(),
+                false);
+        String storeType = sharedInbox ? SHARED_VIEW_STORE_TYPE : resolveDocumentStoreType(scope, sharedTarget);
         if (StringUtils.hasText(parentId)) {
             SysFiles parent = getActiveFile(parentId);
-            assertOwner(parent, username);
+            assertCanManageDocument(parent, context);
+            validateSharedSpaceParent(parent, sharedTarget);
             if (!FLAG_YES.equals(parent.getIzFolder())) {
                 throw new IllegalArgumentException("父级必须是文件夹");
             }
@@ -596,6 +615,7 @@ public class SysFilesServiceImpl extends BaseServiceImpl<SysFilesMapper, SysFile
         folder.setUpdateTime(LocalDateTime.now());
         folder.setDeleteFlag(0);
         baseMapper.insert(folder);
+        bindDepartSharedRootIfNeeded(folder, sharedTarget);
         return buildDocumentVO(folder, context);
     }
 
@@ -603,12 +623,13 @@ public class SysFilesServiceImpl extends BaseServiceImpl<SysFilesMapper, SysFile
     @Transactional(rollbackFor = Exception.class)
     public DocumentFileVO renameDocument(String username, DocumentRenameReq req) {
         SysFiles file = getActiveFile(req.getId());
-        assertOwner(file, username);
+        UserAccessContext context = buildUserAccessContext(username, requireTenantId());
+        assertCanManageDocument(file, context);
         assertNotBusinessReadonlyDocument(file);
         file.setFileName(trimToNull(req.getFileName()));
         fillUpdate(file, username);
         baseMapper.updateById(file);
-        return buildDocumentVO(file, buildUserAccessContext(username, requireTenantId()));
+        return buildDocumentVO(file, context);
     }
 
     @Override
@@ -618,6 +639,11 @@ public class SysFilesServiceImpl extends BaseServiceImpl<SysFilesMapper, SysFile
         UserAccessContext context = buildUserAccessContext(username, requireTenantId());
         String parentId = trimToNull(req.getParentId());
         String scope = normalizeScope(req.getScope());
+        SharedTargetContext sharedTarget = resolveSharedTargetContext(
+                context,
+                req.getShareTargetType(),
+                req.getShareTargetId(),
+                false);
         if (SCOPE_BUSINESS.equals(scope)) {
             throw new IllegalArgumentException("业务文档只允许查看，不支持移动或归类");
         }
@@ -626,13 +652,14 @@ public class SysFilesServiceImpl extends BaseServiceImpl<SysFilesMapper, SysFile
             moveSharedInboxPlacement(context, file, parentId);
             return buildDocumentVO(file, context);
         }
-        assertOwner(file, username);
+        assertCanManageDocument(file, context);
         if (Objects.equals(file.getId(), parentId)) {
             throw new IllegalArgumentException("不能移动到自身下");
         }
         if (StringUtils.hasText(parentId)) {
             SysFiles parent = getActiveFile(parentId);
-            assertOwner(parent, username);
+            assertCanManageDocument(parent, context);
+            validateSharedSpaceParent(parent, sharedTarget);
             if (!FLAG_YES.equals(parent.getIzFolder())) {
                 throw new IllegalArgumentException("目标必须是文件夹");
             }
@@ -642,7 +669,10 @@ public class SysFilesServiceImpl extends BaseServiceImpl<SysFilesMapper, SysFile
             }
             validateNotMoveToDescendant(file.getId(), parentId);
         }
+        validateSharedSpaceMember(file, sharedTarget);
         updateDocumentParent(file, parentId, username);
+        updateSharedSpaceStoreType(file, parentId, sharedTarget, username);
+        bindDepartSharedRootIfNeeded(file, sharedTarget);
         return buildDocumentVO(file, context);
     }
 
@@ -660,6 +690,7 @@ public class SysFilesServiceImpl extends BaseServiceImpl<SysFilesMapper, SysFile
             moveReq.setParentId(req.getParentId());
             moveReq.setScope(req.getScope());
             moveReq.setShareTargetType(req.getShareTargetType());
+            moveReq.setShareTargetId(req.getShareTargetId());
             movedFiles.add(moveDocument(username, moveReq));
         }
         return movedFiles;
@@ -692,6 +723,7 @@ public class SysFilesServiceImpl extends BaseServiceImpl<SysFilesMapper, SysFile
                 validateNotMoveToDescendant(source.getId(), copyTarget.parentId());
             }
             SysFiles copied = copyDocumentTree(context, source, copyTarget.parentId(), copyTarget.storeType());
+            bindDepartSharedRootIfNeeded(copied, copyTarget.sharedTarget());
             copiedFiles.add(buildDocumentVO(copied, context));
         }
         return copiedFiles;
@@ -701,7 +733,8 @@ public class SysFilesServiceImpl extends BaseServiceImpl<SysFilesMapper, SysFile
     @Transactional(rollbackFor = Exception.class)
     public void deleteDocument(String username, String fileId) {
         SysFiles file = getActiveFile(fileId);
-        assertOwner(file, username);
+        UserAccessContext context = buildUserAccessContext(username, requireTenantId());
+        assertCanManageDocument(file, context);
         assertDocumentCanBeDeleted(file);
         softDeleteDocumentTree(file, username);
     }
@@ -722,7 +755,8 @@ public class SysFilesServiceImpl extends BaseServiceImpl<SysFilesMapper, SysFile
     @Transactional(rollbackFor = Exception.class)
     public DocumentFileVO restoreDocument(String username, String fileId) {
         SysFiles file = getFileIncludingDeleted(fileId);
-        assertOwner(file, username);
+        UserAccessContext context = buildUserAccessContext(username, requireTenantId());
+        assertCanManageDocument(file, context);
         if (StringUtils.hasText(file.getParentId())) {
             SysFiles parent = getFileIncludingDeleted(file.getParentId());
             if (parent != null && Objects.equals(parent.getDeleteFlag(), 1)) {
@@ -731,7 +765,7 @@ public class SysFilesServiceImpl extends BaseServiceImpl<SysFilesMapper, SysFile
         }
         restoreDocumentTree(file, username);
         SysFiles restored = getActiveFile(fileId);
-        return buildDocumentVO(restored, buildUserAccessContext(username, requireTenantId()));
+        return buildDocumentVO(restored, context);
     }
 
     @Override
@@ -752,7 +786,7 @@ public class SysFilesServiceImpl extends BaseServiceImpl<SysFilesMapper, SysFile
     @Transactional(rollbackFor = Exception.class)
     public void purgeDocument(String username, String fileId) {
         SysFiles file = getFileIncludingDeleted(fileId);
-        assertOwner(file, username);
+        assertCanManageDocument(file, buildUserAccessContext(username, requireTenantId()));
         if (!Objects.equals(file.getDeleteFlag(), 1)) {
             throw new IllegalArgumentException("只能彻底删除回收站中的文档");
         }
@@ -786,12 +820,13 @@ public class SysFilesServiceImpl extends BaseServiceImpl<SysFilesMapper, SysFile
     @Transactional(rollbackFor = Exception.class)
     public DocumentFileVO toggleDocumentStar(String username, String fileId) {
         SysFiles file = getActiveFile(fileId);
-        assertOwner(file, username);
+        UserAccessContext context = buildUserAccessContext(username, requireTenantId());
+        assertCanManageDocument(file, context);
         assertNotBusinessReadonlyDocument(file);
         file.setIzStar(FLAG_YES.equals(file.getIzStar()) ? FLAG_NO : FLAG_YES);
         fillUpdate(file, username);
         baseMapper.updateById(file);
-        return buildDocumentVO(file, buildUserAccessContext(username, requireTenantId()));
+        return buildDocumentVO(file, context);
     }
 
     @Override
@@ -801,9 +836,9 @@ public class SysFilesServiceImpl extends BaseServiceImpl<SysFilesMapper, SysFile
             throw new IllegalArgumentException("共享信息不能为空");
         }
         SysFiles file = getActiveFile(req.getFileId());
-        assertOwner(file, username);
-        assertNotBusinessReadonlyDocument(file);
         String tenantId = requireTenantId();
+        assertCanManageDocument(file, buildUserAccessContext(username, tenantId));
+        assertNotBusinessReadonlyDocument(file);
         LocalDateTime now = LocalDateTime.now();
 
         LambdaUpdateWrapper<SysFileAcl> deleteWrapper = Wrappers.lambdaUpdate(SysFileAcl.class)
@@ -847,7 +882,7 @@ public class SysFilesServiceImpl extends BaseServiceImpl<SysFilesMapper, SysFile
     @Override
     public List<DocumentShareVO> listDocumentShares(String username, String fileId) {
         SysFiles file = getActiveFile(fileId);
-        assertOwner(file, username);
+        assertCanManageDocument(file, buildUserAccessContext(username, requireTenantId()));
         List<SysFileAcl> acls = fileAclMapper.selectList(Wrappers.lambdaQuery(SysFileAcl.class)
                 .eq(SysFileAcl::getTenantId, requireTenantId())
                 .eq(SysFileAcl::getFileId, fileId)
@@ -870,7 +905,7 @@ public class SysFilesServiceImpl extends BaseServiceImpl<SysFilesMapper, SysFile
             throw new IllegalArgumentException("共享记录不存在");
         }
         SysFiles file = getActiveFile(acl.getFileId());
-        assertOwner(file, username);
+        assertCanManageDocument(file, buildUserAccessContext(username, requireTenantId()));
         EntityFillUtils.fillDeleteFields(acl, username);
         fileAclMapper.updateById(acl);
         if (!hasActiveAcl(file.getId(), file.getTenantId())) {
@@ -1100,6 +1135,23 @@ public class SysFilesServiceImpl extends BaseServiceImpl<SysFilesMapper, SysFile
                 ? Collections.emptyList()
                 : selectActiveFilesByIds(context, sharedIds, pageReq.getFolderOnly());
         return pageCombinedDocuments(context, pageReq, sharedByMeFolders, sharedFiles);
+    }
+
+    private PageVO<DocumentFileVO> pageSharedTargetDocuments(UserAccessContext context, DocumentPageReq pageReq) {
+        SharedTargetContext sharedTarget = resolveSharedTargetContext(
+                context,
+                pageReq.getShareTargetType(),
+                pageReq.getShareTargetId(),
+                true);
+        String parentId = trimToNull(pageReq.getParentId());
+        if (StringUtils.hasText(parentId)) {
+            SysFiles parent = getActiveFile(parentId);
+            assertCanViewSharedSpace(parent, context);
+            validateSharedSpaceParent(parent, sharedTarget);
+            return pageDocumentChildrenByParent(context, pageReq, parentId);
+        }
+        List<SysFiles> sharedFiles = selectSharedSpaceRootFiles(context, sharedTarget, pageReq.getFolderOnly());
+        return pageCombinedDocuments(context, pageReq, Collections.emptyList(), sharedFiles);
     }
 
     private PageVO<DocumentFileVO> pageBusinessDocuments(UserAccessContext context, DocumentPageReq pageReq) {
@@ -1366,6 +1418,7 @@ public class SysFilesServiceImpl extends BaseServiceImpl<SysFilesMapper, SysFile
         if (SCOPE_ALL.equals(scope)) {
             List<String> sharedFileIds = findSharedFileIdsWithDescendants(context);
             List<String> businessFileIds = findAccessibleBusinessFileIds(context);
+            List<String> sharedSpaceFileIds = findAccessibleSharedSpaceFileIds(context);
             wrapper.and(item -> {
                 item.eq(SysFiles::getCreateBy, context.username());
                 if (!sharedFileIds.isEmpty()) {
@@ -1374,10 +1427,30 @@ public class SysFilesServiceImpl extends BaseServiceImpl<SysFilesMapper, SysFile
                 if (!businessFileIds.isEmpty()) {
                     item.or().in(SysFiles::getId, businessFileIds);
                 }
+                if (!sharedSpaceFileIds.isEmpty()) {
+                    item.or().in(SysFiles::getId, sharedSpaceFileIds);
+                }
             });
             return;
         }
         if (SCOPE_SHARED.equals(scope)) {
+            if (isSharedTargetScope(req, scope)) {
+                SharedTargetContext sharedTarget = resolveSharedTargetContext(
+                        context,
+                        req.getShareTargetType(),
+                        req.getShareTargetId(),
+                        true);
+                List<String> fileIds = selectSharedSpaceRootFiles(context, sharedTarget, req.getFolderOnly()).stream()
+                        .map(SysFiles::getId)
+                        .filter(StringUtils::hasText)
+                        .toList();
+                if (fileIds.isEmpty()) {
+                    wrapper.eq(SysFiles::getId, "__none__");
+                    return;
+                }
+                wrapper.in(SysFiles::getId, fileIds);
+                return;
+            }
             validateSharedTargetFilter(req, context);
             List<String> fileIds = findSharedFileIds(context, req);
             if (!StringUtils.hasText(req.getParentId())) {
@@ -1473,6 +1546,41 @@ public class SysFilesServiceImpl extends BaseServiceImpl<SysFilesMapper, SysFile
                     .toList();
         }
         return new ArrayList<>(fileIds);
+    }
+
+    private List<String> findAccessibleSharedSpaceFileIds(UserAccessContext context) {
+        LinkedHashSet<String> fileIds = new LinkedHashSet<>();
+        SharedTargetContext tenantTarget = new SharedTargetContext(TARGET_TENANT, context.tenantId());
+        selectSharedSpaceRootFiles(context, tenantTarget, false).stream()
+                .map(SysFiles::getId)
+                .filter(StringUtils::hasText)
+                .forEach(fileIds::add);
+        for (String departId : context.departIds()) {
+            SharedTargetContext departTarget = new SharedTargetContext(TARGET_DEPART, departId);
+            selectSharedSpaceRootFiles(context, departTarget, false).stream()
+                    .map(SysFiles::getId)
+                    .filter(StringUtils::hasText)
+                    .forEach(fileIds::add);
+        }
+        collectDescendantFileIds(context.tenantId(), fileIds);
+        return new ArrayList<>(fileIds);
+    }
+
+    private void collectDescendantFileIds(String tenantId, LinkedHashSet<String> fileIds) {
+        List<String> cursor = new ArrayList<>(fileIds);
+        int guard = 0;
+        while (!cursor.isEmpty() && guard++ < 20) {
+            List<SysFiles> children = baseMapper.selectList(Wrappers.lambdaQuery(SysFiles.class)
+                    .select(SysFiles::getId)
+                    .eq(SysFiles::getTenantId, tenantId)
+                    .eq(SysFiles::getDeleteFlag, 0)
+                    .in(SysFiles::getParentId, cursor));
+            cursor = children.stream()
+                    .map(SysFiles::getId)
+                    .filter(StringUtils::hasText)
+                    .filter(fileIds::add)
+                    .toList();
+        }
     }
 
     /**
@@ -1654,13 +1762,15 @@ public class SysFilesServiceImpl extends BaseServiceImpl<SysFilesMapper, SysFile
         String bizType = relation.getBizType();
         if (!StringUtils.hasText(bizType)
                 || BUSINESS_DOCUMENT_EXCLUDED_BIZ_TYPES.contains(bizType)
+                || DEPART_SHARED_RELATION_BIZ_TYPE.equals(bizType)
                 || bizType.startsWith(PERSONAL_SHARED_RELATION_PREFIX)
                 || bizType.startsWith(PERSONAL_BUSINESS_RELATION_PREFIX)) {
             return false;
         }
         Integer relationType = relation.getRelationType();
         return !Objects.equals(relationType, PERSONAL_SHARED_RELATION_TYPE)
-                && !Objects.equals(relationType, PERSONAL_BUSINESS_RELATION_TYPE);
+                && !Objects.equals(relationType, PERSONAL_BUSINESS_RELATION_TYPE)
+                && !Objects.equals(relationType, DEPART_SHARED_RELATION_TYPE);
     }
 
     private SysFiles buildBusinessVirtualFolder(
@@ -1883,11 +1993,417 @@ public class SysFilesServiceImpl extends BaseServiceImpl<SysFilesMapper, SysFile
         return false;
     }
 
+    private SharedTargetContext resolveSharedTargetContext(
+            UserAccessContext context,
+            String rawTargetType,
+            String rawTargetId,
+            boolean required) {
+        String targetType = trimToNull(rawTargetType);
+        String targetId = trimToNull(rawTargetId);
+        if (!StringUtils.hasText(targetType)) {
+            if (required) {
+                throw new IllegalArgumentException("共享目标类型不能为空");
+            }
+            return null;
+        }
+        if (TARGET_TENANT.equals(targetType)) {
+            String resolvedTargetId = StringUtils.hasText(targetId) ? targetId : context.tenantId();
+            if (!Objects.equals(resolvedTargetId, context.tenantId())) {
+                throw new IllegalArgumentException("无权访问该租户共享文件夹");
+            }
+            DocumentShareTargetReq target = new DocumentShareTargetReq();
+            target.setTargetType(TARGET_TENANT);
+            target.setTargetId(resolvedTargetId);
+            validateShareTarget(target, context.tenantId());
+            return new SharedTargetContext(TARGET_TENANT, resolvedTargetId);
+        }
+        if (TARGET_DEPART.equals(targetType)) {
+            if (!StringUtils.hasText(targetId)) {
+                throw new IllegalArgumentException("部门共享目标不能为空");
+            }
+            if (!context.departIds().contains(targetId)) {
+                throw new IllegalArgumentException("无权访问该部门共享文件夹");
+            }
+            DocumentShareTargetReq target = new DocumentShareTargetReq();
+            target.setTargetType(TARGET_DEPART);
+            target.setTargetId(targetId);
+            validateShareTarget(target, context.tenantId());
+            return new SharedTargetContext(TARGET_DEPART, targetId);
+        }
+        if (required) {
+            throw new IllegalArgumentException("共享目标类型不正确");
+        }
+        return null;
+    }
+
+    private boolean isSharedTargetScope(DocumentPageReq req, String scope) {
+        return SCOPE_SHARED.equals(scope)
+                && req != null
+                && (TARGET_TENANT.equals(trimToNull(req.getShareTargetType()))
+                || TARGET_DEPART.equals(trimToNull(req.getShareTargetType())));
+    }
+
+    private String resolveDocumentStoreType(String scope, SharedTargetContext sharedTarget) {
+        if (SCOPE_SHARED_BY_ME.equals(scope)) {
+            return SHARED_BY_ME_STORE_TYPE;
+        }
+        if (SCOPE_SHARED.equals(scope) && sharedTarget != null) {
+            if (TARGET_TENANT.equals(sharedTarget.targetType())) {
+                return TENANT_SHARED_STORE_TYPE;
+            }
+            if (TARGET_DEPART.equals(sharedTarget.targetType())) {
+                return DEPART_SHARED_STORE_TYPE;
+            }
+        }
+        return DOCUMENT_STORE_TYPE;
+    }
+
+    private void validateSharedSpaceParent(SysFiles parent, SharedTargetContext sharedTarget) {
+        if (sharedTarget == null) {
+            if (isSharedSpaceDocument(parent)) {
+                throw new IllegalArgumentException("目标文件夹不属于当前目录");
+            }
+            return;
+        }
+        if (parent == null || !isSharedSpaceMember(parent, sharedTarget)) {
+            throw new IllegalArgumentException("目标文件夹不属于当前共享空间");
+        }
+    }
+
+    private void validateSharedSpaceMember(SysFiles file, SharedTargetContext sharedTarget) {
+        if (file == null) {
+            return;
+        }
+        if (sharedTarget == null) {
+            if (isSharedSpaceDocument(file)) {
+                throw new IllegalArgumentException("只能在当前共享空间内移动文件");
+            }
+            return;
+        }
+        if (isSharedSpaceDocument(file) && !isSharedSpaceMember(file, sharedTarget)) {
+            throw new IllegalArgumentException("只能在当前共享空间内移动文件");
+        }
+    }
+
+    private boolean isSharedSpaceMember(SysFiles file, SharedTargetContext sharedTarget) {
+        if (file == null || sharedTarget == null) {
+            return false;
+        }
+        if (TARGET_TENANT.equals(sharedTarget.targetType())) {
+            return TENANT_SHARED_STORE_TYPE.equals(file.getStoreType());
+        }
+        return DEPART_SHARED_STORE_TYPE.equals(file.getStoreType())
+                && isInDepartSharedSpace(file, sharedTarget.targetId());
+    }
+
+    private boolean isSharedSpaceDocument(SysFiles file) {
+        return file != null
+                && (TENANT_SHARED_STORE_TYPE.equals(file.getStoreType())
+                || DEPART_SHARED_STORE_TYPE.equals(file.getStoreType()));
+    }
+
+    private void bindDepartSharedRootIfNeeded(SysFiles file, SharedTargetContext sharedTarget) {
+        if (file == null
+                || sharedTarget == null
+                || !TARGET_DEPART.equals(sharedTarget.targetType())
+                || StringUtils.hasText(file.getParentId())) {
+            return;
+        }
+        SysFileRelation existing = fileRelationMapper.selectOne(Wrappers.lambdaQuery(SysFileRelation.class)
+                .eq(SysFileRelation::getTenantId, file.getTenantId())
+                .eq(SysFileRelation::getFileId, file.getId())
+                .eq(SysFileRelation::getBizType, DEPART_SHARED_RELATION_BIZ_TYPE)
+                .eq(SysFileRelation::getRelationType, DEPART_SHARED_RELATION_TYPE)
+                .eq(SysFileRelation::getDeleteFlag, 0)
+                .last("LIMIT 1"));
+        if (existing != null && Objects.equals(existing.getBizId(), sharedTarget.targetId())) {
+            return;
+        }
+        softDeleteDepartSharedRootRelations(file.getId(), file.getTenantId(), file.getCreateBy());
+        SysFileRelation relation = new SysFileRelation();
+        relation.setId(newId());
+        relation.setTenantId(file.getTenantId());
+        relation.setFileId(file.getId());
+        relation.setBizType(DEPART_SHARED_RELATION_BIZ_TYPE);
+        relation.setBizId(sharedTarget.targetId());
+        relation.setRelationType(DEPART_SHARED_RELATION_TYPE);
+        relation.setSortOrder(0);
+        relation.setCreateBy(file.getCreateBy());
+        relation.setCreateTime(LocalDateTime.now());
+        relation.setDeleteFlag(0);
+        fileRelationMapper.insert(relation);
+    }
+
+    private void softDeleteDepartSharedRootRelations(String fileId, String tenantId, String username) {
+        if (!StringUtils.hasText(fileId)) {
+            return;
+        }
+        LocalDateTime now = LocalDateTime.now();
+        fileRelationMapper.update(null, Wrappers.lambdaUpdate(SysFileRelation.class)
+                .eq(SysFileRelation::getTenantId, tenantId)
+                .eq(SysFileRelation::getFileId, fileId)
+                .eq(SysFileRelation::getBizType, DEPART_SHARED_RELATION_BIZ_TYPE)
+                .eq(SysFileRelation::getRelationType, DEPART_SHARED_RELATION_TYPE)
+                .eq(SysFileRelation::getDeleteFlag, 0)
+                .set(SysFileRelation::getDeleteFlag, 1)
+                .set(SysFileRelation::getDeleteTime, now)
+                .set(SysFileRelation::getDeleteBy, username));
+    }
+
+    private void updateSharedSpaceStoreType(
+            SysFiles file,
+            String parentId,
+            SharedTargetContext sharedTarget,
+            String username) {
+        String targetStoreType = sharedTarget == null
+                ? DOCUMENT_STORE_TYPE
+                : resolveDocumentStoreType(SCOPE_SHARED, sharedTarget);
+        if (StringUtils.hasText(parentId)) {
+            SysFiles parent = getActiveFile(parentId);
+            targetStoreType = StringUtils.hasText(parent.getStoreType()) ? parent.getStoreType() : targetStoreType;
+        }
+        updateDocumentTreeStoreType(file, targetStoreType, username);
+        if (StringUtils.hasText(parentId) || sharedTarget == null || !TARGET_DEPART.equals(sharedTarget.targetType())) {
+            softDeleteDepartSharedRootRelations(file.getId(), file.getTenantId(), username);
+        }
+    }
+
+    private void updateDocumentTreeStoreType(SysFiles file, String storeType, String username) {
+        if (file == null || Objects.equals(file.getStoreType(), storeType)) {
+            return;
+        }
+        file.setStoreType(storeType);
+        fillUpdate(file, username);
+        baseMapper.update(null, Wrappers.lambdaUpdate(SysFiles.class)
+                .eq(SysFiles::getId, file.getId())
+                .eq(SysFiles::getTenantId, file.getTenantId())
+                .set(SysFiles::getStoreType, storeType)
+                .set(SysFiles::getUpdateBy, file.getUpdateBy())
+                .set(SysFiles::getUpdateTime, file.getUpdateTime()));
+        for (SysFiles child : selectActiveChildren(file.getTenantId(), file.getId())) {
+            updateDocumentTreeStoreType(child, storeType, username);
+        }
+    }
+
+    private List<SysFiles> selectSharedSpaceRootFiles(
+            UserAccessContext context,
+            SharedTargetContext sharedTarget,
+            Boolean folderOnly) {
+        if (sharedTarget == null) {
+            return Collections.emptyList();
+        }
+        LambdaQueryWrapper<SysFiles> wrapper = Wrappers.lambdaQuery(SysFiles.class)
+                .eq(SysFiles::getTenantId, context.tenantId())
+                .eq(SysFiles::getDeleteFlag, 0)
+                .and(item -> item.isNull(SysFiles::getParentId).or().eq(SysFiles::getParentId, ""));
+        if (Boolean.TRUE.equals(folderOnly)) {
+            wrapper.eq(SysFiles::getIzFolder, FLAG_YES);
+        }
+        if (TARGET_TENANT.equals(sharedTarget.targetType())) {
+            wrapper.eq(SysFiles::getStoreType, TENANT_SHARED_STORE_TYPE);
+            return baseMapper.selectList(wrapper);
+        }
+        List<String> rootIds = fileRelationMapper.selectList(Wrappers.lambdaQuery(SysFileRelation.class)
+                        .select(SysFileRelation::getFileId)
+                        .eq(SysFileRelation::getTenantId, context.tenantId())
+                        .eq(SysFileRelation::getBizType, DEPART_SHARED_RELATION_BIZ_TYPE)
+                        .eq(SysFileRelation::getBizId, sharedTarget.targetId())
+                        .eq(SysFileRelation::getRelationType, DEPART_SHARED_RELATION_TYPE)
+                        .eq(SysFileRelation::getDeleteFlag, 0))
+                .stream()
+                .map(SysFileRelation::getFileId)
+                .filter(StringUtils::hasText)
+                .distinct()
+                .toList();
+        if (rootIds.isEmpty()) {
+            return Collections.emptyList();
+        }
+        wrapper.eq(SysFiles::getStoreType, DEPART_SHARED_STORE_TYPE)
+                .in(SysFiles::getId, rootIds);
+        return baseMapper.selectList(wrapper);
+    }
+
+    private void assertCanViewSharedSpace(SysFiles file, UserAccessContext context) {
+        if (!hasSharedSpaceAccess(file, context)) {
+            throw new IllegalArgumentException("无权访问该共享空间");
+        }
+    }
+
+    private void assertCanManageDocument(SysFiles file, UserAccessContext context) {
+        if (file != null && Objects.equals(file.getCreateBy(), context.username())) {
+            return;
+        }
+        if (hasSharedSpaceAccess(file, context)) {
+            return;
+        }
+        throw new IllegalArgumentException("无权管理该文档");
+    }
+
+    private boolean hasSharedSpaceAccess(SysFiles file, UserAccessContext context) {
+        if (file == null || !Objects.equals(file.getTenantId(), context.tenantId())) {
+            return false;
+        }
+        if (TENANT_SHARED_STORE_TYPE.equals(file.getStoreType())) {
+            return true;
+        }
+        if (!DEPART_SHARED_STORE_TYPE.equals(file.getStoreType())) {
+            return false;
+        }
+        SysFiles root = resolveRootFile(file);
+        if (root == null || context.departIds().isEmpty()) {
+            return false;
+        }
+        return fileRelationMapper.selectCount(Wrappers.lambdaQuery(SysFileRelation.class)
+                .eq(SysFileRelation::getTenantId, context.tenantId())
+                .eq(SysFileRelation::getFileId, root.getId())
+                .eq(SysFileRelation::getBizType, DEPART_SHARED_RELATION_BIZ_TYPE)
+                .in(SysFileRelation::getBizId, context.departIds())
+                .eq(SysFileRelation::getRelationType, DEPART_SHARED_RELATION_TYPE)
+                .eq(SysFileRelation::getDeleteFlag, 0)) > 0;
+    }
+
+    private boolean isInDepartSharedSpace(SysFiles file, String departId) {
+        if (file == null || !StringUtils.hasText(departId)) {
+            return false;
+        }
+        SysFiles root = resolveRootFile(file);
+        return root != null
+                && fileRelationMapper.selectCount(Wrappers.lambdaQuery(SysFileRelation.class)
+                .eq(SysFileRelation::getTenantId, file.getTenantId())
+                .eq(SysFileRelation::getFileId, root.getId())
+                .eq(SysFileRelation::getBizType, DEPART_SHARED_RELATION_BIZ_TYPE)
+                .eq(SysFileRelation::getBizId, departId)
+                .eq(SysFileRelation::getRelationType, DEPART_SHARED_RELATION_TYPE)
+                .eq(SysFileRelation::getDeleteFlag, 0)) > 0;
+    }
+
+    private SysFiles resolveRootFile(SysFiles file) {
+        SysFiles current = file;
+        int guard = 0;
+        while (current != null && StringUtils.hasText(current.getParentId()) && guard++ < 20) {
+            current = getFileIncludingDeleted(current.getParentId());
+        }
+        return current;
+    }
+
+    private void validateSharedTargetParent(SysFiles parent, SharedTargetContext sharedTarget) {
+        if (sharedTarget == null) {
+            return;
+        }
+        if (parent == null
+                || (!hasActiveAclForTarget(parent.getId(), parent.getTenantId(), sharedTarget)
+                && !hasSharedTargetAncestor(parent.getParentId(), parent.getTenantId(), sharedTarget))) {
+            throw new IllegalArgumentException("目标文件夹不属于当前共享节点");
+        }
+    }
+
+    private void validateSharedTargetMember(SysFiles file, SharedTargetContext sharedTarget) {
+        if (sharedTarget == null || file == null || !StringUtils.hasText(file.getParentId())) {
+            return;
+        }
+        if (!hasActiveAclForTarget(file.getId(), file.getTenantId(), sharedTarget)
+                && !hasSharedTargetAncestor(file.getParentId(), file.getTenantId(), sharedTarget)) {
+            throw new IllegalArgumentException("只能在当前共享节点内移动文件");
+        }
+    }
+
+    private boolean hasSharedTargetAncestor(String parentId, String tenantId, SharedTargetContext sharedTarget) {
+        String currentId = parentId;
+        int guard = 0;
+        while (StringUtils.hasText(currentId) && guard++ < 20) {
+            if (hasActiveAclForTarget(currentId, tenantId, sharedTarget)) {
+                return true;
+            }
+            SysFiles parent = baseMapper.selectOne(Wrappers.lambdaQuery(SysFiles.class)
+                    .select(SysFiles::getId, SysFiles::getParentId)
+                    .eq(SysFiles::getId, currentId)
+                    .eq(SysFiles::getTenantId, tenantId)
+                    .eq(SysFiles::getDeleteFlag, 0)
+                    .last("LIMIT 1"));
+            currentId = parent == null ? null : parent.getParentId();
+        }
+        return false;
+    }
+
+    private boolean hasActiveAclForTarget(String fileId, String tenantId, SharedTargetContext sharedTarget) {
+        if (!StringUtils.hasText(fileId) || sharedTarget == null) {
+            return false;
+        }
+        return fileAclMapper.selectCount(Wrappers.lambdaQuery(SysFileAcl.class)
+                .eq(SysFileAcl::getTenantId, tenantId)
+                .eq(SysFileAcl::getFileId, fileId)
+                .eq(SysFileAcl::getTargetType, sharedTarget.targetType())
+                .eq(SysFileAcl::getTargetId, sharedTarget.targetId())
+                .eq(SysFileAcl::getDeleteFlag, 0)) > 0;
+    }
+
+    private void syncSharedTargetAcl(SysFiles file, SharedTargetContext sharedTarget) {
+        if (file == null || sharedTarget == null || StringUtils.hasText(file.getParentId())) {
+            return;
+        }
+        if (hasActiveAclForTarget(file.getId(), file.getTenantId(), sharedTarget)) {
+            return;
+        }
+        SysFileAcl acl = new SysFileAcl();
+        acl.setId(newId());
+        acl.setTenantId(file.getTenantId());
+        acl.setFileId(file.getId());
+        acl.setTargetType(sharedTarget.targetType());
+        acl.setTargetId(sharedTarget.targetId());
+        acl.setPermission(PERMISSION_DOWNLOAD);
+        acl.setCreateBy(file.getCreateBy());
+        acl.setCreateTime(LocalDateTime.now());
+        acl.setDeleteFlag(0);
+        fileAclMapper.insert(acl);
+
+        file.setSharePerms("2");
+        file.setEnableDown(FLAG_YES);
+        file.setEnableUpdat(FLAG_NO);
+        fillUpdate(file, file.getCreateBy());
+        baseMapper.updateById(file);
+    }
+
     private List<String> findFileIdsSharedByOwner(UserAccessContext context) {
         List<String> sharedFileIds = fileAclMapper.selectList(Wrappers.lambdaQuery(SysFileAcl.class)
                         .select(SysFileAcl::getFileId)
                         .eq(SysFileAcl::getTenantId, context.tenantId())
                         .eq(SysFileAcl::getCreateBy, context.username())
+                        .eq(SysFileAcl::getDeleteFlag, 0))
+                .stream()
+                .map(SysFileAcl::getFileId)
+                .filter(StringUtils::hasText)
+                .distinct()
+                .toList();
+        if (sharedFileIds.isEmpty()) {
+            return Collections.emptyList();
+        }
+        Set<String> ownedFileIds = baseMapper.selectList(Wrappers.lambdaQuery(SysFiles.class)
+                        .select(SysFiles::getId)
+                        .eq(SysFiles::getTenantId, context.tenantId())
+                        .eq(SysFiles::getCreateBy, context.username())
+                        .eq(SysFiles::getDeleteFlag, 0)
+                        .in(SysFiles::getId, sharedFileIds))
+                .stream()
+                .map(SysFiles::getId)
+                .filter(StringUtils::hasText)
+                .collect(Collectors.toSet());
+        return sharedFileIds.stream()
+                .filter(ownedFileIds::contains)
+                .toList();
+    }
+
+    private List<String> findFileIdsSharedByOwnerAndTarget(
+            UserAccessContext context,
+            SharedTargetContext sharedTarget) {
+        if (sharedTarget == null) {
+            return Collections.emptyList();
+        }
+        List<String> sharedFileIds = fileAclMapper.selectList(Wrappers.lambdaQuery(SysFileAcl.class)
+                        .select(SysFileAcl::getFileId)
+                        .eq(SysFileAcl::getTenantId, context.tenantId())
+                        .eq(SysFileAcl::getCreateBy, context.username())
+                        .eq(SysFileAcl::getTargetType, sharedTarget.targetType())
+                        .eq(SysFileAcl::getTargetId, sharedTarget.targetId())
                         .eq(SysFileAcl::getDeleteFlag, 0))
                 .stream()
                 .map(SysFileAcl::getFileId)
@@ -1978,7 +2494,7 @@ public class SysFilesServiceImpl extends BaseServiceImpl<SysFilesMapper, SysFile
             Set<String> sharedFileIds) {
         DocumentFileVO vo = buildBaseDocumentVO(file, context);
         vo.setSharedFlag(sharedFileIds.contains(file.getId()));
-        vo.setCanManage(vo.getOwnerFlag());
+        vo.setCanManage(Boolean.TRUE.equals(vo.getOwnerFlag()) || hasSharedSpaceAccess(file, context));
         vo.setCanDownload(canDownload(file, context));
         vo.setCanUpdate(canUpdate(file, context));
         return vo;
@@ -1991,7 +2507,7 @@ public class SysFilesServiceImpl extends BaseServiceImpl<SysFilesMapper, SysFile
             boolean inheritedUpdate) {
         DocumentFileVO vo = buildBaseDocumentVO(file, context);
         vo.setSharedFlag(false);
-        vo.setCanManage(vo.getOwnerFlag());
+        vo.setCanManage(Boolean.TRUE.equals(vo.getOwnerFlag()) || hasSharedSpaceAccess(file, context));
         vo.setCanDownload(vo.getOwnerFlag() || inheritedDownload);
         vo.setCanUpdate(vo.getOwnerFlag() || inheritedUpdate);
         return vo;
@@ -2112,6 +2628,9 @@ public class SysFilesServiceImpl extends BaseServiceImpl<SysFilesMapper, SysFile
         if (Objects.equals(file.getCreateBy(), context.username())) {
             return true;
         }
+        if (hasSharedSpaceAccess(file, context)) {
+            return true;
+        }
         if (hasBusinessDocumentAccess(file, context)) {
             return true;
         }
@@ -2125,11 +2644,17 @@ public class SysFilesServiceImpl extends BaseServiceImpl<SysFilesMapper, SysFile
         if (Objects.equals(file.getCreateBy(), context.username())) {
             return true;
         }
+        if (hasSharedSpaceAccess(file, context)) {
+            return true;
+        }
         return resolveUpdatePermission(file, context);
     }
 
     private void assertCanViewDocument(SysFiles file, UserAccessContext context) {
         if (Objects.equals(file.getCreateBy(), context.username())) {
+            return;
+        }
+        if (hasSharedSpaceAccess(file, context)) {
             return;
         }
         if (hasBusinessDocumentAccess(file, context)) {
@@ -2489,16 +3014,25 @@ public class SysFilesServiceImpl extends BaseServiceImpl<SysFilesMapper, SysFile
             throw new IllegalArgumentException("当前目录不支持复制粘贴");
         }
         String parentId = trimToNull(req.getParentId());
+        SharedTargetContext sharedTarget = resolveSharedTargetContext(
+                context,
+                req.getShareTargetType(),
+                req.getShareTargetId(),
+                false);
         String storeType = SCOPE_SHARED_BY_ME.equals(scope) ? SHARED_BY_ME_STORE_TYPE : DOCUMENT_STORE_TYPE;
         if (StringUtils.hasText(parentId)) {
             SysFiles parent = getActiveFile(parentId);
-            assertOwner(parent, context.username());
+            assertCanManageDocument(parent, context);
+            validateSharedSpaceParent(parent, sharedTarget);
             if (!FLAG_YES.equals(parent.getIzFolder())) {
                 throw new IllegalArgumentException("目标必须是文件夹");
             }
             storeType = StringUtils.hasText(parent.getStoreType()) ? parent.getStoreType() : storeType;
         }
-        return new CopyTarget(parentId, storeType);
+        if (!StringUtils.hasText(parentId) && sharedTarget != null) {
+            storeType = resolveDocumentStoreType(scope, sharedTarget);
+        }
+        return new CopyTarget(parentId, storeType, sharedTarget);
     }
 
     private SysFiles copyDocumentTree(
@@ -3038,7 +3572,10 @@ public class SysFilesServiceImpl extends BaseServiceImpl<SysFilesMapper, SysFile
         private List<SysFileRelation> accessibleBusinessRelations;
     }
 
-    private record CopyTarget(String parentId, String storeType) {
+    private record SharedTargetContext(String targetType, String targetId) {
+    }
+
+    private record CopyTarget(String parentId, String storeType, SharedTargetContext sharedTarget) {
     }
 
     private record BusinessRecordNode(String bizType, String bizId) {

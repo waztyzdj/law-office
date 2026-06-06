@@ -66,6 +66,7 @@ export interface DocumentContentViewProps {
   itemKey: (record: DocumentFileInfo) => string;
   items: DocumentFileInfo[];
   savingName?: boolean;
+  readonlyContext?: boolean;
   scope: DocumentScope;
 }
 

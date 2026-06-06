@@ -213,7 +213,7 @@ const canManageCurrentScope = computed(() => scope.value === 'my');
 const isSharedInboxScope = computed(
   () => scope.value === 'shared' && !activeScopeOption.value?.shareTargetType,
 );
-const isSharedReadonlyScope = computed(() => scope.value === 'shared');
+const isSharedReadonlyScope = computed(() => scope.value === 'shared' && isSharedInboxScope.value);
 const isReadonlyCollectionScope = computed(() => scope.value === 'sharedByMe' || scope.value === 'starred');
 const isBusinessScope = computed(() => scope.value === 'business');
 const documentActionContext = computed(() => ({
@@ -245,7 +245,7 @@ const canCreateCurrentScope = computed(
         (!currentFolder.value ||
           (Boolean(currentFolder.value.ownerFlag) &&
             currentFolder.value.storeType === 'shared_view'))) ||
-      (Boolean(activeSharedTarget.value) && (!currentFolder.value || Boolean(currentFolder.value.ownerFlag)))),
+      (Boolean(activeSharedTarget.value) && (!currentFolder.value || Boolean(currentFolder.value.canManage)))),
 );
 const canUploadCurrentScope = computed(
   () =>
@@ -255,7 +255,7 @@ const canUploadCurrentScope = computed(
     !isBusinessScope.value &&
     !isSharedInboxScope.value &&
     (canManageCurrentScope.value ||
-      (Boolean(activeSharedTarget.value) && (!currentFolder.value || Boolean(currentFolder.value.ownerFlag)))),
+      (Boolean(activeSharedTarget.value) && (!currentFolder.value || Boolean(currentFolder.value.canManage)))),
 );
 const currentScopeTitle = computed(
   () => activeScopeOption.value?.title || '根目录',
@@ -273,7 +273,7 @@ function canManageFolder(record?: DocumentFileInfo) {
     scope.value !== 'trash' &&
     scope.value !== 'business' &&
     Boolean(record?.id) &&
-    Boolean(record?.ownerFlag)
+    Boolean(record?.canManage)
   );
 }
 
@@ -421,6 +421,7 @@ const documentTreeInteractions = useDocumentTreeInteractions({
   findFolderByKey,
   getActiveSelectedTreeKey,
   getRootKeyFromFolderNodeKey,
+  getScopeOptionByRootKey: (rootKey) => findScopeOption(rootKey),
   getScopeByRootKey: (rootKey) => findScopeOption(rootKey)?.scope,
   handleBatchAction,
   handleCreateFolder,

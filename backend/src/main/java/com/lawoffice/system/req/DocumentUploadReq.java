@@ -14,4 +14,7 @@ public class DocumentUploadReq {
 
     @Size(max = 16)
     private String shareTargetType;
+
+    @Size(max = 64)
+    private String shareTargetId;
 }

@@ -37,7 +37,6 @@ import {
   compareDocuments,
   isActualSharedItem,
   isActualStarredItem,
-  isReadonlyBrowseScope,
   isReadonlyCollectionScope,
 } from './documentExplorerUtils';
 
@@ -107,7 +106,14 @@ const actionContext = computed(() => ({
 
 const canCreateInScope = computed(() => props.canCreate);
 const canUploadInScope = computed(() => props.canUpload);
-const canShowBodyWriteActions = computed(() => !props.isGlobalSearch && !isReadonlyBrowseScope(props.scope));
+const isSharedReadonlyContext = computed(() => props.scope === 'shared' && props.personalizeShared);
+const isReadonlyBrowseContext = computed(
+  () =>
+    props.scope === 'business' ||
+    isSharedReadonlyContext.value ||
+    isReadonlyCollectionScope(props.scope),
+);
+const canShowBodyWriteActions = computed(() => !props.isGlobalSearch && !isReadonlyBrowseContext.value);
 const hasBodyWriteActions = computed(
   () =>
     canShowBodyWriteActions.value &&
@@ -216,7 +222,7 @@ function canShowItemActionMenu(record: DocumentFileInfo) {
   if (props.scope === 'trash') {
     return Boolean(record.id);
   }
-  if (props.scope === 'shared') {
+  if (isSharedReadonlyContext.value) {
     return record.izFolder !== '1';
   }
   if (props.scope === 'business') {
@@ -285,7 +291,7 @@ const documentSelection = useDocumentSelection({
   emitBatchAction: (event, records) => emit('batchAction', event, records),
   emitPaste: () => emit('paste'),
   inlineEditor: toRef(props, 'inlineEditor'),
-  isReadonlyContext: computed(() => props.isGlobalSearch || isReadonlyBrowseScope(props.scope)),
+  isReadonlyContext: computed(() => props.isGlobalSearch || isReadonlyBrowseContext.value),
   isRenaming,
   loading: toRef(props, 'loading'),
   moving: toRef(props, 'moving'),
@@ -381,6 +387,7 @@ const contentViewProps = computed<DocumentContentViewProps>(() => ({
   isSingleContext,
   itemKey,
   items: sortedItems.value,
+  readonlyContext: isReadonlyBrowseContext.value,
   savingName: props.savingName,
   scope: props.scope,
 }));

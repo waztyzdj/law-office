@@ -16,6 +16,9 @@ public class DocumentFolderReq {
     @Size(max = 16)
     private String shareTargetType;
 
+    @Size(max = 64)
+    private String shareTargetId;
+
     @NotBlank(message = "文件夹名称不能为空")
     @Size(max = 255, message = "文件夹名称不能超过255个字符")
     private String fileName;

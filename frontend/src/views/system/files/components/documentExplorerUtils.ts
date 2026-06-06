@@ -29,7 +29,12 @@ export function isReadonlyBrowseScope(scope: DocumentScope) {
 }
 
 function isReadonlyActionContext(context: DocumentExplorerActionContext) {
-  return Boolean(context.globalSearch) || isReadonlyBrowseScope(context.scope);
+  return (
+    Boolean(context.globalSearch) ||
+    context.scope === 'business' ||
+    (context.scope === 'shared' && Boolean(context.personalizeShared)) ||
+    isReadonlyCollectionScope(context.scope)
+  );
 }
 
 export function isActualStarredItem(record?: DocumentFileInfo) {
@@ -190,7 +195,7 @@ export function canMove(record: DocumentFileInfo, context: DocumentExplorerActio
   return (
     context.scope !== 'trash' &&
     Boolean(record.id) &&
-    (Boolean(record.ownerFlag) || context.personalizeShared)
+    (Boolean(record.canManage) || context.personalizeShared)
   );
 }
 
@@ -198,7 +203,7 @@ export function canEditItem(record: DocumentFileInfo, context: DocumentExplorerA
   if (isReadonlyActionContext(context)) {
     return false;
   }
-  return context.scope !== 'trash' && Boolean(record.ownerFlag);
+  return context.scope !== 'trash' && Boolean(record.canManage);
 }
 
 export function canCreateFolderInItem(record: DocumentFileInfo, context: DocumentExplorerActionContext) {
@@ -257,7 +262,7 @@ export function canDropOnFolder(target: DocumentFileInfo, context: DocumentExplo
   if (context.personalizeShared) {
     return Boolean(target.ownerFlag) && target.storeType === 'shared_view';
   }
-  return Boolean(target.ownerFlag);
+  return Boolean(target.canManage);
 }
 
 export function isVirtualBusinessItem(record: DocumentFileInfo) {

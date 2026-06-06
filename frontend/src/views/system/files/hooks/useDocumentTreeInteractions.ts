@@ -1,6 +1,6 @@
 import type { ComputedRef, Ref } from 'vue';
 import type { DocumentFileInfo, DocumentScope } from '#/api/system/document';
-import type { DocumentBatchAction, InlineEditorState } from '../types';
+import type { DocumentBatchAction, InlineEditorState, ScopeOption } from '../types';
 
 import { computed, ref } from 'vue';
 
@@ -10,7 +10,6 @@ import {
   canMove as canMoveDocument,
   isActualSharedItem,
   isActualStarredItem,
-  isReadonlyBrowseScope,
   isSharedReadonlyScope,
   isVirtualBusinessItem,
 } from '../components/documentExplorerUtils';
@@ -39,6 +38,7 @@ interface UseDocumentTreeInteractionsOptions {
   findCachedPath: (key: string) => CachedFolderPath | undefined;
   findFolderByKey: (key: string) => DocumentFileInfo | undefined;
   getRootKeyFromFolderNodeKey: (key: string) => string;
+  getScopeOptionByRootKey: (rootKey: string) => ScopeOption | undefined;
   getScopeByRootKey: (rootKey: string) => DocumentScope | undefined;
   getActiveSelectedTreeKey: () => string;
   handleBatchAction: (event: DocumentBatchAction, records: DocumentFileInfo[]) => void;
@@ -88,7 +88,16 @@ export function useDocumentTreeInteractions(options: UseDocumentTreeInteractions
   }
 
   function isReadonlyBrowseTree(key?: string) {
-    return isReadonlyBrowseScope(key ? getTreeNodeScope(key) : options.scope.value);
+    const nodeScope = key ? getTreeNodeScope(key) : options.scope.value;
+    const option = key
+      ? options.getScopeOptionByRootKey(options.getRootKeyFromFolderNodeKey(key))
+      : undefined;
+    return (
+      nodeScope === 'business' ||
+      (nodeScope === 'shared' && !option?.shareTargetType) ||
+      nodeScope === 'sharedByMe' ||
+      nodeScope === 'starred'
+    );
   }
 
   function canShowSharedByMeShareMenu(key: string) {
@@ -116,7 +125,8 @@ export function useDocumentTreeInteractions(options: UseDocumentTreeInteractions
 
   function canShowTreeContextMenu(key: string) {
     const nodeScope = getTreeNodeScope(key);
-    if (nodeScope === 'business' || isSharedReadonlyScope(nodeScope)) {
+    const option = options.getScopeOptionByRootKey(options.getRootKeyFromFolderNodeKey(key));
+    if (nodeScope === 'business' || (isSharedReadonlyScope(nodeScope) && !option?.shareTargetType)) {
       return false;
     }
     if (nodeScope === 'sharedByMe') {
@@ -133,7 +143,7 @@ export function useDocumentTreeInteractions(options: UseDocumentTreeInteractions
   }
 
   function getTreeCopyableRecords(record?: DocumentFileInfo) {
-    if (isReadonlyBrowseScope(options.scope.value)) {
+    if (isReadonlyBrowseTree()) {
       return [];
     }
     return getTreeContextRecords(record).filter(
@@ -142,7 +152,7 @@ export function useDocumentTreeInteractions(options: UseDocumentTreeInteractions
   }
 
   function getTreeCuttableRecords(record?: DocumentFileInfo) {
-    if (isReadonlyBrowseScope(options.scope.value)) {
+    if (isReadonlyBrowseTree()) {
       return [];
     }
     return getTreeContextRecords(record).filter((item) =>
@@ -155,7 +165,7 @@ export function useDocumentTreeInteractions(options: UseDocumentTreeInteractions
   }
 
   function getTreeDeletableRecords(record?: DocumentFileInfo) {
-    if (isReadonlyBrowseScope(options.scope.value)) {
+    if (isReadonlyBrowseTree()) {
       return [];
     }
     return getTreeContextRecords(record).filter(
@@ -166,7 +176,7 @@ export function useDocumentTreeInteractions(options: UseDocumentTreeInteractions
   function canDropToTreeTarget(key: string) {
     if (
       options.scope.value === 'trash' ||
-      isReadonlyBrowseScope(options.scope.value) ||
+      isReadonlyBrowseTree() ||
       isReadonlyBrowseTree(key)
     ) {
       return false;
@@ -181,7 +191,7 @@ export function useDocumentTreeInteractions(options: UseDocumentTreeInteractions
     if (options.isSharedInboxScope.value) {
       return Boolean(target.ownerFlag) && target.storeType === 'shared_view';
     }
-    return Boolean(target.ownerFlag);
+    return Boolean(target.canManage);
   }
 
   async function handleCreateFolderIn(record?: DocumentFileInfo) {
@@ -338,7 +348,7 @@ export function useDocumentTreeInteractions(options: UseDocumentTreeInteractions
     if (
       sourceIds.length === 0 ||
       options.scope.value === 'trash' ||
-      isReadonlyBrowseScope(options.scope.value) ||
+      isReadonlyBrowseTree() ||
       isReadonlyBrowseTree(targetKey)
     ) {
       return;
@@ -388,7 +398,7 @@ export function useDocumentTreeInteractions(options: UseDocumentTreeInteractions
     if (
       !isDocumentDrag(event) ||
       options.scope.value === 'trash' ||
-      isReadonlyBrowseScope(options.scope.value) ||
+      isReadonlyBrowseTree() ||
       isReadonlyBrowseTree(targetKey)
     ) {
       return;

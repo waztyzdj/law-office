@@ -5,7 +5,6 @@ import type { DocumentBatchAction, InlineEditorState } from '../types';
 import { computed, ref } from 'vue';
 
 import {
-  isReadonlyBrowseScope,
   isVirtualBusinessItem,
 } from '../components/documentExplorerUtils';
 
@@ -213,7 +212,7 @@ export function useDocumentSelection(options: UseDocumentSelectionOptions) {
   }
 
   function getContextDeletableRecords(record: DocumentFileInfo) {
-    if (options.isReadonlyContext.value || isReadonlyBrowseScope(options.scope.value)) {
+    if (options.isReadonlyContext.value) {
       return [];
     }
     return getContextRecords(record).filter(
@@ -222,14 +221,14 @@ export function useDocumentSelection(options: UseDocumentSelectionOptions) {
   }
 
   function getContextCuttableRecords(record: DocumentFileInfo) {
-    if (options.isReadonlyContext.value || isReadonlyBrowseScope(options.scope.value)) {
+    if (options.isReadonlyContext.value) {
       return [];
     }
     return getContextRecords(record).filter((item) => options.canMove(item));
   }
 
   function getContextCopyableRecords(record: DocumentFileInfo) {
-    if (options.isReadonlyContext.value || isReadonlyBrowseScope(options.scope.value)) {
+    if (options.isReadonlyContext.value) {
       return [];
     }
     return getContextRecords(record).filter(
@@ -275,7 +274,7 @@ export function useDocumentSelection(options: UseDocumentSelectionOptions) {
     }
     const key = event.key.toLowerCase();
     if (key === 'delete' || (event.metaKey && key === 'backspace')) {
-      if (options.isReadonlyContext.value || isReadonlyBrowseScope(options.scope.value)) {
+      if (options.isReadonlyContext.value) {
         return;
       }
       const records = selectedRecords.value.filter(
@@ -293,7 +292,7 @@ export function useDocumentSelection(options: UseDocumentSelectionOptions) {
       return;
     }
     if (key === 'x') {
-      if (options.isReadonlyContext.value || isReadonlyBrowseScope(options.scope.value)) {
+      if (options.isReadonlyContext.value) {
         return;
       }
       const records = selectedRecords.value.filter((item) => options.canMove(item));
@@ -305,7 +304,7 @@ export function useDocumentSelection(options: UseDocumentSelectionOptions) {
       return;
     }
     if (key === 'c') {
-      if (options.isReadonlyContext.value || isReadonlyBrowseScope(options.scope.value)) {
+      if (options.isReadonlyContext.value) {
         return;
       }
       const records = selectedRecords.value.filter(

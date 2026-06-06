@@ -130,6 +130,7 @@ export const uploadDocument = (
   parentId?: string,
   context?: {
     scope?: DocumentScope;
+    shareTargetId?: string;
     shareTargetType?: DocumentShareTargetType;
   },
 ) => {
@@ -144,6 +145,9 @@ export const uploadDocument = (
   if (context?.shareTargetType) {
     formData.append('shareTargetType', context.shareTargetType);
   }
+  if (context?.shareTargetId) {
+    formData.append('shareTargetId', context.shareTargetId);
+  }
   return requestClient.post<DocumentFileInfo>('/files/document/upload', formData, {
     headers: {
       'Content-Type': 'multipart/form-data',
@@ -155,6 +159,7 @@ export const createDocumentFolder = (data: {
   fileName: string;
   parentId?: string;
   scope?: DocumentScope;
+  shareTargetId?: string;
   shareTargetType?: DocumentShareTargetType;
 }) => requestClient.post<DocumentFileInfo>('/files/document/folder', data);
 
@@ -165,6 +170,7 @@ export const moveDocument = (data: {
   id: string;
   parentId?: string;
   scope?: DocumentScope;
+  shareTargetId?: string;
   shareTargetType?: DocumentShareTargetType;
 }) =>
   requestClient.post<DocumentFileInfo>('/files/document/move', data);
@@ -173,6 +179,7 @@ export const batchMoveDocuments = (data: {
   ids: string[];
   parentId?: string;
   scope?: DocumentScope;
+  shareTargetId?: string;
   shareTargetType?: DocumentShareTargetType;
 }) =>
   requestClient.post<DocumentFileInfo[]>('/files/document/batch-move', data);
@@ -181,6 +188,7 @@ export const copyDocuments = (data: {
   ids: string[];
   parentId?: string;
   scope?: DocumentScope;
+  shareTargetId?: string;
   shareTargetType?: DocumentShareTargetType;
 }) =>
   requestClient.post<DocumentFileInfo[]>('/files/document/copy', data);

@@ -21,4 +21,7 @@ public class DocumentCopyReq {
 
     @Size(max = 16, message = "共享目标类型不能超过16个字符")
     private String shareTargetType;
+
+    @Size(max = 64, message = "共享目标ID不能超过64个字符")
+    private String shareTargetId;
 }

@@ -144,25 +144,6 @@ export function useDocumentActions(options: UseDocumentActionsOptions) {
     };
   }
 
-  async function shareRootFolderIfNeeded(record: DocumentFileInfo, parentId?: string) {
-    const target = options.activeSharedTarget.value;
-    if (!record.id || parentId || !target) {
-      return;
-    }
-    await shareDocument({
-      enableDown: '1',
-      enableUpdat: '0',
-      fileId: record.id,
-      targets: [
-        {
-          permission: 'download',
-          targetId: target.targetId,
-          targetType: target.targetType,
-        },
-      ],
-    });
-  }
-
   function handleUploadClick() {
     if (!options.canUploadCurrentScope.value || uploading.value) {
       return;
@@ -180,11 +161,11 @@ export function useDocumentActions(options: UseDocumentActionsOptions) {
     uploading.value = true;
     try {
       for (const file of files) {
-        const uploaded = await uploadDocument(file, options.currentParentId.value, {
+        await uploadDocument(file, options.currentParentId.value, {
           scope: options.scope.value,
+          shareTargetId: options.activeScopeOption.value?.shareTargetId,
           shareTargetType: options.activeScopeOption.value?.shareTargetType,
         });
-        await shareRootFolderIfNeeded(uploaded, options.currentParentId.value);
       }
       message.success(files.length > 1 ? '文件已上传' : '文件上传成功');
       await options.loadData();
@@ -253,13 +234,13 @@ export function useDocumentActions(options: UseDocumentActionsOptions) {
     savingName.value = true;
     try {
       if (editor.mode === 'create') {
-        const createdFolder = await createDocumentFolder({
+        await createDocumentFolder({
           fileName,
           parentId: editor.parentId,
           scope: options.scope.value,
+          shareTargetId: options.activeScopeOption.value?.shareTargetId,
           shareTargetType: options.activeScopeOption.value?.shareTargetType,
         });
-        await shareRootFolderIfNeeded(createdFolder, editor.parentId);
         cancelInlineEditor();
         await Promise.all([
           options.loadData(),
@@ -569,6 +550,7 @@ export function useDocumentActions(options: UseDocumentActionsOptions) {
         id: sourceId,
         parentId: targetParentId,
         scope: options.scope.value,
+        shareTargetId: options.activeScopeOption.value?.shareTargetId,
         shareTargetType: options.activeScopeOption.value?.shareTargetType,
       });
       message.success('已移动');
@@ -593,6 +575,7 @@ export function useDocumentActions(options: UseDocumentActionsOptions) {
         ids,
         parentId: targetParentId,
         scope: options.scope.value,
+        shareTargetId: options.activeScopeOption.value?.shareTargetId,
         shareTargetType: options.activeScopeOption.value?.shareTargetType,
       });
       message.success(`已移动 ${ids.length} 项`);
@@ -617,6 +600,7 @@ export function useDocumentActions(options: UseDocumentActionsOptions) {
         ids,
         parentId: targetParentId,
         scope: options.scope.value,
+        shareTargetId: options.activeScopeOption.value?.shareTargetId,
         shareTargetType: options.activeScopeOption.value?.shareTargetType,
       });
       message.success(`已移动 ${ids.length} 项`);
@@ -659,11 +643,9 @@ export function useDocumentActions(options: UseDocumentActionsOptions) {
         ids: clipboard.ids,
         parentId: targetParentId,
         scope: options.scope.value,
+        shareTargetId: options.activeScopeOption.value?.shareTargetId,
         shareTargetType: options.activeScopeOption.value?.shareTargetType,
       });
-      for (const copiedFile of copiedFiles) {
-        await shareRootFolderIfNeeded(copiedFile, targetParentId);
-      }
       message.success(`已粘贴 ${copiedFiles.length} 项`);
       await refreshDocumentArea([targetParentId]);
     } finally {
@@ -694,11 +676,9 @@ export function useDocumentActions(options: UseDocumentActionsOptions) {
         ids: clipboard.ids,
         parentId: record.id,
         scope: options.scope.value,
+        shareTargetId: options.activeScopeOption.value?.shareTargetId,
         shareTargetType: options.activeScopeOption.value?.shareTargetType,
       });
-      for (const copiedFile of copiedFiles) {
-        await shareRootFolderIfNeeded(copiedFile, record.id);
-      }
       message.success(`已粘贴 ${copiedFiles.length} 项`);
       await refreshDocumentArea([record.id]);
     } finally {
