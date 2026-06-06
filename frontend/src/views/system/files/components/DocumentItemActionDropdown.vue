@@ -33,6 +33,7 @@ interface Props
   isGlobalSearch?: boolean;
   mode?: 'button' | 'context';
   record: DocumentFileInfo;
+  readonlyContext?: boolean;
   scope: DocumentScope;
 }
 
@@ -40,6 +41,7 @@ const props = withDefaults(defineProps<Props>(), {
   disabled: false,
   isGlobalSearch: false,
   mode: 'button',
+  readonlyContext: false,
 });
 
 const emit = defineEmits<{
@@ -96,6 +98,7 @@ function handleBatchAction(event: DocumentBatchAction) {
         :context-downloadable-count="getContextDownloadRecords(record).length"
         :context-restorable-count="getContextRestorableRecords(record).length"
         :record="record"
+        :readonly-context="readonlyContext"
         :search-result="isGlobalSearch"
         :scope="scope"
         :single-context="singleContext"

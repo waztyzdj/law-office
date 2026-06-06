@@ -370,6 +370,10 @@ public class SysFilesServiceImpl extends BaseServiceImpl<SysFilesMapper, SysFile
             return pageTrashDocuments(context, pageReq);
         }
 
+        if (SCOPE_STARRED.equals(scope)) {
+            return pageStarredDocuments(context, pageReq);
+        }
+
         if (isSharedTargetScope(pageReq, scope)) {
             return pageSharedTargetDocuments(context, pageReq);
         }
@@ -1109,6 +1113,38 @@ public class SysFilesServiceImpl extends BaseServiceImpl<SysFilesMapper, SysFile
         return pageCombinedDocuments(context, pageReq, rootFolders, rootFiles);
     }
 
+    /**
+     * 收藏根目录按收藏入口合并展示，避免父子文件夹都收藏时在根层重复出现。
+     */
+    private PageVO<DocumentFileVO> pageStarredDocuments(UserAccessContext context, DocumentPageReq pageReq) {
+        String parentId = trimToNull(pageReq.getParentId());
+        if (StringUtils.hasText(parentId)) {
+            SysFiles parent = getActiveFile(parentId);
+            assertOwner(parent, context.username());
+            return pageDocumentChildrenByParent(context, pageReq, parentId);
+        }
+
+        List<SysFiles> starredFiles = baseMapper.selectList(Wrappers.lambdaQuery(SysFiles.class)
+                .eq(SysFiles::getTenantId, context.tenantId())
+                .eq(SysFiles::getCreateBy, context.username())
+                .eq(SysFiles::getIzStar, FLAG_YES)
+                .eq(SysFiles::getDeleteFlag, 0));
+        Set<String> starredIds = starredFiles.stream()
+                .map(SysFiles::getId)
+                .filter(StringUtils::hasText)
+                .collect(Collectors.toSet());
+        List<SysFiles> rootItems = starredFiles.stream()
+                .filter(file -> !hasStarredAncestor(file.getParentId(), starredIds, context.tenantId()))
+                .toList();
+        List<SysFiles> rootFolders = rootItems.stream()
+                .filter(file -> FLAG_YES.equals(file.getIzFolder()))
+                .toList();
+        List<SysFiles> rootFiles = rootItems.stream()
+                .filter(file -> !FLAG_YES.equals(file.getIzFolder()))
+                .toList();
+        return pageCombinedDocuments(context, pageReq, rootFolders, rootFiles);
+    }
+
     private PageVO<DocumentFileVO> pageSharedInboxDocuments(UserAccessContext context, DocumentPageReq pageReq) {
         String parentId = trimToNull(pageReq.getParentId());
         if (StringUtils.hasText(parentId)) {
@@ -1514,18 +1550,6 @@ public class SysFilesServiceImpl extends BaseServiceImpl<SysFilesMapper, SysFile
                         }
                     });
             wrapper.eq(SysFiles::getParentId, req.getParentId());
-            return;
-        }
-        if (SCOPE_STARRED.equals(scope)) {
-            if (StringUtils.hasText(req.getParentId())) {
-                SysFiles parent = getActiveFile(req.getParentId());
-                assertOwner(parent, context.username());
-                wrapper.eq(SysFiles::getCreateBy, context.username())
-                        .eq(SysFiles::getParentId, req.getParentId());
-            } else {
-                wrapper.eq(SysFiles::getCreateBy, context.username())
-                        .eq(SysFiles::getIzStar, FLAG_YES);
-            }
             return;
         }
         wrapper.eq(SysFiles::getCreateBy, context.username());
@@ -2047,6 +2071,27 @@ public class SysFilesServiceImpl extends BaseServiceImpl<SysFilesMapper, SysFile
         int guard = 0;
         while (StringUtils.hasText(currentId) && guard++ < 20) {
             if (sharedIds.contains(currentId)) {
+                return true;
+            }
+            SysFiles parent = baseMapper.selectOne(Wrappers.lambdaQuery(SysFiles.class)
+                    .select(SysFiles::getId, SysFiles::getParentId)
+                    .eq(SysFiles::getId, currentId)
+                    .eq(SysFiles::getTenantId, tenantId)
+                    .eq(SysFiles::getDeleteFlag, 0)
+                    .last("LIMIT 1"));
+            currentId = parent == null ? null : parent.getParentId();
+        }
+        return false;
+    }
+
+    /**
+     * 判断收藏项父链上是否已有收藏入口；有则当前项并入上层收藏目录展示。
+     */
+    private boolean hasStarredAncestor(String parentId, Set<String> starredIds, String tenantId) {
+        String currentId = parentId;
+        int guard = 0;
+        while (StringUtils.hasText(currentId) && guard++ < 20) {
+            if (starredIds.contains(currentId)) {
                 return true;
             }
             SysFiles parent = baseMapper.selectOne(Wrappers.lambdaQuery(SysFiles.class)

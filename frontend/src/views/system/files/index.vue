@@ -480,7 +480,7 @@ async function reloadAfterCancelShare() {
   if (scope.value === 'sharedByMe') {
     resetCurrentRootNavigation();
   }
-  await reloadAll();
+  await loadData();
 }
 
 const documentTreeInteractions = useDocumentTreeInteractions({
@@ -755,7 +755,7 @@ onBeforeUnmount(() => {
     <DocumentShareDrawer
       ref="shareDrawerRef"
       @cancel-share="reloadAfterCancelShare"
-      @success="reloadAll"
+      @success="loadData"
     />
     <DocumentHistoryModal
       ref="historyModalRef"

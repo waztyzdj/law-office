@@ -244,8 +244,8 @@ function getTreeDeletableCount(key: string) {
 
 .document-tree-panel :deep(.ant-tree-treenode) {
   align-items: center;
-  width: max-content;
-  min-width: 100%;
+  width: 100%;
+  min-width: max-content;
   min-height: 28px;
 }
 
@@ -266,7 +266,9 @@ function getTreeDeletableCount(key: string) {
   display: inline-flex;
   align-items: center;
   cursor: default;
-  width: max-content;
+  flex: 1;
+  width: auto;
+  min-width: 0;
   min-height: 28px;
   line-height: 28px;
 }
@@ -275,7 +277,7 @@ function getTreeDeletableCount(key: string) {
   display: inline-flex;
   align-items: center;
   min-width: 0;
-  width: max-content;
+  width: 100%;
 }
 
 .document-tree-node {
@@ -283,8 +285,9 @@ function getTreeDeletableCount(key: string) {
   align-items: center;
   cursor: default;
   gap: 6px;
-  width: max-content;
+  width: 100%;
   min-width: 0;
+  height: 28px;
   white-space: nowrap;
 }
 

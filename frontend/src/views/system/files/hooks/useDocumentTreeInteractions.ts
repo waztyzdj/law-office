@@ -116,13 +116,6 @@ export function useDocumentTreeInteractions(options: UseDocumentTreeInteractions
     return !isScopeRootKey(key) && record?.izFolder === '1' && options.canManageFolder(record);
   }
 
-  function canCreateInTreeFolder(key: string) {
-    if (isReadonlyBrowseTree(key)) {
-      return false;
-    }
-    return !isScopeRootKey(key) && options.canCreateInsideFolder(options.findFolderByKey(key));
-  }
-
   function canShowTreeContextMenu(key: string) {
     const nodeScope = getTreeNodeScope(key);
     const option = options.getScopeOptionByRootKey(options.getRootKeyFromFolderNodeKey(key));
@@ -135,7 +128,8 @@ export function useDocumentTreeInteractions(options: UseDocumentTreeInteractions
     if (nodeScope === 'starred') {
       return canShowStarredMenu(key);
     }
-    return canManageTreeFolder(key) || canCreateInTreeFolder(key);
+    const record = options.findFolderByKey(key);
+    return !isScopeRootKey(key) && record?.izFolder === '1' && Boolean(record.id);
   }
 
   function getTreeContextRecords(record?: DocumentFileInfo) {

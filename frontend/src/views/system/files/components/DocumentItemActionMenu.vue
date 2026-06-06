@@ -38,6 +38,8 @@ interface ActionMenuItem {
   icon: string;
   key: string;
   label: string;
+  primary?: boolean;
+  warning?: boolean;
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -196,10 +198,10 @@ const singleItems = computed<ActionMenuItem[]>(() => {
         return [
           {
             action: 'star',
-            danger: true,
             icon: 'lucide:star',
             key: 'star',
             label: '取消收藏',
+            warning: true,
           },
         ];
       }
@@ -240,10 +242,10 @@ const singleItems = computed<ActionMenuItem[]>(() => {
     if (props.scope === 'starred' && isActualStarredItem(props.record)) {
       items.push({
         action: 'star',
-        danger: true,
         icon: 'lucide:star',
         key: 'star',
         label: '取消收藏',
+        warning: true,
       });
     }
     if (props.scope === 'sharedByMe' && isActualSharedItem(props.record)) {
@@ -273,12 +275,23 @@ const singleItems = computed<ActionMenuItem[]>(() => {
   if (props.canViewHistory) {
     items.push({ action: 'history', icon: 'lucide:history', key: 'history', label: '历史版本' });
   }
+  if (canStarRecord.value) {
+    if (props.record?.izStar !== '1') {
+      items.push({
+        action: 'star',
+        icon: 'lucide:star',
+        key: 'star',
+        label: '收藏',
+      });
+    }
+  }
   if (props.canEdit) {
     items.push({
       action: 'share',
       icon: 'lucide:share-2',
       key: 'share',
       label: props.record?.sharedFlag ? '查看共享' : '共享',
+      primary: props.record?.sharedFlag,
     });
     if (props.record?.sharedFlag) {
       items.push({
@@ -293,11 +306,24 @@ const singleItems = computed<ActionMenuItem[]>(() => {
   return items;
 });
 
+const canStarRecord = computed(
+  () =>
+    Boolean(props.record?.id) &&
+    !props.searchResult &&
+    !props.readonlyContext &&
+    props.scope !== 'trash' &&
+    props.scope !== 'business',
+);
+
 const showDeleteItem = computed(() =>
   !props.searchResult &&
   !props.readonlyContext &&
   props.scope !== 'trash' &&
   props.scope !== 'business',
+);
+
+const showCancelStarItem = computed(
+  () => props.singleContext && canStarRecord.value && props.record?.izStar === '1',
 );
 
 function handleClick(item: ActionMenuItem) {
@@ -333,7 +359,11 @@ function handleClick(item: ActionMenuItem) {
     <Menu.Item
       v-for="item in singleItems"
       :key="item.key"
-      :class="{ 'document-item-action-menu__danger': item.danger }"
+      :class="{
+        'document-item-action-menu__danger': item.danger,
+        'document-item-action-menu__primary': item.primary,
+        'document-item-action-menu__warning': item.warning,
+      }"
       :danger="item.danger"
       @click="handleClick(item)"
     >
@@ -357,6 +387,17 @@ function handleClick(item: ActionMenuItem) {
       <span class="document-item-action-menu__item">
         <IconifyIcon class="document-item-action-menu__icon" icon="lucide:trash-2" />
         <span>删除</span>
+      </span>
+    </Menu.Item>
+    <Menu.Item
+      v-if="showCancelStarItem"
+      key="cancel-star"
+      class="document-item-action-menu__warning"
+      @click="handleClick({ action: 'star', icon: 'lucide:star', key: 'cancel-star', label: '取消收藏' })"
+    >
+      <span class="document-item-action-menu__item">
+        <IconifyIcon class="document-item-action-menu__icon" icon="lucide:star" />
+        <span>取消收藏</span>
       </span>
     </Menu.Item>
   </Menu>
@@ -386,6 +427,14 @@ function handleClick(item: ActionMenuItem) {
   color: hsl(var(--primary));
 }
 
+.document-item-action-menu :deep(.document-item-action-menu__primary:not(.ant-menu-item-disabled)) {
+  color: hsl(var(--primary));
+}
+
+.document-item-action-menu :deep(.document-item-action-menu__primary:not(.ant-menu-item-disabled) .document-item-action-menu__icon) {
+  color: hsl(var(--primary));
+}
+
 .document-item-action-menu :deep(.document-item-action-menu__danger:not(.ant-menu-item-disabled)) {
   color: #ff4d4f;
 }
@@ -404,6 +453,27 @@ function handleClick(item: ActionMenuItem) {
 .document-item-action-menu :deep(.document-item-action-menu__danger:not(.ant-menu-item-disabled):hover .document-item-action-menu__icon),
 .document-item-action-menu :deep(.document-item-action-menu__danger:not(.ant-menu-item-disabled).ant-menu-item-active .document-item-action-menu__icon),
 .document-item-action-menu :deep(.document-item-action-menu__danger:not(.ant-menu-item-disabled).ant-menu-item-selected .document-item-action-menu__icon) {
+  color: #fff;
+}
+
+.document-item-action-menu :deep(.document-item-action-menu__warning:not(.ant-menu-item-disabled)) {
+  color: #faad14;
+}
+
+.document-item-action-menu :deep(.document-item-action-menu__warning:not(.ant-menu-item-disabled) .document-item-action-menu__icon) {
+  color: #faad14;
+}
+
+.document-item-action-menu :deep(.document-item-action-menu__warning:not(.ant-menu-item-disabled):hover),
+.document-item-action-menu :deep(.document-item-action-menu__warning:not(.ant-menu-item-disabled).ant-menu-item-active),
+.document-item-action-menu :deep(.document-item-action-menu__warning:not(.ant-menu-item-disabled).ant-menu-item-selected) {
+  color: #fff;
+  background: #faad14;
+}
+
+.document-item-action-menu :deep(.document-item-action-menu__warning:not(.ant-menu-item-disabled):hover .document-item-action-menu__icon),
+.document-item-action-menu :deep(.document-item-action-menu__warning:not(.ant-menu-item-disabled).ant-menu-item-active .document-item-action-menu__icon),
+.document-item-action-menu :deep(.document-item-action-menu__warning:not(.ant-menu-item-disabled).ant-menu-item-selected .document-item-action-menu__icon) {
   color: #fff;
 }
 </style>

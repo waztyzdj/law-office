@@ -304,7 +304,7 @@ export function useDocumentActions(options: UseDocumentActionsOptions) {
     if (options.scope.value === 'sharedByMe') {
       options.resetCurrentRootNavigation();
     }
-    await options.reloadAll();
+    await options.loadData();
   }
 
   function handleCancelShare(record: DocumentFileInfo) {
@@ -533,7 +533,7 @@ export function useDocumentActions(options: UseDocumentActionsOptions) {
     }
     await toggleDocumentStar(record.id);
     message.success(record.izStar === '1' ? '已取消收藏' : '已收藏');
-    await options.reloadAll();
+    await options.loadData();
   }
 
   async function handleMove(
