@@ -67,6 +67,16 @@ public class DocumentContentAccessServiceImpl implements IDocumentContentAccessS
 
     @Override
     @Transactional(readOnly = true)
+    public InputStream openDocumentContent(String fileId, DocumentAccessContext context) {
+        SysFiles file = checkDocumentReadAccess(fileId, context);
+        if (!StringUtils.hasText(file.getUrl())) {
+            throw new IllegalArgumentException("文档内容不存在，无法读取");
+        }
+        return minioUtils.downloadFile(file.getUrl());
+    }
+
+    @Override
+    @Transactional(readOnly = true)
     public DocumentFileVO checkDocumentEdit(String fileId, DocumentAccessContext context) {
         SysFiles file = checkDocumentReadAccess(fileId, context);
         if (Objects.equals(file.getDeleteFlag(), 1)) {

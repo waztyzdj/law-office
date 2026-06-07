@@ -38,6 +38,15 @@ public interface IDocumentContentAccessService {
     DocumentFileVO checkDocumentRead(String fileId, DocumentAccessContext context);
 
     /**
+     * 校验文件阅读权限并打开文件内容流，不增加阅读次数。
+     *
+     * @param fileId  文件 ID
+     * @param context 当前文档访问上下文
+     * @return 文件内容流，调用方负责关闭
+     */
+    InputStream openDocumentContent(String fileId, DocumentAccessContext context);
+
+    /**
      * 校验文件编辑权限。
      *
      * @param fileId  文件 ID

@@ -238,6 +238,16 @@ public interface IDocumentCenterService {
     DocumentFileVO checkDocumentRead(String fileId, String username);
 
     /**
+     * 校验文档中心阅读权限并打开文件内容流，不更新阅读次数。
+     * 支持回收站中文件所有者读取已删除文件内容。
+     *
+     * @param fileId 文档 ID
+     * @param username 当前用户名
+     * @return 文件内容流，调用方负责关闭
+     */
+    InputStream openDocumentContent(String fileId, String username);
+
+    /**
      * 校验文档中心编辑权限并返回文件元数据。
      *
      * @param fileId 文档 ID

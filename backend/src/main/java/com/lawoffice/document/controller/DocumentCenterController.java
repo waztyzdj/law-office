@@ -20,7 +20,6 @@ import com.lawoffice.framework.enums.LogType;
 import com.lawoffice.framework.enums.OperateType;
 import com.lawoffice.framework.result.BaseResult;
 import com.lawoffice.framework.vo.PageVO;
-import com.lawoffice.system.service.ISysFilesService;
 import com.lawoffice.util.HttpDownloadUtils;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -54,7 +53,6 @@ public class DocumentCenterController {
     private static final Set<String> IMAGE_PREVIEW_EXTENSIONS = Set.of("bmp", "gif", "jpeg", "jpg", "png", "webp");
 
     private final IDocumentCenterService documentCenterService;
-    private final ISysFilesService sysFilesService;
 
     @PostMapping("/page")
     @Operation(summary = "文档中心分页", description = "分页查询我的文档、业务文档、共享目录和回收站")
@@ -227,14 +225,15 @@ public class DocumentCenterController {
             @PathVariable String fileId,
             HttpServletRequest request,
             HttpServletResponse response) throws IOException {
-        DocumentFileVO file = documentCenterService.checkDocumentDownload(fileId, getUsername(request));
+        String username = getUsername(request);
+        DocumentFileVO file = documentCenterService.checkDocumentDownload(fileId, username);
         String fileName = HttpDownloadUtils.resolveDownloadFileName(file.getFileName());
         response.setCharacterEncoding(StandardCharsets.UTF_8.name());
         response.setContentType(resolveContentType(file.getFileType()));
         response.setHeader("Content-Disposition", HttpDownloadUtils.buildContentDisposition(fileName));
         response.setHeader("Access-Control-Expose-Headers", "Content-Disposition");
 
-        try (InputStream inputStream = sysFilesService.downloadFileContent(fileId)) {
+        try (InputStream inputStream = documentCenterService.openDocumentContent(fileId, username)) {
             inputStream.transferTo(response.getOutputStream());
         }
     }
@@ -245,8 +244,9 @@ public class DocumentCenterController {
             @PathVariable String fileId,
             HttpServletRequest request,
             HttpServletResponse response) throws IOException {
-        DocumentFileVO file = documentCenterService.checkDocumentRead(fileId, getUsername(request));
-        writeDocumentImage(fileId, file, response);
+        String username = getUsername(request);
+        DocumentFileVO file = documentCenterService.checkDocumentRead(fileId, username);
+        writeDocumentImage(fileId, username, file, response);
     }
 
     @GetMapping("/preview/image/{fileId}")
@@ -255,26 +255,34 @@ public class DocumentCenterController {
             @PathVariable String fileId,
             HttpServletRequest request,
             HttpServletResponse response) throws IOException {
-        DocumentFileVO file = documentCenterService.checkDocumentPreview(fileId, getUsername(request));
-        writeDocumentImage(fileId, file, response);
+        String username = getUsername(request);
+        DocumentFileVO file = documentCenterService.checkDocumentRead(fileId, username);
+        assertImagePreviewFile(file);
+        file = documentCenterService.checkDocumentPreview(fileId, username);
+        writeDocumentImage(fileId, username, file, response);
     }
 
     private void writeDocumentImage(
             String fileId,
+            String username,
             DocumentFileVO file,
             HttpServletResponse response) throws IOException {
+        assertImagePreviewFile(file);
+        response.setCharacterEncoding(StandardCharsets.UTF_8.name());
+        response.setContentType(resolveImageContentType(file.getFileName()));
+        response.setHeader("Content-Disposition", "inline");
+
+        try (InputStream inputStream = documentCenterService.openDocumentContent(fileId, username)) {
+            inputStream.transferTo(response.getOutputStream());
+        }
+    }
+
+    private void assertImagePreviewFile(DocumentFileVO file) {
         String fileType = file.getFileType() == null ? "" : file.getFileType().toLowerCase(Locale.ROOT);
         String extension = resolveExtension(file.getFileName());
         if ("svg".equals(extension) || (!IMAGE_PREVIEW_EXTENSIONS.contains(extension)
                 && !"image".equals(fileType) && !fileType.startsWith("image/"))) {
             throw new IllegalArgumentException("仅图片文件支持预览");
-        }
-        response.setCharacterEncoding(StandardCharsets.UTF_8.name());
-        response.setContentType(resolveImageContentType(file.getFileName()));
-        response.setHeader("Content-Disposition", "inline");
-
-        try (InputStream inputStream = sysFilesService.downloadFileContent(fileId)) {
-            inputStream.transferTo(response.getOutputStream());
         }
     }
 

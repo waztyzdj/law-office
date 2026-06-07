@@ -60,10 +60,11 @@ const coreRoutes: RouteRecordRaw[] = [
       {
         name: 'DocumentCenter',
         path: 'document-center',
-        component: () => import('#/views/document/center/index.vue'),
+        redirect: '/document/files',
         meta: {
           hideInBreadcrumb: true,
           hideInMenu: true,
+          hideInTab: true,
           title: '文档中心',
         },
       },

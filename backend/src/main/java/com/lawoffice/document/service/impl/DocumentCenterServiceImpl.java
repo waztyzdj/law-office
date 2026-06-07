@@ -669,6 +669,13 @@ public class DocumentCenterServiceImpl extends BaseServiceImpl<SysFilesMapper, S
 
     @Override
     @Transactional(readOnly = true)
+    public InputStream openDocumentContent(String fileId, String username) {
+        DocumentAccessContext context = documentAccessContextService.buildDocumentAccessContext(username, requireTenantId());
+        return documentContentAccessService.openDocumentContent(fileId, context);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
     public DocumentFileVO checkDocumentEdit(String fileId, String username) {
         DocumentAccessContext context = documentAccessContextService.buildDocumentAccessContext(username, requireTenantId());
         return documentContentAccessService.checkDocumentEdit(fileId, context);
@@ -1768,6 +1775,5 @@ public class DocumentCenterServiceImpl extends BaseServiceImpl<SysFilesMapper, S
     }
 
 }
-
 
 
