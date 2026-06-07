@@ -2,7 +2,7 @@ export * from './auth';
 export * from './category';
 export * from './depart';
 export * from './dict';
-export * from './document';
+export * from '../document';
 export * from './log';
 export * from './menu';
 export * from './permission';

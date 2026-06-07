@@ -60,7 +60,7 @@ const coreRoutes: RouteRecordRaw[] = [
       {
         name: 'DocumentCenter',
         path: 'document-center',
-        component: () => import('#/views/system/files/index.vue'),
+        component: () => import('#/views/document/center/index.vue'),
         meta: {
           hideInBreadcrumb: true,
           hideInMenu: true,

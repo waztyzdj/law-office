@@ -1,4 +1,4 @@
-﻿import type { RoleInfo } from '#/api/system/role';
+import type { RoleInfo } from '#/api/system/role';
 import { deleteRole, pageRoles } from '#/api/system/role';
 import { useTable } from '#/composables/Table';
 

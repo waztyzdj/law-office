@@ -1,4 +1,4 @@
-﻿import { useTable } from '#/composables/Table';
+import { useTable } from '#/composables/Table';
 import type { UserInfo } from '#/api/system/user';
 import { deleteUser, pageUsers } from '#/api/system/user';
 

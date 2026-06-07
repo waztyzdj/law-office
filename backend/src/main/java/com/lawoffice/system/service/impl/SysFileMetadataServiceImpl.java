@@ -1,6 +1,6 @@
 package com.lawoffice.system.service.impl;
 
-import static com.lawoffice.system.constant.DocumentCenterConstants.INITIAL_HISTORY_EXTENSIONS;
+import static com.lawoffice.document.constant.DocumentCenterConstants.INITIAL_HISTORY_EXTENSIONS;
 import static com.lawoffice.system.constant.SysFileConstants.*;
 
 import com.lawoffice.system.service.ISysFileMetadataService;
