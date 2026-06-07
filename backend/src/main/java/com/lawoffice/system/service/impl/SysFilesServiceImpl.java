@@ -1,5 +1,7 @@
 package com.lawoffice.system.service.impl;
 
+import static com.lawoffice.system.constant.SysFileConstants.*;
+
 import cn.hutool.core.bean.BeanUtil;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
@@ -25,6 +27,7 @@ import com.lawoffice.system.req.FileRelationReq;
 import com.lawoffice.system.req.FileUploadReq;
 import com.lawoffice.system.service.IDocumentCenterService;
 import com.lawoffice.system.service.ISysFilesService;
+import com.lawoffice.system.service.ISysFileMetadataService;
 import com.lawoffice.system.vo.DocumentFileVO;
 import com.lawoffice.system.vo.DocumentShareVO;
 import com.lawoffice.system.vo.DocumentStatusVO;
@@ -44,66 +47,22 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
-import java.util.Set;
 import java.util.UUID;
 
 @Service
 @RequiredArgsConstructor
 public class SysFilesServiceImpl extends BaseServiceImpl<SysFilesMapper, SysFiles, SysFilesVO> implements ISysFilesService {
 
-    private static final String DEFAULT_STORE_TYPE = "minio";
-    private static final Integer DEFAULT_RELATION_TYPE = 1;
-    private static final long MAX_FILE_SIZE = 50 * 1024 * 1024L;
-    private static final int MAX_FILE_NAME_LENGTH = 255;
-    private static final int MAX_CONTENT_TYPE_LENGTH = 128;
-    private static final Set<String> EXCEL_EXTENSIONS = Set.of("xls", "xlsx");
-    private static final Set<String> WORD_EXTENSIONS = Set.of("doc", "docx");
-    private static final Set<String> PPT_EXTENSIONS = Set.of("ppt", "pptx");
-    private static final Set<String> TEXT_EXTENSIONS = Set.of("csv", "md", "rtf", "txt");
-    private static final Set<String> PDF_EXTENSIONS = Set.of("pdf");
-    private static final Set<String> OFFICE_COMPAT_EXTENSIONS = Set.of("dps", "et", "odp", "ods", "odt", "wps");
-    private static final Set<String> IMAGE_EXTENSIONS = Set.of("bmp", "gif", "jpeg", "jpg", "png", "webp");
-    private static final Set<String> VIDEO_EXTENSIONS = Set.of("avi", "flv", "mkv", "mov", "mp4", "wmv");
-    private static final Set<String> ALLOWED_UPLOAD_EXTENSIONS = Set.of(
-            "avi", "bmp", "csv", "doc", "docx", "dps", "et", "flv", "gif", "jpeg", "jpg",
-            "md", "mkv", "mov", "mp4", "odp", "ods", "odt", "pdf", "png", "ppt", "pptx",
-            "rtf", "txt", "webp", "wmv", "wps", "xls", "xlsx"
-    );
-    private static final Set<String> BLOCKED_UPLOAD_CONTENT_TYPES = Set.of(
-            "application/bat",
-            "application/cmd",
-            "application/javascript",
-            "application/msdos-windows",
-            "application/powershell",
-            "application/vnd.microsoft.portable-executable",
-            "application/x-bat",
-            "application/x-cmd",
-            "application/x-dosexec",
-            "application/x-msdownload",
-            "application/x-msdos-program",
-            "application/x-msi",
-            "application/x-powershell",
-            "application/x-sh",
-            "application/x-shellscript",
-            "text/javascript",
-            "text/vbscript",
-            "text/x-powershell",
-            "text/x-python",
-            "text/x-script",
-            "text/x-shellscript",
-            "text/x-sh"
-    );
-
     private final SysFileRelationMapper fileRelationMapper;
     private final IDocumentCenterService documentCenterService;
+    private final ISysFileMetadataService fileMetadataService;
     private final MinioUtils minioUtils;
 
     @Override
     @Transactional(rollbackFor = Exception.class)
     public FileUploadVO uploadFile(String username, MultipartFile file, FileUploadReq req) {
-        validateUploadFile(file);
+        fileMetadataService.validateUploadFile(file);
         String tenantId = requireTenantId();
         String objectName;
         try {
@@ -116,9 +75,9 @@ public class SysFilesServiceImpl extends BaseServiceImpl<SysFilesMapper, SysFile
             SysFiles fileEntity = new SysFiles();
             fileEntity.setId(newId());
             fileEntity.setTenantId(tenantId);
-            fileEntity.setFileName(resolveFileName(file));
+            fileEntity.setFileName(fileMetadataService.resolveFileName(file));
             fileEntity.setUrl(objectName);
-            fileEntity.setFileType(resolveFileType(file));
+            fileEntity.setFileType(fileMetadataService.resolveBaseFileType(file));
             fileEntity.setStoreType(DEFAULT_STORE_TYPE);
             fileEntity.setFileSize(file.getSize() > 0 ? file.getSize() / 1024.0 : 0D);
             fileEntity.setCreateBy(username);
@@ -429,90 +388,6 @@ public class SysFilesServiceImpl extends BaseServiceImpl<SysFilesMapper, SysFile
             throw new IllegalArgumentException("无权访问该文件关联");
         }
         return relation;
-    }
-
-    private void validateUploadFile(MultipartFile file) {
-        if (file == null || file.isEmpty()) {
-            throw new IllegalArgumentException("上传文件不能为空");
-        }
-        if (file.getSize() > MAX_FILE_SIZE) {
-            throw new IllegalArgumentException("文件大小不能超过50MB");
-        }
-        String fileName = resolveFileName(file);
-        if (fileName.length() > MAX_FILE_NAME_LENGTH) {
-            throw new IllegalArgumentException("文件名长度不能超过255个字符");
-        }
-        String extension = resolveExtension(fileName);
-        if (!ALLOWED_UPLOAD_EXTENSIONS.contains(extension)) {
-            throw new IllegalArgumentException("不支持的文件类型");
-        }
-        String contentType = file.getContentType();
-        if (StringUtils.hasText(contentType)) {
-            String normalizedContentType = contentType.split(";", 2)[0].trim().toLowerCase(Locale.ROOT);
-            if (normalizedContentType.length() > MAX_CONTENT_TYPE_LENGTH) {
-                throw new IllegalArgumentException("文件内容类型过长");
-            }
-            if (BLOCKED_UPLOAD_CONTENT_TYPES.contains(normalizedContentType)) {
-                throw new IllegalArgumentException("不支持的文件内容类型");
-            }
-        }
-    }
-
-    private String resolveFileName(MultipartFile file) {
-        String original = file == null ? null : file.getOriginalFilename();
-        if (!StringUtils.hasText(original)) {
-            return "未命名文件";
-        }
-        String normalized = original.replace("\\", "/");
-        int slashIndex = normalized.lastIndexOf('/');
-        if (slashIndex >= 0) {
-            normalized = normalized.substring(slashIndex + 1);
-        }
-        normalized = normalized.trim();
-        if (!StringUtils.hasText(normalized) || ".".equals(normalized) || "..".equals(normalized)) {
-            return "未命名文件";
-        }
-        return normalized;
-    }
-
-    private String resolveFileType(MultipartFile file) {
-        String extension = resolveExtension(resolveFileName(file));
-        if (EXCEL_EXTENSIONS.contains(extension)) {
-            return "excel";
-        }
-        if (WORD_EXTENSIONS.contains(extension)) {
-            return "word";
-        }
-        if (PPT_EXTENSIONS.contains(extension)) {
-            return "ppt";
-        }
-        if (PDF_EXTENSIONS.contains(extension)) {
-            return "pdf";
-        }
-        if (IMAGE_EXTENSIONS.contains(extension)) {
-            return "image";
-        }
-        if (VIDEO_EXTENSIONS.contains(extension)) {
-            return "video";
-        }
-        if (TEXT_EXTENSIONS.contains(extension)) {
-            return "text";
-        }
-        if (OFFICE_COMPAT_EXTENSIONS.contains(extension)) {
-            return "office";
-        }
-        return "file";
-    }
-
-    private String resolveExtension(String fileName) {
-        if (!StringUtils.hasText(fileName)) {
-            return "";
-        }
-        int index = fileName.lastIndexOf('.');
-        if (index < 0 || index == fileName.length() - 1) {
-            return "";
-        }
-        return fileName.substring(index + 1).toLowerCase(Locale.ROOT);
     }
 
     private FileUploadVO buildUploadVO(SysFiles file) {

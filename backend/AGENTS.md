@@ -49,6 +49,7 @@
 - Mapper 以 `Mapper` 结尾，并继承 MyBatis-Plus `BaseMapper<E>`。
 - 方法名表达业务动作：`assignRoles`、`getCurrentUserDetailInfo`、`validateUnique`。
 - 常量使用 `private static final`，命名为 UPPER_SNAKE_CASE。魔法数字和状态码必须抽成常量或枚举。
+- 跨方法、跨类或代表稳定业务取值的常量必须放在对应业务域的 `constant` 包中，例如 `com.lawoffice.system.constant`；Service 实现类中只允许保留局部实现细节常量，禁止把存储类型、状态码、范围枚举、权限取值、虚拟节点前缀等业务常量长期堆在业务类里。
 - 权限码使用 `模块:动作`，如 `user:view`、`user:edit`，并与前端 `permissionCodes` 保持一致。
 
 ## Spring Boot 与 Java
