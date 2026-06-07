@@ -16,6 +16,8 @@ public class DocumentStatusVO {
 
     private DocumentShareSourceVO inheritedShareSource;
 
+    private DocumentShareSourceVO favoriteSource;
+
     private DocumentFolderStatsVO folderStats;
 
     private String originalPath;

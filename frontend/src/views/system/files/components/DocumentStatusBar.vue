@@ -10,6 +10,8 @@ import { computed, ref, watch } from 'vue';
 
 import { IconifyIcon } from '@vben/icons';
 
+import { Tooltip } from 'ant-design-vue';
+
 import { getDocumentStatus } from '#/api/system/document';
 
 import {
@@ -95,9 +97,17 @@ const shareSourceText = computed(() => {
 });
 
 const favoriteText = computed(() => {
+  const detail = statusDetail.value;
   const record = detailRecord.value;
   if (!record || props.scope === 'business' || props.scope === 'trash') {
     return '不适用';
+  }
+  const favoriteSource = detail?.favoriteSource;
+  if (favoriteSource?.sourceType === 'inherited') {
+    return `继承自「${favoriteSource.inheritedFromFileName || favoriteSource.fileName || '上级文件夹'}」的收藏`;
+  }
+  if (favoriteSource?.sourceType === 'direct') {
+    return '已收藏';
   }
   if (props.scope === 'sharedByMe' && record.izStar !== '1') {
     return '不适用';
@@ -184,7 +194,7 @@ function formatShareSource(source: DocumentShareSourceInfo, received = true) {
   if (source.sourceType === 'space') {
     return `位于${targetTypeText(source.targetType)}共享空间${source.targetName ? `「${source.targetName}」` : ''}`;
   }
-  const target = [targetTypeText(source.targetType), source.targetName].filter(Boolean).join(' ');
+  const target = source.targetSummary || [targetTypeText(source.targetType), source.targetName].filter(Boolean).join(' ');
   const permission = source.permission ? `，权限：${permissionText(source.permission)}` : '';
   if (received) {
     return `${source.sharedBy || '他人'}通过${target || '共享'}给我${permission}`;
@@ -242,26 +252,48 @@ function permissionText(permission?: string) {
       </span>
     </template>
     <template v-else-if="detailRecord">
-      <span
+      <Tooltip
         v-if="detailRecord.izFolder === '1' && folderStatsText"
-        class="document-status-bar__item document-status-bar__item--wide"
         :title="folderStatsText"
+        overlay-class-name="document-status-bar-tooltip"
+        placement="topLeft"
       >
-        <span class="document-status-bar__label">内容</span>
-        <span class="document-status-bar__value">{{ folderStatsText }}</span>
-      </span>
-      <span class="document-status-bar__item">
-        <span class="document-status-bar__label">收藏</span>
-        <span class="document-status-bar__value">{{ favoriteText }}</span>
-      </span>
-      <span class="document-status-bar__item document-status-bar__item--share" :title="shareSourceText">
-        <span class="document-status-bar__label">共享</span>
-        <span class="document-status-bar__value">{{ shareSourceText }}</span>
-      </span>
-      <span v-if="businessText" class="document-status-bar__item document-status-bar__item--wide" :title="businessText">
-        <span class="document-status-bar__label">业务</span>
-        <span class="document-status-bar__value">{{ businessText }}</span>
-      </span>
+        <span class="document-status-bar__item document-status-bar__item--wide">
+          <span class="document-status-bar__label">内容</span>
+          <span class="document-status-bar__value">{{ folderStatsText }}</span>
+        </span>
+      </Tooltip>
+      <Tooltip
+        :title="favoriteText"
+        overlay-class-name="document-status-bar-tooltip"
+        placement="topLeft"
+      >
+        <span class="document-status-bar__item">
+          <span class="document-status-bar__label">收藏</span>
+          <span class="document-status-bar__value">{{ favoriteText }}</span>
+        </span>
+      </Tooltip>
+      <Tooltip
+        :title="shareSourceText"
+        overlay-class-name="document-status-bar-tooltip"
+        placement="topLeft"
+      >
+        <span class="document-status-bar__item document-status-bar__item--share">
+          <span class="document-status-bar__label">共享</span>
+          <span class="document-status-bar__value">{{ shareSourceText }}</span>
+        </span>
+      </Tooltip>
+      <Tooltip
+        v-if="businessText"
+        :title="businessText"
+        overlay-class-name="document-status-bar-tooltip"
+        placement="topLeft"
+      >
+        <span class="document-status-bar__item document-status-bar__item--wide">
+          <span class="document-status-bar__label">业务</span>
+          <span class="document-status-bar__value">{{ businessText }}</span>
+        </span>
+      </Tooltip>
       <span class="document-status-bar__item">
         <span class="document-status-bar__label">修改</span>
         <span class="document-status-bar__value">
@@ -282,14 +314,17 @@ function permissionText(permission?: string) {
         <span class="document-status-bar__label">删除人</span>
         <span class="document-status-bar__value">{{ statusDetail.deleteBy }}</span>
       </span>
-      <span
+      <Tooltip
         v-if="scope === 'trash' && statusDetail?.originalPath"
-        class="document-status-bar__item document-status-bar__item--share"
         :title="statusDetail.originalPath"
+        overlay-class-name="document-status-bar-tooltip"
+        placement="topLeft"
       >
-        <span class="document-status-bar__label">原路径</span>
-        <span class="document-status-bar__value">{{ statusDetail.originalPath }}</span>
-      </span>
+        <span class="document-status-bar__item document-status-bar__item--share">
+          <span class="document-status-bar__label">原路径</span>
+          <span class="document-status-bar__value">{{ statusDetail.originalPath }}</span>
+        </span>
+      </Tooltip>
     </template>
   </div>
 </template>
@@ -373,4 +408,18 @@ function permissionText(permission?: string) {
   flex: 0 0 auto;
 }
 
+:global(.document-status-bar-tooltip) {
+  max-width: min(640px, calc(100vw - 48px));
+}
+
+:global(.document-status-bar-tooltip .ant-tooltip-inner) {
+  max-height: 240px;
+  overflow: auto;
+  border-radius: 6px;
+  padding: 8px 10px;
+  line-height: 20px;
+  text-align: left;
+  white-space: normal;
+  word-break: break-word;
+}
 </style>

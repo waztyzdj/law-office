@@ -22,6 +22,8 @@ public class DocumentShareSourceVO {
 
     private String targetName;
 
+    private String targetSummary;
+
     private String permission;
 
     private String inheritedFromFileId;

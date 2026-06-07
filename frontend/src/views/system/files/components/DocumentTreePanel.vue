@@ -69,17 +69,6 @@ function handleSelect(keys: Key[], info: { node?: { key?: Key } }) {
   emit('treeSelect', keys, info);
 }
 
-function handleNodeClick(key: string, expanded?: boolean, isLeaf?: boolean) {
-  if (isLeaf) {
-    return;
-  }
-  const nextExpanded = !expanded;
-  const nextKeys = nextExpanded
-    ? Array.from(new Set([...props.expandedKeys, key]))
-    : props.expandedKeys.filter((item) => item !== key);
-  emit('treeExpand', nextKeys, { expanded: nextExpanded, node: { key } });
-}
-
 function handleAction(event: string, record?: DocumentFileInfo) {
   if (!record) {
     return;
@@ -117,6 +106,7 @@ function getTreeDeletableCount(key: string) {
       <Tree
         :key="treeRenderKey"
         :auto-expand-parent="false"
+        expand-action="dblclick"
         :expanded-keys="expandedKeys"
         block-node
         :selected-keys="selectedKeys"
@@ -124,7 +114,7 @@ function getTreeDeletableCount(key: string) {
         @expand="handleExpand"
         @select="handleSelect"
       >
-        <template #title="{ expanded, isLeaf, key, title }">
+        <template #title="{ key, title }">
           <Dropdown
             v-if="canShowTreeContextMenu(String(key))"
             :trigger="['contextmenu']"
@@ -136,7 +126,6 @@ function getTreeDeletableCount(key: string) {
               @dragstart="emit('treeDragStart', $event, String(key))"
               @dragover="emit('treeDragOver', $event, String(key))"
               @drop="emit('dropToTree', $event, String(key))"
-              @click="handleNodeClick(String(key), Boolean(expanded), Boolean(isLeaf))"
             >
               <IconifyIcon
                 :icon="getTreeNodeIcon(String(key))"
@@ -174,7 +163,6 @@ function getTreeDeletableCount(key: string) {
             class="document-tree-node"
             @dragover="emit('treeDragOver', $event, String(key))"
             @drop="emit('dropToTree', $event, String(key))"
-            @click="handleNodeClick(String(key), Boolean(expanded), Boolean(isLeaf))"
           >
             <IconifyIcon
               :icon="getTreeNodeIcon(String(key))"

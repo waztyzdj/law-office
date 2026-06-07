@@ -93,6 +93,7 @@ export interface DocumentShareSourceInfo {
   sourceType?: 'direct' | 'inherited' | 'space' | string;
   targetId?: string;
   targetName?: string;
+  targetSummary?: string;
   targetType?: DocumentShareTargetType;
 }
 
@@ -110,6 +111,7 @@ export interface DocumentStatusInfo {
   businessRecordName?: string;
   deleteBy?: string;
   directShares?: DocumentShareInfo[];
+  favoriteSource?: DocumentShareSourceInfo;
   file?: DocumentFileInfo;
   folderStats?: DocumentFolderStatsInfo;
   inheritedShareSource?: DocumentShareSourceInfo;
