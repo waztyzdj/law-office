@@ -54,10 +54,7 @@ public class JwtAuthFilter extends OncePerRequestFilter {
             "/api/favicon.ico",
             "/api/document/files/onlyoffice/callback/",
             "/api/document/files/onlyoffice/download/",
-            "/api/document/files/onlyoffice/history/download/",
-            "/api/files/document/onlyoffice/callback/",
-            "/api/files/document/onlyoffice/download/",
-            "/api/files/document/onlyoffice/history/download/"
+            "/api/document/files/onlyoffice/history/download/"
     );
 
     @Override

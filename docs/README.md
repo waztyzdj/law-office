@@ -30,5 +30,6 @@
 - 数据库说明：[03-database/database-overview.md](03-database/database-overview.md)
 - 接口总览：[04-api/api-overview.md](04-api/api-overview.md)
 - 系统管理模块：[05-modules/system/README.md](05-modules/system/README.md)
+- 文档中心模块：[05-modules/document/README.md](05-modules/document/README.md)
 - 本地开发：[06-deployment/local-development.md](06-deployment/local-development.md)
 - 编码规范：[07-quality/coding-standards.md](07-quality/coding-standards.md)

@@ -5,7 +5,7 @@ import { computed, onBeforeUnmount, ref } from 'vue';
 
 import { Empty, Modal, Spin, message } from 'ant-design-vue';
 
-import { downloadDocumentThumbnail } from '#/api/document';
+import { downloadDocumentImagePreview } from '#/api/document';
 
 const openState = ref(false);
 const loading = ref(false);
@@ -15,6 +15,9 @@ const imageUrl = ref('');
 let imageLoadVersion = 0;
 
 const modalTitle = computed(() => currentRecord.value?.fileName || '图片预览');
+const emit = defineEmits<{
+  previewed: [record: DocumentFileInfo];
+}>();
 
 function revokeImageUrl() {
   if (imageUrl.value) {
@@ -34,11 +37,12 @@ async function open(record: DocumentFileInfo) {
   loading.value = true;
   const version = ++imageLoadVersion;
   try {
-    const blob = await downloadDocumentThumbnail(record.id);
+    const blob = await downloadDocumentImagePreview(record.id);
     if (version !== imageLoadVersion) {
       return;
     }
     imageUrl.value = URL.createObjectURL(blob);
+    emit('previewed', record);
   } catch (error) {
     if (version !== imageLoadVersion) {
       return;

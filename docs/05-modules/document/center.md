@@ -1,15 +1,16 @@
-﻿# 文件管理
+﻿# 文档中心
 
 ## 功能说明
 
-文件管理用于维护文件元数据和业务关联，并与 MinIO 对象存储能力配合。
-第一期文档中心在此基础上提供用户个人文档、租户内共享和回收站能力。
+文档中心用于提供用户个人文档、业务文档、租户/部门共享、共享给我、我的共享、收藏、回收站和 ONLYOFFICE 在线预览编辑能力。通用文件元数据、业务关联和 MinIO 对象存储仍由系统文件基础设施提供。
 
 ## 代码入口
 
-- Controller：`backend/src/main/java/com/lawoffice/system/controller/SysFilesController.java`
-- Service：`backend/src/main/java/com/lawoffice/system/service/impl/SysFilesServiceImpl.java`
-- Entity：`backend/src/main/java/com/lawoffice/system/entity/SysFiles.java`
+- 文档中心 Controller：`backend/src/main/java/com/lawoffice/document/controller/DocumentCenterController.java`
+- ONLYOFFICE Controller：`backend/src/main/java/com/lawoffice/document/controller/OnlyOfficeDocumentController.java`
+- 文档中心 Service：`backend/src/main/java/com/lawoffice/document/service/impl/DocumentCenterServiceImpl.java`
+- 通用文件基础设施：`backend/src/main/java/com/lawoffice/system/service/impl/SysFilesServiceImpl.java`
+- 前端页面：`frontend/src/views/document/center`
 
 ## 数据表
 
@@ -20,8 +21,8 @@
 
 ## 接口前缀
 
-- `/files`
 - `/document/files`
+- `/document/files/onlyoffice`
 
 ## 关键规则
 

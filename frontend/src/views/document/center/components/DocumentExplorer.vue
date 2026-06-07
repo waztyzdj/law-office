@@ -56,6 +56,7 @@ interface Props {
   isGlobalSearch?: boolean;
   scope: DocumentScope;
   sortState: DocumentSortState;
+  statusRefreshKey?: number;
   viewMode?: DocumentViewMode;
 }
 
@@ -454,6 +455,7 @@ onBeforeUnmount(() => {
         :is-global-search="isGlobalSearch"
         :scope="scope"
         :selected-records="selectedRecords"
+        :status-refresh-key="statusRefreshKey"
       />
     </div>
       <template #overlay>

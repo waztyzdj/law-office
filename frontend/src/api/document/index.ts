@@ -276,6 +276,9 @@ export const downloadDocument = (fileId: string) =>
 export const downloadDocumentThumbnail = (fileId: string) =>
   requestClient.download<Blob>(`${DOCUMENT_FILES_API_PREFIX}/thumbnail/${fileId}`);
 
+export const downloadDocumentImagePreview = (fileId: string) =>
+  requestClient.download<Blob>(`${DOCUMENT_FILES_API_PREFIX}/preview/image/${fileId}`);
+
 export const getOnlyOfficePreviewConfig = (
   fileId: string,
   mode: OnlyOfficePreviewMode = 'view',

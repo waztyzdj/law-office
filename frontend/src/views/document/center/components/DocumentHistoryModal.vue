@@ -332,7 +332,7 @@ defineExpose({
     v-model:open="openState"
     class="document-history-modal"
     destroy-on-close
-    :body-style="{ height: '540px', overflow: 'auto', padding: '16px 24px' }"
+    :body-style="{ height: '540px', overflow: 'auto', padding: '8px 0 12px' }"
     :footer="null"
     :title="modalTitle"
     width="1040px"
@@ -346,6 +346,7 @@ defineExpose({
       :pagination="false"
       :scroll="tableScroll"
       :show-card="false"
+      :show-toolbar="false"
       row-key="id"
       size="small"
       @change="handleTableChange"

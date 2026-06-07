@@ -21,7 +21,7 @@
 
 ## 文档中心
 
-文档中心接口使用 `/document/files` 前缀，基于 `sys_files` 保存文档和文件夹，基于 `sys_file_acl` 保存共享授权。旧 `/files/document` 路径仅作为过渡兼容别名保留，新代码应调用 `/document/files`。
+文档中心接口使用 `/document/files` 前缀，基于 `sys_files` 保存文档和文件夹，基于 `sys_file_acl` 保存共享授权。
 
 核心接口：
 
@@ -46,6 +46,7 @@
 - `GET /document/files/shares/{fileId}`：查询共享目标。
 - `POST /document/files/share/revoke/{aclId}`：撤销单条共享。
 - `GET /document/files/download/{fileId}`：按文档中心权限下载。
+- `GET /document/files/thumbnail/{fileId}`：按文档中心读取权限返回图片缩略图，不增加阅读次数；`GET /document/files/preview/image/{fileId}`：按文档中心读取权限返回图片预览内容，并增加阅读次数。
 
 请求约定：
 - `/upload`、`/folder`、`/move`、`/copy` 可传 `scope` 和 `shareTargetType` 标识当前文档中心根目录；`scope=shared` 且未传 `shareTargetType` 表示“共享给我”。
@@ -53,7 +54,7 @@
 - “共享给我”的拖拽归类不修改原文件 `sys_files.parent_id`，而是用 `sys_file_relation` 记录当前用户自己的整理位置。
 - “我的共享”根目录展示本人直接共享出去的文件/文件夹和本人创建的共享整理文件夹；进入已共享文件夹后按原文件夹层级展示直接子级，子文件不需要逐条写共享授权。
 - 回收站中文件夹只允许恢复或彻底删除；文件只允许预览、下载、恢复或彻底删除。删除态文件的预览和下载仅允许文件所有者访问，在线编辑接口拒绝删除态文件。
-- 租户共享、部门共享、共享给我、我的共享和我的收藏的前端右键菜单、拖拽、多选限制属于交互层规则；实际共享项、实际收藏项及其子级继承可见的区别见 `docs/05-modules/system/files.md`。
+- 租户共享、部门共享、共享给我、我的共享和我的收藏的前端右键菜单、拖拽、多选限制属于交互层规则；实际共享项、实际收藏项及其子级继承可见的区别见 `docs/05-modules/document/center.md`。
 - “业务文档”是与“我的文档”平行的独立分类，不允许在文档中心上传、重命名、移动、复制或删除业务附件；消息附件等业务文档按业务模块访问权展示，例如消息发件人和收件人均可查看。业务文档根目录返回 `store_type=business_module_view` 的虚拟业务模块目录，模块下返回 `store_type=business_record_view` 的虚拟业务数据目录，业务数据目录下展示附件。历史数据中如存在 `store_type=business_view` 的个人整理文件夹和 `sys_file_relation` 的 `relation_type=3`、`biz_type=document_business:<userId>` 个人归类关系，仅用于兼容只读展示，不再通过文档中心新增或修改归类。业务附件在业务数据解除关联后才可由普通文档流程清理。
 - 用户头像等系统内部附件不返回到业务文档分类，避免把非业务协作文档暴露在通用文档中心。
 - 新业务模块接入业务文档时，附件仍通过 `sys_file_relation.biz_type/biz_id` 绑定；业务模块需要实现 `IBusinessDocumentProvider`，提供模块名称、业务数据目录名称和当前用户访问校验。文档中心核心服务只依赖该 Provider 接口，不为每个业务模块写定制分支。

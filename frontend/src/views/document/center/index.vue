@@ -50,6 +50,7 @@ const shareDrawerRef = ref<InstanceType<typeof DocumentShareDrawer>>();
 const historyModalRef = ref<InstanceType<typeof DocumentHistoryModal>>();
 const imagePreviewModalRef = ref<InstanceType<typeof DocumentImagePreviewModal>>();
 const previewModalRef = ref<InstanceType<typeof DocumentOnlyOfficePreviewModal>>();
+const statusRefreshKey = ref(0);
 const treeInitialized = ref(false);
 const documentShellRef = ref<HTMLElement>();
 const treePanelWidth = ref(readStoredTreePanelWidth());
@@ -356,6 +357,10 @@ function canCreateInsideFolder(record?: DocumentFileInfo) {
     return false;
   }
   return canManageFolder(record);
+}
+
+function handleDocumentPreviewed() {
+  statusRefreshKey.value += 1;
 }
 
 const documentActions = useDocumentActions({
@@ -689,6 +694,7 @@ onBeforeUnmount(() => {
           :personalize-shared="isSharedInboxScope"
           :scope="scope"
           :sort-state="documentSortState"
+          :status-refresh-key="statusRefreshKey"
           :view-mode="documentViewMode"
           @action="handleAction"
           @batch-action="handleBatchAction"
@@ -762,7 +768,7 @@ onBeforeUnmount(() => {
       @preview="(version) => previewModalRef?.openHistoryVersion(version)"
       @restored="reloadAll"
     />
-    <DocumentImagePreviewModal ref="imagePreviewModalRef" />
+    <DocumentImagePreviewModal ref="imagePreviewModalRef" @previewed="handleDocumentPreviewed" />
     <DocumentOnlyOfficePreviewModal ref="previewModalRef" />
   </div>
 </template>

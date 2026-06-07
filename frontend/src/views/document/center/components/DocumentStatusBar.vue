@@ -27,6 +27,7 @@ interface Props {
   isGlobalSearch?: boolean;
   scope: DocumentScope;
   selectedRecords: DocumentFileInfo[];
+  statusRefreshKey?: number;
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -143,8 +144,8 @@ const businessText = computed(() => {
 });
 
 watch(
-  () => singleRecord.value?.id,
-  async (id) => {
+  () => [singleRecord.value?.id, props.statusRefreshKey] as const,
+  async ([id]) => {
     const seq = ++requestSeq;
     statusDetail.value = undefined;
     const record = singleRecord.value;

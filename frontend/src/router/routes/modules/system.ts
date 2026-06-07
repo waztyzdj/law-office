@@ -56,15 +56,6 @@ const routes: RouteRecordRaw[] = [
         },
       },
       {
-        name: 'SystemFiles',
-        path: '/system/files',
-        component: () => import('#/views/document/center/index.vue'),
-        meta: {
-          icon: 'lucide:folder-open',
-          title: '文件中心',
-        },
-      },
-      {
         name: 'SystemCategory',
         path: '/system/category',
         component: () => import('#/views/system/category/index.vue'),

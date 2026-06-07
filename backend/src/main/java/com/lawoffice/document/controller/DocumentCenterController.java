@@ -46,7 +46,7 @@ import java.util.Map;
 import java.util.Set;
 
 @RestController
-@RequestMapping({"/document/files", "/files/document"})
+@RequestMapping("/document/files")
 @RequiredArgsConstructor
 @Tag(name = "文档中心", description = "文档中心浏览、共享、回收站和在线文档")
 public class DocumentCenterController {
@@ -246,11 +246,28 @@ public class DocumentCenterController {
             HttpServletRequest request,
             HttpServletResponse response) throws IOException {
         DocumentFileVO file = documentCenterService.checkDocumentRead(fileId, getUsername(request));
+        writeDocumentImage(fileId, file, response);
+    }
+
+    @GetMapping("/preview/image/{fileId}")
+    @Operation(summary = "预览文档中心图片", description = "按文档中心读取权限返回图片内容，并记录阅读次数")
+    public void previewDocumentImage(
+            @PathVariable String fileId,
+            HttpServletRequest request,
+            HttpServletResponse response) throws IOException {
+        DocumentFileVO file = documentCenterService.checkDocumentPreview(fileId, getUsername(request));
+        writeDocumentImage(fileId, file, response);
+    }
+
+    private void writeDocumentImage(
+            String fileId,
+            DocumentFileVO file,
+            HttpServletResponse response) throws IOException {
         String fileType = file.getFileType() == null ? "" : file.getFileType().toLowerCase(Locale.ROOT);
         String extension = resolveExtension(file.getFileName());
         if ("svg".equals(extension) || (!IMAGE_PREVIEW_EXTENSIONS.contains(extension)
                 && !"image".equals(fileType) && !fileType.startsWith("image/"))) {
-            throw new IllegalArgumentException("仅图片文件支持缩略图预览");
+            throw new IllegalArgumentException("仅图片文件支持预览");
         }
         response.setCharacterEncoding(StandardCharsets.UTF_8.name());
         response.setContentType(resolveImageContentType(file.getFileName()));
