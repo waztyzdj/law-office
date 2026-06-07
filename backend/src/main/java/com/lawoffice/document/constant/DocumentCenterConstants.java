@@ -48,9 +48,6 @@ public final class DocumentCenterConstants {
     public static final String PERMISSION_UPDATE = "update";
     public static final String PERMISSION_MANAGE = "manage";
     public static final String VERSION_TYPE_UPLOAD = "upload";
-    public static final Set<String> INITIAL_HISTORY_EXTENSIONS = Set.of(
-            "doc", "docx", "pdf", "ppt", "pptx", "xls", "xlsx"
-    );
 
     public static final int TREE_PREFETCH_PARENT_LIMIT = 100;
     public static final int TREE_PREFETCH_PAGE_SIZE = 500;

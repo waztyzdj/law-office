@@ -46,7 +46,7 @@ import java.util.Map;
 import java.util.Set;
 
 @RestController
-@RequestMapping("/files/document")
+@RequestMapping({"/document/files", "/files/document"})
 @RequiredArgsConstructor
 @Tag(name = "文档中心", description = "文档中心浏览、共享、回收站和在线文档")
 public class DocumentCenterController {

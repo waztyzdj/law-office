@@ -52,6 +52,9 @@ public class JwtAuthFilter extends OncePerRequestFilter {
             "/api/webjars",
             "/api/static",
             "/api/favicon.ico",
+            "/api/document/files/onlyoffice/callback/",
+            "/api/document/files/onlyoffice/download/",
+            "/api/document/files/onlyoffice/history/download/",
             "/api/files/document/onlyoffice/callback/",
             "/api/files/document/onlyoffice/download/",
             "/api/files/document/onlyoffice/history/download/"

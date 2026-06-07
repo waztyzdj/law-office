@@ -25,6 +25,9 @@ public final class SysFileConstants {
     public static final Set<String> OFFICE_COMPAT_EXTENSIONS = Set.of("dps", "et", "odp", "ods", "odt", "wps");
     public static final Set<String> IMAGE_EXTENSIONS = Set.of("bmp", "gif", "jpeg", "jpg", "png", "webp");
     public static final Set<String> VIDEO_EXTENSIONS = Set.of("avi", "flv", "mkv", "mov", "mp4", "wmv");
+    public static final Set<String> INITIAL_HISTORY_EXTENSIONS = Set.of(
+            "doc", "docx", "pdf", "ppt", "pptx", "xls", "xlsx"
+    );
     public static final Set<String> ALLOWED_UPLOAD_EXTENSIONS = Set.of(
             "avi", "bmp", "csv", "doc", "docx", "dps", "et", "flv", "gif", "jpeg", "jpg",
             "md", "mkv", "mov", "mp4", "odp", "ods", "odt", "pdf", "png", "ppt", "pptx",

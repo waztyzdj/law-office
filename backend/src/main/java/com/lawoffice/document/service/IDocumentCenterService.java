@@ -24,7 +24,7 @@ import java.util.Map;
 /**
  * 文档中心业务入口，承载浏览、共享、回收站、状态栏和在线编辑等能力。
  * <p>
- * 接口路径仍由 {@link ISysFilesService} 暴露，当前服务用于把文档中心逻辑从通用文件服务中解耦。
+ * Controller 层通过文档中心独立路由暴露接口，通用文件服务只保留上传、绑定和下载等基础能力。
  */
 public interface IDocumentCenterService {
 

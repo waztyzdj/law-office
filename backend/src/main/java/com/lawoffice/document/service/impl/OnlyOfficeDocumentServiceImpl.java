@@ -14,8 +14,8 @@ import com.lawoffice.system.entity.SysFileVersion;
 import com.lawoffice.system.entity.User;
 import com.lawoffice.system.mapper.SysFileVersionMapper;
 import com.lawoffice.system.mapper.UserMapper;
+import com.lawoffice.document.service.IDocumentCenterService;
 import com.lawoffice.document.service.IOnlyOfficeDocumentService;
-import com.lawoffice.system.service.ISysFilesService;
 import com.lawoffice.document.vo.DocumentFileVO;
 import com.lawoffice.document.vo.OnlyOfficeHistoryVersionVO;
 import com.lawoffice.document.vo.OnlyOfficePreviewVO;
@@ -74,7 +74,7 @@ public class OnlyOfficeDocumentServiceImpl implements IOnlyOfficeDocumentService
     private static final Duration CALLBACK_DOWNLOAD_TIMEOUT = Duration.ofMinutes(2);
 
     private final OnlyOfficeProperties properties;
-    private final ISysFilesService sysFilesService;
+    private final IDocumentCenterService documentCenterService;
     private final UserMapper userMapper;
     private final SysFileVersionMapper sysFileVersionMapper;
     private final MinioUtils minioUtils;
@@ -86,8 +86,8 @@ public class OnlyOfficeDocumentServiceImpl implements IOnlyOfficeDocumentService
         assertEnabled();
         String editorMode = normalizeMode(mode);
         DocumentFileVO file = MODE_EDIT.equals(editorMode)
-                ? sysFilesService.checkDocumentEdit(fileId, username)
-                : sysFilesService.checkDocumentPreview(fileId, username);
+                ? documentCenterService.checkDocumentEdit(fileId, username)
+                : documentCenterService.checkDocumentPreview(fileId, username);
         String extension = resolveSupportedExtension(file.getFileName());
         if (MODE_EDIT.equals(editorMode) && !EDITABLE_EXTENSIONS.contains(extension)) {
             throw new IllegalArgumentException("Current file type does not support online editing");
@@ -100,7 +100,7 @@ public class OnlyOfficeDocumentServiceImpl implements IOnlyOfficeDocumentService
         document.put("fileType", extension);
         document.put("key", buildDocumentKey(file));
         document.put("title", file.getFileName());
-        document.put("url", joinUrl(properties.getServerBaseUrl(), "/files/document/onlyoffice/download/" + downloadToken));
+        document.put("url", joinUrl(properties.getServerBaseUrl(), "/document/files/onlyoffice/download/" + downloadToken));
         document.put("permissions", Map.of(
                 "comment", MODE_EDIT.equals(editorMode),
                 "copy", true,
@@ -112,7 +112,7 @@ public class OnlyOfficeDocumentServiceImpl implements IOnlyOfficeDocumentService
 
         Map<String, Object> editorConfig = buildEditorConfig(username, userId, editorMode);
         if (MODE_EDIT.equals(editorMode)) {
-            editorConfig.put("callbackUrl", joinUrl(properties.getServerBaseUrl(), "/files/document/onlyoffice/callback/" + callbackToken));
+            editorConfig.put("callbackUrl", joinUrl(properties.getServerBaseUrl(), "/document/files/onlyoffice/callback/" + callbackToken));
             editorConfig.put("coEditing", Map.of(
                     "change", false,
                     "mode", "fast"
@@ -157,7 +157,7 @@ public class OnlyOfficeDocumentServiceImpl implements IOnlyOfficeDocumentService
             downloaded = downloadCallbackFile(req.getUrl());
             TenantContextHolder.setCurrentTenantId(context.tenantId());
             try (InputStream inputStream = Files.newInputStream(downloaded.path())) {
-                sysFilesService.saveDocumentEdit(
+                documentCenterService.saveDocumentEdit(
                         context.fileId(),
                         context.username(),
                         inputStream,
@@ -179,7 +179,7 @@ public class OnlyOfficeDocumentServiceImpl implements IOnlyOfficeDocumentService
     @Override
     public List<OnlyOfficeHistoryVersionVO> listHistory(String username, String fileId) {
         assertEnabled();
-        sysFilesService.checkDocumentRead(fileId, username);
+        documentCenterService.checkDocumentRead(fileId, username);
         return sysFileVersionMapper.selectList(Wrappers.lambdaQuery(SysFileVersion.class)
                         .eq(SysFileVersion::getFileId, fileId)
                         .eq(SysFileVersion::getDeleteFlag, 0)
@@ -194,7 +194,7 @@ public class OnlyOfficeDocumentServiceImpl implements IOnlyOfficeDocumentService
     public OnlyOfficePreviewVO buildHistoryPreviewConfig(String username, String userId, String versionId) {
         assertEnabled();
         SysFileVersion version = getActiveVersion(versionId);
-        DocumentFileVO file = sysFilesService.checkDocumentRead(version.getFileId(), username);
+        DocumentFileVO file = documentCenterService.checkDocumentRead(version.getFileId(), username);
         String fileName = StringUtils.hasText(version.getFileName()) ? version.getFileName() : file.getFileName();
         String extension = resolveSupportedExtension(fileName);
         String documentType = resolveDocumentType(extension);
@@ -204,7 +204,7 @@ public class OnlyOfficeDocumentServiceImpl implements IOnlyOfficeDocumentService
         document.put("fileType", extension);
         document.put("key", buildHistoryDocumentKey(version));
         document.put("title", fileName + " V" + version.getVersionNo());
-        document.put("url", joinUrl(properties.getServerBaseUrl(), "/files/document/onlyoffice/history/download/" + downloadToken));
+        document.put("url", joinUrl(properties.getServerBaseUrl(), "/document/files/onlyoffice/history/download/" + downloadToken));
         document.put("permissions", Map.of(
                 "comment", false,
                 "copy", true,
@@ -251,9 +251,9 @@ public class OnlyOfficeDocumentServiceImpl implements IOnlyOfficeDocumentService
     public OnlyOfficeHistoryVersionVO restoreHistoryVersion(String username, String versionId) {
         assertEnabled();
         SysFileVersion source = getActiveVersion(versionId);
-        DocumentFileVO file = sysFilesService.checkDocumentEdit(source.getFileId(), username);
+        DocumentFileVO file = documentCenterService.checkDocumentEdit(source.getFileId(), username);
         try (InputStream inputStream = minioUtils.downloadFile(source.getObjectName())) {
-            sysFilesService.saveDocumentEdit(
+            documentCenterService.saveDocumentEdit(
                     source.getFileId(),
                     username,
                     inputStream,
@@ -274,7 +274,7 @@ public class OnlyOfficeDocumentServiceImpl implements IOnlyOfficeDocumentService
         if (latest != null && downloaded.checksum().equals(latest.getChecksum())) {
             return;
         }
-        DocumentFileVO file = sysFilesService.checkDocumentRead(context.fileId(), context.username());
+        DocumentFileVO file = documentCenterService.checkDocumentRead(context.fileId(), context.username());
         int versionNo = latest == null ? 1 : latest.getVersionNo() + 1;
         String contentType = safeContentType(downloaded.contentType());
         String versionFileName = buildVersionFileName(file.getFileName(), versionNo);

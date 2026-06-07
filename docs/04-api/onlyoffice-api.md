@@ -1,11 +1,11 @@
-# ONLYOFFICE 在线预览与编辑接口
+﻿# ONLYOFFICE 在线预览与编辑接口
 
 本文记录文档中心接入 ONLYOFFICE Docs 的接口。当前支持 PDF、Word、Excel、PPT 在线预览，支持 Word、Excel、PPT 在线协同编辑，并支持在线编辑历史版本查看与恢复。
 
 ## 生成编辑器配置
 
 - 方法：`GET`
-- 路径：`/files/document/onlyoffice/config/{fileId}`
+- 路径：`/document/files/onlyoffice/config/{fileId}`
 - 查询参数：`mode=view|edit`，默认 `view`
 - 认证：需要当前登录 JWT
 - 说明：后端按文档中心权限生成 `DocsAPI.DocEditor` 初始化配置。
@@ -40,7 +40,7 @@
 ## 文件回源
 
 - 方法：`GET`
-- 路径：`/files/document/onlyoffice/download/{token}`
+- 路径：`/document/files/onlyoffice/download/{token}`
 - 认证：不使用浏览器 JWT，仅接受后端生成的短期 token
 - 调用方：ONLYOFFICE Document Server
 - 说明：Document Server 使用该接口拉取受保护文件内容。token 包含文件 ID、租户 ID 和过期时间。
@@ -48,7 +48,7 @@
 ## 保存回调
 
 - 方法：`POST`
-- 路径：`/files/document/onlyoffice/callback/{token}`
+- 路径：`/document/files/onlyoffice/callback/{token}`
 - 认证：不使用浏览器 JWT，仅接受后端生成的编辑回调 token
 - 调用方：ONLYOFFICE Document Server
 - 响应：必须返回 ONLYOFFICE 约定 JSON，例如 `{"error":0}`
@@ -64,7 +64,7 @@
 ## 历史版本列表
 
 - 方法：`GET`
-- 路径：`/files/document/onlyoffice/history/{fileId}`
+- 路径：`/document/files/onlyoffice/history/{fileId}`
 - 认证：需要当前登录 JWT
 - 说明：校验读取权限后返回该文件的历史版本，按版本号倒序。
 
@@ -81,19 +81,20 @@
 ## 历史版本预览
 
 - 方法：`GET`
-- 路径：`/files/document/onlyoffice/history/config/{versionId}`
+- 路径：`/document/files/onlyoffice/history/config/{versionId}`
 - 认证：需要当前登录 JWT
 - 说明：校验当前文件读取权限后返回 ONLYOFFICE 只读预览配置。历史版本不会返回 `callbackUrl`，`document.permissions.edit=false`，不允许编辑历史版本本身。
 
 历史版本回源：
 - 方法：`GET`
-- 路径：`/files/document/onlyoffice/history/download/{token}`
+- 路径：`/document/files/onlyoffice/history/download/{token}`
 - 认证：不使用浏览器 JWT，仅接受后端生成的短期历史版本回源 token。
 - 调用方：ONLYOFFICE Document Server。
 
 ## 历史版本恢复
 
 - 方法：`POST`
-- 路径：`/files/document/onlyoffice/history/{versionId}/restore`
+- 路径：`/document/files/onlyoffice/history/{versionId}/restore`
 - 认证：需要当前登录 JWT
 - 说明：校验当前文件编辑权限后，把历史版本内容覆盖到当前文件，并新增一条 `restore` 类型历史版本记录。
+

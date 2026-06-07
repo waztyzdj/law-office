@@ -1,4 +1,4 @@
-# 文件与导入导出接口
+﻿# 文件与导入导出接口
 
 ## 通用 Excel 导入
 
@@ -21,31 +21,31 @@
 
 ## 文档中心
 
-文档中心接口复用 `/files/document` 前缀，基于 `sys_files` 保存文档和文件夹，基于 `sys_file_acl` 保存共享授权。
+文档中心接口使用 `/document/files` 前缀，基于 `sys_files` 保存文档和文件夹，基于 `sys_file_acl` 保存共享授权。旧 `/files/document` 路径仅作为过渡兼容别名保留，新代码应调用 `/document/files`。
 
 核心接口：
 
-- `POST /files/document/page`：分页查询文档，`scope` 支持 `all`、`my`、`business`、`shared`、`sharedByMe`、`starred`、`trash`；`scope=all` 用于全局搜索本人有查询权限的未删除文件，`scope=business` 用于按“业务模块虚拟目录 -> 业务数据虚拟目录 -> 附件/个人整理文件夹”查询当前用户有业务访问权且仍有关联关系的业务文档，`scope=shared` 时可用 `shareTargetType`、`shareTargetId` 过滤租户共享或部门共享，并包含本人共享到该目标的文件；`scope=starred` 根目录返回本人收藏的未删除文件和文件夹，传 `parentId` 时浏览该收藏文件夹的直接子级；`scope=trash` 根目录只返回已删除文件夹树的顶层节点，可传 `parentId` 浏览已删除文件夹的直接子级。
-- `POST /files/document/page` 可传 `folderOnly=true`，用于左侧树等只需要文件夹节点的场景；后端仅返回文件夹并按文件夹子节点计算 `hasChild`，普通右侧列表不传该参数。
-- `POST /files/document/tree/batch`：批量加载左侧树多个节点的下一层文件夹。请求体为 `{ "items": [{ "key": "my", "scope": "my", "parentId": "...", "shareTargetType": "tenant", "shareTargetId": "..." }] }`；响应为 `{ [key]: DocumentFileVO[] }`。前端首次进入文档中心时用该接口一次加载多个根分类的首层目录，避免多个 `/document/page` 请求返回顺序不同造成树闪动。
-- `POST /files/document/tree/prefetch`：批量预取左侧树多个父级目录的下一层文件夹。请求体为 `{ "parentIds": ["..."], "scope": "my", "shareTargetType": "tenant", "shareTargetId": "..." }`，一次最多处理 100 个父级目录；响应为 `{ [parentId]: DocumentFileVO[] }`。该接口复用文档分页查询的权限和 scope 规则，只用于前端树展开后的下一级缓存预热，不改变树的展开状态。
-- `POST /files/document/upload`：上传文档中心文件。
-- `POST /files/document/folder`：创建文件夹。
-- `POST /files/document/rename`：重命名本人文档。
-- `POST /files/document/move`：移动本人文档。
-- `POST /files/document/batch-move`：批量移动本人文档或文件夹，任一文件校验失败时整体回滚。请求体：`{ "ids": ["..."], "parentId": "...", "scope": "my", "shareTargetType": "depart" }`。
-- `POST /files/document/copy`：复制当前用户可下载的文档或文件夹到目标目录，文件内容会复制为新的对象存储文件。
-- `POST /files/document/delete/{fileId}`：移入回收站。
-- `POST /files/document/batch-delete`：批量移入回收站，任一文件校验失败时整体回滚。请求体：`{ "ids": ["..."] }`。
-- `POST /files/document/restore/{fileId}`：从回收站恢复。
-- `POST /files/document/batch-restore`：批量从回收站恢复，任一文件校验失败时整体回滚。请求体：`{ "ids": ["..."] }`。
-- `POST /files/document/purge/{fileId}`：从回收站彻底删除本人拥有的文档及其子级，同时清理文件授权、个人归类关系、历史版本记录和对象存储文件。
-- `POST /files/document/trash/clear`：清空本人回收站。
-- `POST /files/document/star/{fileId}`：切换收藏状态。
-- `POST /files/document/share`：覆盖保存共享目标。
-- `GET /files/document/shares/{fileId}`：查询共享目标。
-- `POST /files/document/share/revoke/{aclId}`：撤销单条共享。
-- `GET /files/document/download/{fileId}`：按文档中心权限下载。
+- `POST /document/files/page`：分页查询文档，`scope` 支持 `all`、`my`、`business`、`shared`、`sharedByMe`、`starred`、`trash`；`scope=all` 用于全局搜索本人有查询权限的未删除文件，`scope=business` 用于按“业务模块虚拟目录 -> 业务数据虚拟目录 -> 附件/个人整理文件夹”查询当前用户有业务访问权且仍有关联关系的业务文档，`scope=shared` 时可用 `shareTargetType`、`shareTargetId` 过滤租户共享或部门共享，并包含本人共享到该目标的文件；`scope=starred` 根目录返回本人收藏的未删除文件和文件夹，传 `parentId` 时浏览该收藏文件夹的直接子级；`scope=trash` 根目录只返回已删除文件夹树的顶层节点，可传 `parentId` 浏览已删除文件夹的直接子级。
+- `POST /document/files/page` 可传 `folderOnly=true`，用于左侧树等只需要文件夹节点的场景；后端仅返回文件夹并按文件夹子节点计算 `hasChild`，普通右侧列表不传该参数。
+- `POST /document/files/tree/batch`：批量加载左侧树多个节点的下一层文件夹。请求体为 `{ "items": [{ "key": "my", "scope": "my", "parentId": "...", "shareTargetType": "tenant", "shareTargetId": "..." }] }`；响应为 `{ [key]: DocumentFileVO[] }`。前端首次进入文档中心时用该接口一次加载多个根分类的首层目录，避免多个 `/document/page` 请求返回顺序不同造成树闪动。
+- `POST /document/files/tree/prefetch`：批量预取左侧树多个父级目录的下一层文件夹。请求体为 `{ "parentIds": ["..."], "scope": "my", "shareTargetType": "tenant", "shareTargetId": "..." }`，一次最多处理 100 个父级目录；响应为 `{ [parentId]: DocumentFileVO[] }`。该接口复用文档分页查询的权限和 scope 规则，只用于前端树展开后的下一级缓存预热，不改变树的展开状态。
+- `POST /document/files/upload`：上传文档中心文件。
+- `POST /document/files/folder`：创建文件夹。
+- `POST /document/files/rename`：重命名本人文档。
+- `POST /document/files/move`：移动本人文档。
+- `POST /document/files/batch-move`：批量移动本人文档或文件夹，任一文件校验失败时整体回滚。请求体：`{ "ids": ["..."], "parentId": "...", "scope": "my", "shareTargetType": "depart" }`。
+- `POST /document/files/copy`：复制当前用户可下载的文档或文件夹到目标目录，文件内容会复制为新的对象存储文件。
+- `POST /document/files/delete/{fileId}`：移入回收站。
+- `POST /document/files/batch-delete`：批量移入回收站，任一文件校验失败时整体回滚。请求体：`{ "ids": ["..."] }`。
+- `POST /document/files/restore/{fileId}`：从回收站恢复。
+- `POST /document/files/batch-restore`：批量从回收站恢复，任一文件校验失败时整体回滚。请求体：`{ "ids": ["..."] }`。
+- `POST /document/files/purge/{fileId}`：从回收站彻底删除本人拥有的文档及其子级，同时清理文件授权、个人归类关系、历史版本记录和对象存储文件。
+- `POST /document/files/trash/clear`：清空本人回收站。
+- `POST /document/files/star/{fileId}`：切换收藏状态。
+- `POST /document/files/share`：覆盖保存共享目标。
+- `GET /document/files/shares/{fileId}`：查询共享目标。
+- `POST /document/files/share/revoke/{aclId}`：撤销单条共享。
+- `GET /document/files/download/{fileId}`：按文档中心权限下载。
 
 请求约定：
 - `/upload`、`/folder`、`/move`、`/copy` 可传 `scope` 和 `shareTargetType` 标识当前文档中心根目录；`scope=shared` 且未传 `shareTargetType` 表示“共享给我”。
@@ -64,3 +64,4 @@
 - 下载和导出不得泄露敏感字段。
 - 对象存储 key 由服务端生成。
 - 文档中心所有查询、下载、共享和恢复操作必须校验 `tenant_id`、文件状态和访问授权，租户共享使用 `target_type=tenant` 且 `target_id` 为当前租户 ID。
+

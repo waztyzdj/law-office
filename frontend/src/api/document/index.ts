@@ -1,6 +1,8 @@
 import { requestClient } from '#/framework/api/request';
 import type { BasePageReq } from '#/framework/api/base.api';
 
+const DOCUMENT_FILES_API_PREFIX = '/document/files';
+
 export type DocumentScope =
   | 'all'
   | 'business'
@@ -148,17 +150,17 @@ export const pageDocuments = (params: DocumentPageReq) =>
     pageSize: number;
     records: DocumentFileInfo[];
     total: number;
-  }>('/files/document/page', params);
+  }>(`${DOCUMENT_FILES_API_PREFIX}/page`, params);
 
 export const prefetchDocumentTree = (params: DocumentTreePrefetchReq) =>
   requestClient.post<Record<string, DocumentFileInfo[]>>(
-    '/files/document/tree/prefetch',
+    `${DOCUMENT_FILES_API_PREFIX}/tree/prefetch`,
     params,
   );
 
 export const batchLoadDocumentTree = (params: DocumentTreeBatchReq) =>
   requestClient.post<Record<string, DocumentFileInfo[]>>(
-    '/files/document/tree/batch',
+    `${DOCUMENT_FILES_API_PREFIX}/tree/batch`,
     params,
   );
 
@@ -185,7 +187,7 @@ export const uploadDocument = (
   if (context?.shareTargetId) {
     formData.append('shareTargetId', context.shareTargetId);
   }
-  return requestClient.post<DocumentFileInfo>('/files/document/upload', formData, {
+  return requestClient.post<DocumentFileInfo>(`${DOCUMENT_FILES_API_PREFIX}/upload`, formData, {
     headers: {
       'Content-Type': 'multipart/form-data',
     },
@@ -198,10 +200,10 @@ export const createDocumentFolder = (data: {
   scope?: DocumentScope;
   shareTargetId?: string;
   shareTargetType?: DocumentShareTargetType;
-}) => requestClient.post<DocumentFileInfo>('/files/document/folder', data);
+}) => requestClient.post<DocumentFileInfo>(`${DOCUMENT_FILES_API_PREFIX}/folder`, data);
 
 export const renameDocument = (data: { fileName: string; id: string }) =>
-  requestClient.post<DocumentFileInfo>('/files/document/rename', data);
+  requestClient.post<DocumentFileInfo>(`${DOCUMENT_FILES_API_PREFIX}/rename`, data);
 
 export const moveDocument = (data: {
   id: string;
@@ -210,7 +212,7 @@ export const moveDocument = (data: {
   shareTargetId?: string;
   shareTargetType?: DocumentShareTargetType;
 }) =>
-  requestClient.post<DocumentFileInfo>('/files/document/move', data);
+  requestClient.post<DocumentFileInfo>(`${DOCUMENT_FILES_API_PREFIX}/move`, data);
 
 export const batchMoveDocuments = (data: {
   ids: string[];
@@ -219,7 +221,7 @@ export const batchMoveDocuments = (data: {
   shareTargetId?: string;
   shareTargetType?: DocumentShareTargetType;
 }) =>
-  requestClient.post<DocumentFileInfo[]>('/files/document/batch-move', data);
+  requestClient.post<DocumentFileInfo[]>(`${DOCUMENT_FILES_API_PREFIX}/batch-move`, data);
 
 export const copyDocuments = (data: {
   ids: string[];
@@ -228,28 +230,28 @@ export const copyDocuments = (data: {
   shareTargetId?: string;
   shareTargetType?: DocumentShareTargetType;
 }) =>
-  requestClient.post<DocumentFileInfo[]>('/files/document/copy', data);
+  requestClient.post<DocumentFileInfo[]>(`${DOCUMENT_FILES_API_PREFIX}/copy`, data);
 
 export const deleteDocument = (fileId: string) =>
-  requestClient.post<void>(`/files/document/delete/${fileId}`);
+  requestClient.post<void>(`${DOCUMENT_FILES_API_PREFIX}/delete/${fileId}`);
 
 export const batchDeleteDocuments = (ids: string[]) =>
-  requestClient.post<void>('/files/document/batch-delete', { ids });
+  requestClient.post<void>(`${DOCUMENT_FILES_API_PREFIX}/batch-delete`, { ids });
 
 export const restoreDocument = (fileId: string) =>
-  requestClient.post<DocumentFileInfo>(`/files/document/restore/${fileId}`);
+  requestClient.post<DocumentFileInfo>(`${DOCUMENT_FILES_API_PREFIX}/restore/${fileId}`);
 
 export const batchRestoreDocuments = (ids: string[]) =>
-  requestClient.post<DocumentFileInfo[]>('/files/document/batch-restore', { ids });
+  requestClient.post<DocumentFileInfo[]>(`${DOCUMENT_FILES_API_PREFIX}/batch-restore`, { ids });
 
 export const purgeDocument = (fileId: string) =>
-  requestClient.post<void>(`/files/document/purge/${fileId}`);
+  requestClient.post<void>(`${DOCUMENT_FILES_API_PREFIX}/purge/${fileId}`);
 
 export const clearDocumentTrash = () =>
-  requestClient.post<void>('/files/document/trash/clear');
+  requestClient.post<void>(`${DOCUMENT_FILES_API_PREFIX}/trash/clear`);
 
 export const toggleDocumentStar = (fileId: string) =>
-  requestClient.post<DocumentFileInfo>(`/files/document/star/${fileId}`);
+  requestClient.post<DocumentFileInfo>(`${DOCUMENT_FILES_API_PREFIX}/star/${fileId}`);
 
 export const shareDocument = (data: {
   enableDown?: string;
@@ -257,29 +259,29 @@ export const shareDocument = (data: {
   expireTime?: string;
   fileId: string;
   targets: DocumentShareTarget[];
-}) => requestClient.post<DocumentShareInfo[]>('/files/document/share', data);
+}) => requestClient.post<DocumentShareInfo[]>(`${DOCUMENT_FILES_API_PREFIX}/share`, data);
 
 export const listDocumentShares = (fileId: string) =>
-  requestClient.get<DocumentShareInfo[]>(`/files/document/shares/${fileId}`);
+  requestClient.get<DocumentShareInfo[]>(`${DOCUMENT_FILES_API_PREFIX}/shares/${fileId}`);
 
 export const getDocumentStatus = (fileId: string) =>
-  requestClient.get<DocumentStatusInfo>(`/files/document/status/${fileId}`);
+  requestClient.get<DocumentStatusInfo>(`${DOCUMENT_FILES_API_PREFIX}/status/${fileId}`);
 
 export const revokeDocumentShare = (aclId: string) =>
-  requestClient.post<void>(`/files/document/share/revoke/${aclId}`);
+  requestClient.post<void>(`${DOCUMENT_FILES_API_PREFIX}/share/revoke/${aclId}`);
 
 export const downloadDocument = (fileId: string) =>
-  requestClient.download<Blob>(`/files/document/download/${fileId}`);
+  requestClient.download<Blob>(`${DOCUMENT_FILES_API_PREFIX}/download/${fileId}`);
 
 export const downloadDocumentThumbnail = (fileId: string) =>
-  requestClient.download<Blob>(`/files/document/thumbnail/${fileId}`);
+  requestClient.download<Blob>(`${DOCUMENT_FILES_API_PREFIX}/thumbnail/${fileId}`);
 
 export const getOnlyOfficePreviewConfig = (
   fileId: string,
   mode: OnlyOfficePreviewMode = 'view',
 ) =>
   requestClient.get<OnlyOfficePreviewConfig>(
-    `/files/document/onlyoffice/config/${fileId}`,
+    `${DOCUMENT_FILES_API_PREFIX}/onlyoffice/config/${fileId}`,
     {
       params: {
         mode,
@@ -289,15 +291,15 @@ export const getOnlyOfficePreviewConfig = (
 
 export const listOnlyOfficeHistory = (fileId: string) =>
   requestClient.get<OnlyOfficeHistoryVersion[]>(
-    `/files/document/onlyoffice/history/${fileId}`,
+    `${DOCUMENT_FILES_API_PREFIX}/onlyoffice/history/${fileId}`,
   );
 
 export const getOnlyOfficeHistoryPreviewConfig = (versionId: string) =>
   requestClient.get<OnlyOfficePreviewConfig>(
-    `/files/document/onlyoffice/history/config/${versionId}`,
+    `${DOCUMENT_FILES_API_PREFIX}/onlyoffice/history/config/${versionId}`,
   );
 
 export const restoreOnlyOfficeHistoryVersion = (versionId: string) =>
   requestClient.post<OnlyOfficeHistoryVersion>(
-    `/files/document/onlyoffice/history/${versionId}/restore`,
+    `${DOCUMENT_FILES_API_PREFIX}/onlyoffice/history/${versionId}/restore`,
   );

@@ -35,7 +35,7 @@ import java.util.Map;
 @Slf4j
 @RestController
 @RequiredArgsConstructor
-@RequestMapping("/files/document/onlyoffice")
+@RequestMapping({"/document/files/onlyoffice", "/files/document/onlyoffice"})
 @Tag(name = "ONLYOFFICE 文档协作", description = "ONLYOFFICE 在线预览、编辑保存和文档回源")
 public class OnlyOfficeDocumentController {
 

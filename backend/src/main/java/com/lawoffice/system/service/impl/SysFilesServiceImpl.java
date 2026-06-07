@@ -7,30 +7,14 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.lawoffice.framework.config.TenantContextHolder;
 import com.lawoffice.framework.service.impl.BaseServiceImpl;
-import com.lawoffice.framework.vo.PageVO;
 import com.lawoffice.system.entity.SysFileRelation;
 import com.lawoffice.system.entity.SysFiles;
 import com.lawoffice.system.mapper.SysFileRelationMapper;
 import com.lawoffice.system.mapper.SysFilesMapper;
-import com.lawoffice.document.req.DocumentBatchDeleteReq;
-import com.lawoffice.document.req.DocumentBatchMoveReq;
-import com.lawoffice.document.req.DocumentCopyReq;
-import com.lawoffice.document.req.DocumentFolderReq;
-import com.lawoffice.document.req.DocumentMoveReq;
-import com.lawoffice.document.req.DocumentPageReq;
-import com.lawoffice.document.req.DocumentRenameReq;
-import com.lawoffice.document.req.DocumentShareReq;
-import com.lawoffice.document.req.DocumentTreeBatchReq;
-import com.lawoffice.document.req.DocumentTreePrefetchReq;
-import com.lawoffice.document.req.DocumentUploadReq;
 import com.lawoffice.system.req.FileRelationReq;
 import com.lawoffice.system.req.FileUploadReq;
-import com.lawoffice.document.service.IDocumentCenterService;
 import com.lawoffice.system.service.ISysFilesService;
 import com.lawoffice.system.service.ISysFileMetadataService;
-import com.lawoffice.document.vo.DocumentFileVO;
-import com.lawoffice.document.vo.DocumentShareVO;
-import com.lawoffice.document.vo.DocumentStatusVO;
 import com.lawoffice.system.vo.FileRelationVO;
 import com.lawoffice.system.vo.FileUploadVO;
 import com.lawoffice.system.vo.SysFilesVO;
@@ -55,7 +39,6 @@ import java.util.UUID;
 public class SysFilesServiceImpl extends BaseServiceImpl<SysFilesMapper, SysFiles, SysFilesVO> implements ISysFilesService {
 
     private final SysFileRelationMapper fileRelationMapper;
-    private final IDocumentCenterService documentCenterService;
     private final ISysFileMetadataService fileMetadataService;
     private final MinioUtils minioUtils;
 
@@ -172,143 +155,6 @@ public class SysFilesServiceImpl extends BaseServiceImpl<SysFilesMapper, SysFile
     public InputStream downloadFileContent(String fileId) {
         SysFiles file = getActiveFile(fileId);
         return minioUtils.downloadFile(file.getUrl());
-    }
-
-    @Override
-    public PageVO<DocumentFileVO> pageDocuments(String username, DocumentPageReq req) {
-        return documentCenterService.pageDocuments(username, req);
-    }
-
-    @Override
-    public Map<String, List<DocumentFileVO>> batchLoadDocumentFolderTree(String username, DocumentTreeBatchReq req) {
-        return documentCenterService.batchLoadDocumentFolderTree(username, req);
-    }
-
-    @Override
-    public Map<String, List<DocumentFileVO>> prefetchDocumentFolderTree(String username, DocumentTreePrefetchReq req) {
-        return documentCenterService.prefetchDocumentFolderTree(username, req);
-    }
-
-    @Override
-    public DocumentFileVO uploadDocument(String username, MultipartFile file, DocumentUploadReq req) {
-        return documentCenterService.uploadDocument(username, file, req);
-    }
-
-    @Override
-    public DocumentFileVO createDocumentFolder(String username, DocumentFolderReq req) {
-        return documentCenterService.createDocumentFolder(username, req);
-    }
-
-    @Override
-    public DocumentFileVO renameDocument(String username, DocumentRenameReq req) {
-        return documentCenterService.renameDocument(username, req);
-    }
-
-    @Override
-    public DocumentFileVO moveDocument(String username, DocumentMoveReq req) {
-        return documentCenterService.moveDocument(username, req);
-    }
-
-    @Override
-    public List<DocumentFileVO> batchMoveDocuments(String username, DocumentBatchMoveReq req) {
-        return documentCenterService.batchMoveDocuments(username, req);
-    }
-
-    @Override
-    public List<DocumentFileVO> copyDocuments(String username, DocumentCopyReq req) {
-        return documentCenterService.copyDocuments(username, req);
-    }
-
-    @Override
-    public void deleteDocument(String username, String fileId) {
-        documentCenterService.deleteDocument(username, fileId);
-    }
-
-    @Override
-    public void batchDeleteDocuments(String username, DocumentBatchDeleteReq req) {
-        documentCenterService.batchDeleteDocuments(username, req);
-    }
-
-    @Override
-    public DocumentFileVO restoreDocument(String username, String fileId) {
-        return documentCenterService.restoreDocument(username, fileId);
-    }
-
-    @Override
-    public List<DocumentFileVO> batchRestoreDocuments(String username, DocumentBatchDeleteReq req) {
-        return documentCenterService.batchRestoreDocuments(username, req);
-    }
-
-    @Override
-    public void purgeDocument(String username, String fileId) {
-        documentCenterService.purgeDocument(username, fileId);
-    }
-
-    @Override
-    public void clearDocumentTrash(String username) {
-        documentCenterService.clearDocumentTrash(username);
-    }
-
-    @Override
-    public DocumentFileVO toggleDocumentStar(String username, String fileId) {
-        return documentCenterService.toggleDocumentStar(username, fileId);
-    }
-
-    @Override
-    public List<DocumentShareVO> shareDocument(String username, DocumentShareReq req) {
-        return documentCenterService.shareDocument(username, req);
-    }
-
-    @Override
-    public List<DocumentShareVO> listDocumentShares(String username, String fileId) {
-        return documentCenterService.listDocumentShares(username, fileId);
-    }
-
-    @Override
-    public DocumentStatusVO getDocumentStatus(String username, String fileId) {
-        return documentCenterService.getDocumentStatus(username, fileId);
-    }
-
-    @Override
-    public void revokeDocumentShare(String username, String aclId) {
-        documentCenterService.revokeDocumentShare(username, aclId);
-    }
-
-    @Override
-    public DocumentFileVO checkDocumentDownload(String fileId, String username) {
-        return documentCenterService.checkDocumentDownload(fileId, username);
-    }
-
-    @Override
-    public DocumentFileVO checkDocumentPreview(String fileId, String username) {
-        return documentCenterService.checkDocumentPreview(fileId, username);
-    }
-
-    @Override
-    public DocumentFileVO checkDocumentRead(String fileId, String username) {
-        return documentCenterService.checkDocumentRead(fileId, username);
-    }
-
-    @Override
-    public DocumentFileVO checkDocumentEdit(String fileId, String username) {
-        return documentCenterService.checkDocumentEdit(fileId, username);
-    }
-
-    @Override
-    public void saveDocumentEdit(
-            String fileId,
-            String username,
-            InputStream inputStream,
-            String contentType,
-            Long contentLength,
-            boolean touchUpdateTime) {
-        documentCenterService.saveDocumentEdit(
-                fileId,
-                username,
-                inputStream,
-                contentType,
-                contentLength,
-                touchUpdateTime);
     }
 
     private List<FileUploadVO> listFilesByBiz(String bizType, String bizId, String ownerUsername) {
