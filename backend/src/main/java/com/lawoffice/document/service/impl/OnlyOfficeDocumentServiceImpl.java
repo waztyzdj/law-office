@@ -100,7 +100,7 @@ public class OnlyOfficeDocumentServiceImpl implements IOnlyOfficeDocumentService
         document.put("fileType", extension);
         document.put("key", buildDocumentKey(file));
         document.put("title", file.getFileName());
-        document.put("url", joinUrl(properties.getServerBaseUrl(), "/document/files/onlyoffice/download/" + downloadToken));
+        document.put("url", joinUrl(properties.getServerBaseUrl(), "/document/files/onlyoffice/download?token=" + encodeUrlParam(downloadToken)));
         document.put("permissions", Map.of(
                 "comment", MODE_EDIT.equals(editorMode),
                 "copy", true,
@@ -112,7 +112,7 @@ public class OnlyOfficeDocumentServiceImpl implements IOnlyOfficeDocumentService
 
         Map<String, Object> editorConfig = buildEditorConfig(username, userId, editorMode);
         if (MODE_EDIT.equals(editorMode)) {
-            editorConfig.put("callbackUrl", joinUrl(properties.getServerBaseUrl(), "/document/files/onlyoffice/callback/" + callbackToken));
+            editorConfig.put("callbackUrl", joinUrl(properties.getServerBaseUrl(), "/document/files/onlyoffice/callback?token=" + encodeUrlParam(callbackToken)));
             editorConfig.put("coEditing", Map.of(
                     "change", false,
                     "mode", "fast"
@@ -204,7 +204,7 @@ public class OnlyOfficeDocumentServiceImpl implements IOnlyOfficeDocumentService
         document.put("fileType", extension);
         document.put("key", buildHistoryDocumentKey(version));
         document.put("title", fileName + " V" + version.getVersionNo());
-        document.put("url", joinUrl(properties.getServerBaseUrl(), "/document/files/onlyoffice/history/download/" + downloadToken));
+        document.put("url", joinUrl(properties.getServerBaseUrl(), "/document/files/onlyoffice/history/download?token=" + encodeUrlParam(downloadToken)));
         document.put("permissions", Map.of(
                 "comment", false,
                 "copy", true,
@@ -759,6 +759,10 @@ public class OnlyOfficeDocumentServiceImpl implements IOnlyOfficeDocumentService
             suffix = "/" + suffix;
         }
         return base + suffix;
+    }
+
+    private String encodeUrlParam(String value) {
+        return URLEncoder.encode(value, StandardCharsets.UTF_8);
     }
 
     private String normalizeBaseUrl(String baseUrl) {

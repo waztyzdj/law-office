@@ -6,6 +6,8 @@ import com.lawoffice.document.dto.OnlyOfficeCallbackReq;
 import com.lawoffice.document.dto.OnlyOfficeDownloadContext;
 import com.lawoffice.document.dto.OnlyOfficeHistoryDownloadContext;
 import com.lawoffice.document.dto.OnlyOfficeHistoryFileContent;
+import com.lawoffice.document.req.DocumentIdReq;
+import com.lawoffice.document.req.OnlyOfficePreviewConfigReq;
 import com.lawoffice.document.service.IOnlyOfficeDocumentService;
 import com.lawoffice.system.service.ISysFilesService;
 import com.lawoffice.system.vo.FileUploadVO;
@@ -16,10 +18,10 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -42,21 +44,21 @@ public class OnlyOfficeDocumentController {
     private final IOnlyOfficeDocumentService onlyOfficeDocumentService;
     private final ISysFilesService sysFilesService;
 
-    @GetMapping("/config/{fileId}")
+    @PostMapping("/config")
     @Operation(summary = "生成 ONLYOFFICE 配置", description = "按文档中心权限生成预览或编辑配置")
     public BaseResult<OnlyOfficePreviewVO> getPreviewConfig(
-            @PathVariable String fileId,
-            @RequestParam(required = false, defaultValue = "view") String mode,
+            @Valid @RequestBody OnlyOfficePreviewConfigReq req,
             HttpServletRequest request) {
         String username = (String) request.getAttribute("username");
         String userId = (String) request.getAttribute("userId");
-        return BaseResult.success(onlyOfficeDocumentService.buildPreviewConfig(username, userId, fileId, mode));
+        String mode = req.getMode() == null ? "view" : req.getMode();
+        return BaseResult.success(onlyOfficeDocumentService.buildPreviewConfig(username, userId, req.getFileId(), mode));
     }
 
-    @GetMapping("/download/{token}")
+    @GetMapping("/download")
     @Operation(summary = "ONLYOFFICE 文件回源", description = "Document Server 使用短期令牌拉取文件内容")
     public void downloadForOnlyOffice(
-            @PathVariable String token,
+            @RequestParam String token,
             HttpServletResponse response) throws IOException {
         OnlyOfficeDownloadContext context = onlyOfficeDocumentService.parseDownloadToken(token);
         try {
@@ -75,10 +77,10 @@ public class OnlyOfficeDocumentController {
         }
     }
 
-    @PostMapping("/callback/{token}")
+    @PostMapping("/callback")
     @Operation(summary = "ONLYOFFICE 保存回调", description = "Document Server 保存在线编辑内容时调用")
     public Map<String, Integer> handleCallback(
-            @PathVariable String token,
+            @RequestParam String token,
             @RequestBody(required = false) OnlyOfficeCallbackReq req) {
         try {
             onlyOfficeDocumentService.handleCallback(token, req);
@@ -89,29 +91,29 @@ public class OnlyOfficeDocumentController {
         }
     }
 
-    @GetMapping("/history/{fileId}")
+    @PostMapping("/history/list")
     @Operation(summary = "ONLYOFFICE 历史版本列表", description = "查询文件在线编辑历史版本")
     public BaseResult<List<OnlyOfficeHistoryVersionVO>> listHistory(
-            @PathVariable String fileId,
+            @Valid @RequestBody DocumentIdReq req,
             HttpServletRequest request) {
         String username = (String) request.getAttribute("username");
-        return BaseResult.success(onlyOfficeDocumentService.listHistory(username, fileId));
+        return BaseResult.success(onlyOfficeDocumentService.listHistory(username, req.getId()));
     }
 
-    @GetMapping("/history/config/{versionId}")
+    @PostMapping("/history/config")
     @Operation(summary = "ONLYOFFICE 历史版本预览配置", description = "生成历史版本只读预览配置")
     public BaseResult<OnlyOfficePreviewVO> getHistoryPreviewConfig(
-            @PathVariable String versionId,
+            @Valid @RequestBody DocumentIdReq req,
             HttpServletRequest request) {
         String username = (String) request.getAttribute("username");
         String userId = (String) request.getAttribute("userId");
-        return BaseResult.success(onlyOfficeDocumentService.buildHistoryPreviewConfig(username, userId, versionId));
+        return BaseResult.success(onlyOfficeDocumentService.buildHistoryPreviewConfig(username, userId, req.getId()));
     }
 
-    @GetMapping("/history/download/{token}")
+    @GetMapping("/history/download")
     @Operation(summary = "ONLYOFFICE 历史版本回源", description = "Document Server 使用短期令牌拉取历史版本内容")
     public void downloadHistoryForOnlyOffice(
-            @PathVariable String token,
+            @RequestParam String token,
             HttpServletResponse response) throws IOException {
         OnlyOfficeHistoryDownloadContext context = onlyOfficeDocumentService.parseHistoryDownloadToken(token);
         try {
@@ -130,13 +132,13 @@ public class OnlyOfficeDocumentController {
         }
     }
 
-    @PostMapping("/history/{versionId}/restore")
+    @PostMapping("/history/restore")
     @Operation(summary = "ONLYOFFICE 恢复历史版本", description = "将历史版本恢复为当前文件")
     public BaseResult<OnlyOfficeHistoryVersionVO> restoreHistoryVersion(
-            @PathVariable String versionId,
+            @Valid @RequestBody DocumentIdReq req,
             HttpServletRequest request) {
         String username = (String) request.getAttribute("username");
-        return BaseResult.success(onlyOfficeDocumentService.restoreHistoryVersion(username, versionId));
+        return BaseResult.success(onlyOfficeDocumentService.restoreHistoryVersion(username, req.getId()));
     }
 
     private String resolveContentType(String fileType) {

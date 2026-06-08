@@ -4,6 +4,7 @@ import com.lawoffice.document.req.DocumentBatchDeleteReq;
 import com.lawoffice.document.req.DocumentBatchMoveReq;
 import com.lawoffice.document.req.DocumentCopyReq;
 import com.lawoffice.document.req.DocumentFolderReq;
+import com.lawoffice.document.req.DocumentIdReq;
 import com.lawoffice.document.req.DocumentMoveReq;
 import com.lawoffice.document.req.DocumentPageReq;
 import com.lawoffice.document.req.DocumentRenameReq;
@@ -27,8 +28,6 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -133,11 +132,13 @@ public class DocumentCenterController {
         return BaseResult.success(documentCenterService.copyDocuments(getUsername(request), req));
     }
 
-    @PostMapping("/delete/{fileId}")
+    @PostMapping("/delete")
     @Operation(summary = "删除文档", description = "将本人拥有的文档移入回收站")
     @AutoLog(value = "删除文档", logType = LogType.OPERATION, operateType = OperateType.DELETE)
-    public BaseResult<Void> deleteDocument(@PathVariable String fileId, HttpServletRequest request) {
-        documentCenterService.deleteDocument(getUsername(request), fileId);
+    public BaseResult<Void> deleteDocument(
+            @Valid @RequestBody DocumentIdReq req,
+            HttpServletRequest request) {
+        documentCenterService.deleteDocument(getUsername(request), req.getId());
         return BaseResult.success();
     }
 
@@ -151,11 +152,13 @@ public class DocumentCenterController {
         return BaseResult.success();
     }
 
-    @PostMapping("/restore/{fileId}")
+    @PostMapping("/restore")
     @Operation(summary = "恢复文档", description = "从回收站恢复本人拥有的文档")
     @AutoLog(value = "恢复文档", logType = LogType.OPERATION, operateType = OperateType.SAVE)
-    public BaseResult<DocumentFileVO> restoreDocument(@PathVariable String fileId, HttpServletRequest request) {
-        return BaseResult.success(documentCenterService.restoreDocument(getUsername(request), fileId));
+    public BaseResult<DocumentFileVO> restoreDocument(
+            @Valid @RequestBody DocumentIdReq req,
+            HttpServletRequest request) {
+        return BaseResult.success(documentCenterService.restoreDocument(getUsername(request), req.getId()));
     }
 
     @PostMapping("/batch-restore")
@@ -167,11 +170,13 @@ public class DocumentCenterController {
         return BaseResult.success(documentCenterService.batchRestoreDocuments(getUsername(request), req));
     }
 
-    @PostMapping("/purge/{fileId}")
+    @PostMapping("/purge")
     @Operation(summary = "彻底删除文档", description = "从回收站彻底删除本人拥有的文档")
     @AutoLog(value = "彻底删除文档", logType = LogType.OPERATION, operateType = OperateType.DELETE)
-    public BaseResult<Void> purgeDocument(@PathVariable String fileId, HttpServletRequest request) {
-        documentCenterService.purgeDocument(getUsername(request), fileId);
+    public BaseResult<Void> purgeDocument(
+            @Valid @RequestBody DocumentIdReq req,
+            HttpServletRequest request) {
+        documentCenterService.purgeDocument(getUsername(request), req.getId());
         return BaseResult.success();
     }
 
@@ -183,11 +188,13 @@ public class DocumentCenterController {
         return BaseResult.success();
     }
 
-    @PostMapping("/star/{fileId}")
+    @PostMapping("/star")
     @Operation(summary = "收藏文档", description = "切换本人文档收藏状态")
     @AutoLog(value = "收藏文档", logType = LogType.OPERATION, operateType = OperateType.SAVE)
-    public BaseResult<DocumentFileVO> toggleDocumentStar(@PathVariable String fileId, HttpServletRequest request) {
-        return BaseResult.success(documentCenterService.toggleDocumentStar(getUsername(request), fileId));
+    public BaseResult<DocumentFileVO> toggleDocumentStar(
+            @Valid @RequestBody DocumentIdReq req,
+            HttpServletRequest request) {
+        return BaseResult.success(documentCenterService.toggleDocumentStar(getUsername(request), req.getId()));
     }
 
     @PostMapping("/share")
@@ -199,33 +206,40 @@ public class DocumentCenterController {
         return BaseResult.success(documentCenterService.shareDocument(getUsername(request), req));
     }
 
-    @GetMapping("/shares/{fileId}")
+    @PostMapping("/shares")
     @Operation(summary = "查询文档共享", description = "查询本人文档的共享目标")
-    public BaseResult<List<DocumentShareVO>> listDocumentShares(@PathVariable String fileId, HttpServletRequest request) {
-        return BaseResult.success(documentCenterService.listDocumentShares(getUsername(request), fileId));
+    public BaseResult<List<DocumentShareVO>> listDocumentShares(
+            @Valid @RequestBody DocumentIdReq req,
+            HttpServletRequest request) {
+        return BaseResult.success(documentCenterService.listDocumentShares(getUsername(request), req.getId()));
     }
 
-    @GetMapping("/status/{fileId}")
+    @PostMapping("/status")
     @Operation(summary = "查询文档状态栏详情", description = "查询文档中心状态栏需要的共享来源、统计信息和业务来源")
-    public BaseResult<DocumentStatusVO> getDocumentStatus(@PathVariable String fileId, HttpServletRequest request) {
-        return BaseResult.success(documentCenterService.getDocumentStatus(getUsername(request), fileId));
+    public BaseResult<DocumentStatusVO> getDocumentStatus(
+            @Valid @RequestBody DocumentIdReq req,
+            HttpServletRequest request) {
+        return BaseResult.success(documentCenterService.getDocumentStatus(getUsername(request), req.getId()));
     }
 
-    @PostMapping("/share/revoke/{aclId}")
+    @PostMapping("/share/revoke")
     @Operation(summary = "撤销文档共享", description = "撤销本人文档的一条共享授权")
     @AutoLog(value = "撤销文档共享", logType = LogType.OPERATION, operateType = OperateType.DELETE)
-    public BaseResult<Void> revokeDocumentShare(@PathVariable String aclId, HttpServletRequest request) {
-        documentCenterService.revokeDocumentShare(getUsername(request), aclId);
+    public BaseResult<Void> revokeDocumentShare(
+            @Valid @RequestBody DocumentIdReq req,
+            HttpServletRequest request) {
+        documentCenterService.revokeDocumentShare(getUsername(request), req.getId());
         return BaseResult.success();
     }
 
-    @GetMapping("/download/{fileId}")
+    @PostMapping("/download")
     @Operation(summary = "下载文档中心文件", description = "按文档中心权限下载文件")
     public void downloadDocument(
-            @PathVariable String fileId,
+            @Valid @RequestBody DocumentIdReq req,
             HttpServletRequest request,
             HttpServletResponse response) throws IOException {
         String username = getUsername(request);
+        String fileId = req.getId();
         DocumentFileVO file = documentCenterService.checkDocumentDownload(fileId, username);
         String fileName = HttpDownloadUtils.resolveDownloadFileName(file.getFileName());
         response.setCharacterEncoding(StandardCharsets.UTF_8.name());
@@ -238,24 +252,26 @@ public class DocumentCenterController {
         }
     }
 
-    @GetMapping("/thumbnail/{fileId}")
+    @PostMapping("/thumbnail")
     @Operation(summary = "预览文档中心图片缩略图", description = "按文档中心读取权限返回图片内容")
     public void previewDocumentImageThumbnail(
-            @PathVariable String fileId,
+            @Valid @RequestBody DocumentIdReq req,
             HttpServletRequest request,
             HttpServletResponse response) throws IOException {
         String username = getUsername(request);
+        String fileId = req.getId();
         DocumentFileVO file = documentCenterService.checkDocumentRead(fileId, username);
         writeDocumentImage(fileId, username, file, response);
     }
 
-    @GetMapping("/preview/image/{fileId}")
+    @PostMapping("/preview/image")
     @Operation(summary = "预览文档中心图片", description = "按文档中心读取权限返回图片内容，并记录阅读次数")
     public void previewDocumentImage(
-            @PathVariable String fileId,
+            @Valid @RequestBody DocumentIdReq req,
             HttpServletRequest request,
             HttpServletResponse response) throws IOException {
         String username = getUsername(request);
+        String fileId = req.getId();
         DocumentFileVO file = documentCenterService.checkDocumentRead(fileId, username);
         assertImagePreviewFile(file);
         file = documentCenterService.checkDocumentPreview(fileId, username);

@@ -233,25 +233,25 @@ export const copyDocuments = (data: {
   requestClient.post<DocumentFileInfo[]>(`${DOCUMENT_FILES_API_PREFIX}/copy`, data);
 
 export const deleteDocument = (fileId: string) =>
-  requestClient.post<void>(`${DOCUMENT_FILES_API_PREFIX}/delete/${fileId}`);
+  requestClient.post<void>(`${DOCUMENT_FILES_API_PREFIX}/delete`, { id: fileId });
 
 export const batchDeleteDocuments = (ids: string[]) =>
   requestClient.post<void>(`${DOCUMENT_FILES_API_PREFIX}/batch-delete`, { ids });
 
 export const restoreDocument = (fileId: string) =>
-  requestClient.post<DocumentFileInfo>(`${DOCUMENT_FILES_API_PREFIX}/restore/${fileId}`);
+  requestClient.post<DocumentFileInfo>(`${DOCUMENT_FILES_API_PREFIX}/restore`, { id: fileId });
 
 export const batchRestoreDocuments = (ids: string[]) =>
   requestClient.post<DocumentFileInfo[]>(`${DOCUMENT_FILES_API_PREFIX}/batch-restore`, { ids });
 
 export const purgeDocument = (fileId: string) =>
-  requestClient.post<void>(`${DOCUMENT_FILES_API_PREFIX}/purge/${fileId}`);
+  requestClient.post<void>(`${DOCUMENT_FILES_API_PREFIX}/purge`, { id: fileId });
 
 export const clearDocumentTrash = () =>
   requestClient.post<void>(`${DOCUMENT_FILES_API_PREFIX}/trash/clear`);
 
 export const toggleDocumentStar = (fileId: string) =>
-  requestClient.post<DocumentFileInfo>(`${DOCUMENT_FILES_API_PREFIX}/star/${fileId}`);
+  requestClient.post<DocumentFileInfo>(`${DOCUMENT_FILES_API_PREFIX}/star`, { id: fileId });
 
 export const shareDocument = (data: {
   enableDown?: string;
@@ -262,47 +262,55 @@ export const shareDocument = (data: {
 }) => requestClient.post<DocumentShareInfo[]>(`${DOCUMENT_FILES_API_PREFIX}/share`, data);
 
 export const listDocumentShares = (fileId: string) =>
-  requestClient.get<DocumentShareInfo[]>(`${DOCUMENT_FILES_API_PREFIX}/shares/${fileId}`);
+  requestClient.post<DocumentShareInfo[]>(`${DOCUMENT_FILES_API_PREFIX}/shares`, { id: fileId });
 
 export const getDocumentStatus = (fileId: string) =>
-  requestClient.get<DocumentStatusInfo>(`${DOCUMENT_FILES_API_PREFIX}/status/${fileId}`);
+  requestClient.post<DocumentStatusInfo>(`${DOCUMENT_FILES_API_PREFIX}/status`, { id: fileId });
 
 export const revokeDocumentShare = (aclId: string) =>
-  requestClient.post<void>(`${DOCUMENT_FILES_API_PREFIX}/share/revoke/${aclId}`);
+  requestClient.post<void>(`${DOCUMENT_FILES_API_PREFIX}/share/revoke`, { id: aclId });
 
 export const downloadDocument = (fileId: string) =>
-  requestClient.download<Blob>(`${DOCUMENT_FILES_API_PREFIX}/download/${fileId}`);
+  requestClient.download<Blob>(`${DOCUMENT_FILES_API_PREFIX}/download`, {
+    data: { id: fileId },
+    method: 'POST',
+  });
 
 export const downloadDocumentThumbnail = (fileId: string) =>
-  requestClient.download<Blob>(`${DOCUMENT_FILES_API_PREFIX}/thumbnail/${fileId}`);
+  requestClient.download<Blob>(`${DOCUMENT_FILES_API_PREFIX}/thumbnail`, {
+    data: { id: fileId },
+    method: 'POST',
+  });
 
 export const downloadDocumentImagePreview = (fileId: string) =>
-  requestClient.download<Blob>(`${DOCUMENT_FILES_API_PREFIX}/preview/image/${fileId}`);
+  requestClient.download<Blob>(`${DOCUMENT_FILES_API_PREFIX}/preview/image`, {
+    data: { id: fileId },
+    method: 'POST',
+  });
 
 export const getOnlyOfficePreviewConfig = (
   fileId: string,
   mode: OnlyOfficePreviewMode = 'view',
 ) =>
-  requestClient.get<OnlyOfficePreviewConfig>(
-    `${DOCUMENT_FILES_API_PREFIX}/onlyoffice/config/${fileId}`,
-    {
-      params: {
-        mode,
-      },
-    },
-  );
+  requestClient.post<OnlyOfficePreviewConfig>(`${DOCUMENT_FILES_API_PREFIX}/onlyoffice/config`, {
+    fileId,
+    mode,
+  });
 
 export const listOnlyOfficeHistory = (fileId: string) =>
-  requestClient.get<OnlyOfficeHistoryVersion[]>(
-    `${DOCUMENT_FILES_API_PREFIX}/onlyoffice/history/${fileId}`,
+  requestClient.post<OnlyOfficeHistoryVersion[]>(
+    `${DOCUMENT_FILES_API_PREFIX}/onlyoffice/history/list`,
+    { id: fileId },
   );
 
 export const getOnlyOfficeHistoryPreviewConfig = (versionId: string) =>
-  requestClient.get<OnlyOfficePreviewConfig>(
-    `${DOCUMENT_FILES_API_PREFIX}/onlyoffice/history/config/${versionId}`,
+  requestClient.post<OnlyOfficePreviewConfig>(
+    `${DOCUMENT_FILES_API_PREFIX}/onlyoffice/history/config`,
+    { id: versionId },
   );
 
 export const restoreOnlyOfficeHistoryVersion = (versionId: string) =>
   requestClient.post<OnlyOfficeHistoryVersion>(
-    `${DOCUMENT_FILES_API_PREFIX}/onlyoffice/history/${versionId}/restore`,
+    `${DOCUMENT_FILES_API_PREFIX}/onlyoffice/history/restore`,
+    { id: versionId },
   );

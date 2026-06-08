@@ -35,18 +35,20 @@
 - `POST /document/files/move`：移动本人文档。
 - `POST /document/files/batch-move`：批量移动本人文档或文件夹，任一文件校验失败时整体回滚。请求体：`{ "ids": ["..."], "parentId": "...", "scope": "my", "shareTargetType": "depart" }`。
 - `POST /document/files/copy`：复制当前用户可下载的文档或文件夹到目标目录，文件内容会复制为新的对象存储文件。
-- `POST /document/files/delete/{fileId}`：移入回收站。
+- `POST /document/files/delete`：移入回收站。请求体：`{ "id": "..." }`。
 - `POST /document/files/batch-delete`：批量移入回收站，任一文件校验失败时整体回滚。请求体：`{ "ids": ["..."] }`。
-- `POST /document/files/restore/{fileId}`：从回收站恢复。
+- `POST /document/files/restore`：从回收站恢复。请求体：`{ "id": "..." }`。
 - `POST /document/files/batch-restore`：批量从回收站恢复，任一文件校验失败时整体回滚。请求体：`{ "ids": ["..."] }`。
-- `POST /document/files/purge/{fileId}`：从回收站彻底删除本人拥有的文档及其子级，同时清理文件授权、个人归类关系、历史版本记录和对象存储文件。
+- `POST /document/files/purge`：从回收站彻底删除本人拥有的文档及其子级，同时清理文件授权、个人归类关系、历史版本记录和对象存储文件。请求体：`{ "id": "..." }`。
 - `POST /document/files/trash/clear`：清空本人回收站。
-- `POST /document/files/star/{fileId}`：切换收藏状态。
+- `POST /document/files/star`：切换收藏状态。请求体：`{ "id": "..." }`。
 - `POST /document/files/share`：覆盖保存共享目标。
-- `GET /document/files/shares/{fileId}`：查询共享目标。
-- `POST /document/files/share/revoke/{aclId}`：撤销单条共享。
-- `GET /document/files/download/{fileId}`：按文档中心权限下载。
-- `GET /document/files/thumbnail/{fileId}`：按文档中心读取权限返回图片缩略图，不增加阅读次数；`GET /document/files/preview/image/{fileId}`：按文档中心读取权限返回图片预览内容，并增加阅读次数。
+- `POST /document/files/shares`：查询共享目标。请求体：`{ "id": "..." }`。
+- `POST /document/files/status`：查询文档中心状态栏详情。请求体：`{ "id": "..." }`。
+- `POST /document/files/share/revoke`：撤销单条共享。请求体：`{ "id": "..." }`，`id` 为共享授权 ID。
+- `POST /document/files/download`：按文档中心权限下载。请求体：`{ "id": "..." }`。
+- `POST /document/files/thumbnail`：按文档中心读取权限返回图片缩略图，不增加阅读次数。请求体：`{ "id": "..." }`。
+- `POST /document/files/preview/image`：按文档中心读取权限返回图片预览内容，并增加阅读次数。请求体：`{ "id": "..." }`。
 
 请求约定：
 - `/upload`、`/folder`、`/move`、`/copy` 可传 `scope` 和 `shareTargetType` 标识当前文档中心根目录；`scope=shared` 且未传 `shareTargetType` 表示“共享给我”。
