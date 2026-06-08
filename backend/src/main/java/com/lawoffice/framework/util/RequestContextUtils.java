@@ -20,6 +20,11 @@ public class RequestContextUtils {
         return username != null ? username.toString() : "anonymous";
     }
 
+    public static String getCurrentUserId(HttpServletRequest request) {
+        Object userId = request.getAttribute("userId");
+        return userId != null ? userId.toString() : null;
+    }
+
     /**
      * 构建请求上下文信息
      * 
@@ -29,6 +34,7 @@ public class RequestContextUtils {
     public static RequestContext buildContext(HttpServletRequest request) {
         return RequestContext.builder()
                 .username(getCurrentUsername(request))
+                .userId(getCurrentUserId(request))
                 .token(request.getHeader("Authorization"))
                 .ipAddress(request.getRemoteAddr())
                 .userAgent(request.getHeader("User-Agent"))

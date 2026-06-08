@@ -12,6 +12,8 @@ import lombok.NoArgsConstructor;
 public class RequestContext {
     
     private String username;
+
+    private String userId;
     
     private String token;
     

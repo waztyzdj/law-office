@@ -43,3 +43,8 @@ shiro:
   successUrl: /api/
   # 未授权URL
   unauthorizedUrl: /api/403
+
+# Flowable 配置
+flowable:
+  # ACT_* 引擎表由 Flowable 自身管理；系统业务表 wf_* 仍由 sql/建表脚本.sql 管理。
+  database-schema-update: true

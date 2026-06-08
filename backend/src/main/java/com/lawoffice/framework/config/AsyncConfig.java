@@ -10,8 +10,8 @@ import java.util.concurrent.ThreadPoolExecutor;
 @Configuration
 public class AsyncConfig {
 
-    @Bean(name = "taskExecutor")
-    public Executor taskExecutor() {
+    @Bean(name = "logTaskExecutor")
+    public Executor logTaskExecutor() {
         ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
         executor.setCorePoolSize(5); // 核心线程数
         executor.setMaxPoolSize(10); // 最大线程数

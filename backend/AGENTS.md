@@ -28,6 +28,7 @@
 - `com.lawoffice.framework`：通用框架层。放 BaseController/BaseService、统一返回、异常处理、租户、日志、查询构建、通用 DTO/Req/VO。禁止依赖具体业务模块。
 - `com.lawoffice.system`：系统管理域。包含用户、角色、菜单、权限、字典、部门、租户、文件、认证等。
 - `com.lawoffice.case`、`home`、`oa`：业务域。新业务按领域建包，保持 `controller/entity/mapper/req/service/vo` 结构。
+- `com.lawoffice.workflow`：工作流与审批能力域。承载 Flowable 集成、流程模型、表单实例、任务和审批记录等横向能力，避免绑定到单一 OA 模块。
 - `com.lawoffice.util`：跨模块工具。工具类必须无状态、线程安全；有业务语义的逻辑优先放 Service。
 - `src/main/resources`：配置和资源。环境差异放 `application-dev.yml`、`application-prod.yml`，禁止提交真实密钥。
 - `sql/`：建表、初始化权限、菜单、字典等 SQL。后端字段或权限变更涉及数据库时必须同步。
@@ -51,6 +52,7 @@
 - 常量使用 `private static final`，命名为 UPPER_SNAKE_CASE。魔法数字和状态码必须抽成常量或枚举。
 - 跨方法、跨类或代表稳定业务取值的常量必须放在对应业务域的 `constant` 包中，例如 `com.lawoffice.system.constant`；Service 实现类中只允许保留局部实现细节常量，禁止把存储类型、状态码、范围枚举、权限取值、虚拟节点前缀等业务常量长期堆在业务类里。
 - 权限码使用 `模块:动作`，如 `user:view`、`user:edit`，并与前端 `permissionCodes` 保持一致。
+- 业务域接口前缀、权限码前缀必须与当前业务包语义一致；例如工作流域使用 `/workflow` 和 `workflow:*`，不得继续使用旧的 `/workflow/approval` 或 `approval:*` 残留命名。
 
 ## Spring Boot 与 Java
 
@@ -75,6 +77,8 @@ public class UserController extends BaseController<IUserService, User, UserVO, U
 - 新业务 Controller 必须标注 `@RestController`、`@RequestMapping`、`@Tag`；需要自动权限时补充 `@ModuleInfo`。
 - 自定义接口必须标注 `@Operation`，说明接口语义，不写误导性的描述。
 - 请求体使用 `@Valid @RequestBody`；路径参数、查询参数需要校验时使用 Bean Validation 注解。
+- 后台业务接口默认采用项目既有风格：`POST + @RequestBody`，参数和 `id` 放在请求体中，例如 `/getById`、`/delete`、`/publish`、`/task/approve`。新后台业务模块不得新增 `/resource/{id}`、`/task/{taskId}/approve` 这类 RESTful 路径；确需使用 `@PathVariable` 的资源型接口（如文件下载、预览、公开回调、字典 options）必须在代码和模块文档中说明原因。
+- Controller 的 `@RequestMapping` 不得叠加过期业务别名；例如 `com.lawoffice.workflow` 下接口统一使用 `/workflow`，管理端使用 `/workflow/admin/...`。
 - 不在 Controller 中手动拼接大量业务数据；调用 Service 返回 VO 或简单结果。
 - 自定义接口优先让异常交给 `GlobalExceptionHandler` 统一处理。不要把未知异常的 `e.getMessage()` 直接返回给前端。
 - 文件下载/导出接口必须设置响应头、文件名编码、Content-Type，并处理写出失败日志。

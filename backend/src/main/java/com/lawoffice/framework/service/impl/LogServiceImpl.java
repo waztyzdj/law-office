@@ -13,7 +13,7 @@ import org.springframework.stereotype.Service;
 public class LogServiceImpl extends BaseServiceImpl<LogMapper, SysLog, SysLogVO> implements ILogService {
 
     @Override
-    @Async("taskExecutor")
+    @Async("logTaskExecutor")
     public void saveLogAsync(SysLog sysLog) {
         try {
             // 使用 ServiceImpl 提供的 baseMapper
