@@ -223,8 +223,8 @@ const buildFormSchema = (): VbenFormSchema[] => [
               .min(1, '请输入权限码')
               .max(100, '权限码不能超过100个字符')
               .regex(
-                /^[A-Za-z][A-Za-z0-9_-]*:[A-Za-z][A-Za-z0-9_-]*$/,
-                '权限码格式为 module:action',
+                /^[A-Za-z][A-Za-z0-9_-]*(?::[A-Za-z][A-Za-z0-9_-]*){1,2}$/,
+                '权限码格式为 module:action 或 domain:module:action',
               )
           : noopRule,
       show: (values) => isButtonPermission(values.menuType),

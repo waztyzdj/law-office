@@ -1,6 +1,8 @@
 package com.lawoffice.workflow.service.impl;
 
+import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.lawoffice.framework.dto.BaseDTO;
+import com.lawoffice.framework.dto.BasePageDTO;
 import com.lawoffice.workflow.constant.WorkflowConstants;
 import com.lawoffice.workflow.entity.ProcessCategory;
 import com.lawoffice.workflow.mapper.FormDefinitionMapper;
@@ -23,6 +25,16 @@ public class ProcessCategoryServiceImpl extends AbstractWorkflowConfigServiceImp
             ProcessModelMapper processModelMapper) {
         this.formDefinitionMapper = formDefinitionMapper;
         this.processModelMapper = processModelMapper;
+    }
+
+    @Override
+    protected void doBeforeList(BaseDTO<ProcessCategory> baseDTO) {
+        applyTenantAndDefaultSort(baseDTO);
+    }
+
+    @Override
+    protected void doBeforePage(BasePageDTO<ProcessCategory> basePageDTO) {
+        applyTenantAndDefaultSort(basePageDTO);
     }
 
     @Override
@@ -69,5 +81,16 @@ public class ProcessCategoryServiceImpl extends AbstractWorkflowConfigServiceImp
                 throw new IllegalArgumentException("分类下存在流程模型，不能删除");
             }
         }
+    }
+
+    private void applyTenantAndDefaultSort(BaseDTO<ProcessCategory> baseDTO) {
+        QueryWrapper<ProcessCategory> wrapper = (QueryWrapper<ProcessCategory>) baseDTO.getQueryWrapper();
+        if (wrapper == null) {
+            wrapper = new QueryWrapper<>();
+            baseDTO.setQueryWrapper(wrapper);
+        }
+        wrapper.eq("tenant_id", resolveTenantId(null, baseDTO.getContext()))
+                .orderByAsc("sort_order")
+                .orderByAsc("create_time");
     }
 }

@@ -5,3 +5,4 @@
 ## 审批中心
 
 - 一期设计文档：[approval-center-phase1-design.md](approval-center-phase1-design.md)
+- 组织关系增强设计：[approval-center-org-relation-design.md](approval-center-org-relation-design.md)

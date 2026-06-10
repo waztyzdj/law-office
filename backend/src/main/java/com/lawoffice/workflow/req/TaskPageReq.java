@@ -9,4 +9,26 @@ import lombok.EqualsAndHashCode;
 public class TaskPageReq extends BasePageReq {
 
     private String processInstanceId;
+
+    private String instanceTitle;
+
+    private String instanceNo;
+
+    private String taskName;
+
+    private String taskType;
+
+    private String status;
+
+    private String starterRealname;
+
+    private String assigneeRealname;
+
+    private String startTimeGe;
+
+    private String startTimeLe;
+
+    private String completeTimeGe;
+
+    private String completeTimeLe;
 }

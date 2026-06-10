@@ -69,6 +69,14 @@ public class RuntimeController {
         return runtimeService.start(req, context);
     }
 
+    @PostMapping("/start/draft")
+    @Operation(summary = "保存发起申请草稿")
+    public BaseResult<StartProcessVO> saveStartDraft(@RequestBody StartProcessReq req,
+            HttpServletRequest request) {
+        RequestContext context = RequestContextUtils.buildContext(request);
+        return runtimeService.saveStartDraft(req, context);
+    }
+
     @PostMapping("/todo/page")
     @Operation(summary = "我的待办")
     public BaseResult<PageVO<RuntimeTaskVO>> pageTodo(@RequestBody(required = false) TaskPageReq req,
@@ -123,6 +131,22 @@ public class RuntimeController {
             HttpServletRequest request) {
         RequestContext context = RequestContextUtils.buildContext(request);
         return runtimeService.approve(req == null ? null : req.getTaskId(), req, context);
+    }
+
+    @PostMapping("/task/start-draft/submit")
+    @Operation(summary = "提交发起申请草稿")
+    public BaseResult<TaskActionVO> submitStartDraft(@RequestBody(required = false) TaskActionReq req,
+            HttpServletRequest request) {
+        RequestContext context = RequestContextUtils.buildContext(request);
+        return runtimeService.submitStartDraft(req == null ? null : req.getTaskId(), req, context);
+    }
+
+    @PostMapping("/task/start-draft/save")
+    @Operation(summary = "保存发起申请草稿任务")
+    public BaseResult<TaskActionVO> saveStartDraftTask(@RequestBody(required = false) TaskActionReq req,
+            HttpServletRequest request) {
+        RequestContext context = RequestContextUtils.buildContext(request);
+        return runtimeService.saveStartDraftTask(req == null ? null : req.getTaskId(), req, context);
     }
 
     @PostMapping("/task/reject")

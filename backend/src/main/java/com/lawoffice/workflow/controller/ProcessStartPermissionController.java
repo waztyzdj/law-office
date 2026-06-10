@@ -14,7 +14,7 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequestMapping("/workflow/admin/start-permission")
 @Tag(name = "流程发起权限", description = "审批中心流程发起权限管理")
-@ModuleInfo(value = "workflow:start-permission", name = "流程发起权限", description = "审批中心流程发起权限管理")
+@ModuleInfo(value = "workflow:process", name = "流程发起权限", description = "流程设计内部发起权限能力")
 public class ProcessStartPermissionController extends BaseController<IProcessStartPermissionService, ProcessStartPermission, ProcessStartPermissionVO, ProcessStartPermissionReq> {
 
     @Autowired

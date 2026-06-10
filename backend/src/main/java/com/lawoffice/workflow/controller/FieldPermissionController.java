@@ -14,7 +14,7 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequestMapping("/workflow/admin/field-permission")
 @Tag(name = "审批字段权限", description = "审批中心节点字段权限管理")
-@ModuleInfo(value = "workflow:field-permission", name = "审批字段权限", description = "审批中心节点字段权限管理")
+@ModuleInfo(value = "workflow:process", name = "审批字段权限", description = "流程设计内部字段权限能力")
 public class FieldPermissionController extends BaseController<IFieldPermissionService, FieldPermission, FieldPermissionVO, FieldPermissionReq> {
 
     @Autowired

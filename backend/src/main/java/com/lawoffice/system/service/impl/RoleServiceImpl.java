@@ -228,10 +228,24 @@ public class RoleServiceImpl extends BaseServiceImpl<RoleMapper, Role, RoleVO> i
         LambdaQueryWrapper<RolePermission> wrapper = new LambdaQueryWrapper<>();
         wrapper.eq(RolePermission::getRoleId, roleId)
                 .eq(RolePermission::getDeleteFlag, 0);
-        return rolePermissionMapper.selectList(wrapper).stream()
+        List<String> permissionIds = rolePermissionMapper.selectList(wrapper).stream()
                 .map(RolePermission::getPermissionId)
                 .filter(StringUtils::hasText)
                 .distinct()
+                .collect(Collectors.toList());
+        if (permissionIds.isEmpty()) {
+            return new ArrayList<>();
+        }
+
+        LambdaQueryWrapper<Permission> permissionWrapper = new LambdaQueryWrapper<>();
+        permissionWrapper.in(Permission::getId, permissionIds)
+                .eq(Permission::getDeleteFlag, 0);
+        Set<String> activePermissionIds = permissionMapper.selectList(permissionWrapper).stream()
+                .map(Permission::getId)
+                .filter(StringUtils::hasText)
+                .collect(Collectors.toSet());
+        return permissionIds.stream()
+                .filter(activePermissionIds::contains)
                 .collect(Collectors.toList());
     }
 

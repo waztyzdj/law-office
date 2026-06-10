@@ -104,6 +104,11 @@ function handleUncheckAll() {
   checkedKeys.value = { checked: [], halfChecked: [] };
 }
 
+function getVisibleCheckedPermissionIds(ids: Key[]) {
+  const visiblePermissionKeys = new Set(collectTreeKeys(permissionTree.value).map(String));
+  return ids.map(String).filter((id) => visiblePermissionKeys.has(id));
+}
+
 async function loadData(role: RoleInfo) {
   if (!role.id) {
     return;
@@ -119,7 +124,10 @@ async function loadData(role: RoleInfo) {
       getRolePermissionIds(role.id),
     ]);
     permissionTree.value = tree;
-    checkedKeys.value = { checked: ids, halfChecked: [] };
+    checkedKeys.value = {
+      checked: getVisibleCheckedPermissionIds(ids),
+      halfChecked: [],
+    };
     expandedKeys.value = collectExpandedKeysByDepth(tree, 1);
   } finally {
     loading.value = false;
@@ -135,7 +143,7 @@ async function handleSubmit() {
     drawerApi.lock();
     await assignRolePermissions(
       currentRole.value.id,
-      checkedKeys.value.checked.map(String),
+      getVisibleCheckedPermissionIds(checkedKeys.value.checked),
     );
     message.success('角色授权已保存');
     emit('success');

@@ -66,6 +66,7 @@ public final class WorkflowConstants {
     }
 
     public static final class TaskType {
+        public static final String START_DRAFT = "start_draft";
         public static final String NORMAL = "normal";
         public static final String TRANSFER = "transfer";
         public static final String ADD_SIGN = "add_sign";
@@ -78,6 +79,7 @@ public final class WorkflowConstants {
         public static final String USER = "user";
         public static final String ROLE = "role";
         public static final String DEPART_LEADER = "depart_leader";
+        public static final String DEPART_ROLE = "depart_role";
         public static final String STARTER = "starter";
 
         private AssigneeType() {
@@ -94,6 +96,7 @@ public final class WorkflowConstants {
     }
 
     public static final class Action {
+        public static final String SAVE_DRAFT = "save_draft";
         public static final String START = "start";
         public static final String APPROVE = "approve";
         public static final String REJECT = "reject";

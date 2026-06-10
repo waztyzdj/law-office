@@ -9,11 +9,13 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.lawoffice.framework.dto.RequestContext;
 import com.lawoffice.framework.result.BaseResult;
 import com.lawoffice.framework.vo.PageVO;
+import com.lawoffice.system.entity.DepartRoleUser;
 import com.lawoffice.system.entity.SysDepart;
 import com.lawoffice.system.entity.User;
 import com.lawoffice.system.entity.UserDepart;
 import com.lawoffice.system.entity.UserRole;
 import com.lawoffice.system.entity.UserTenant;
+import com.lawoffice.system.mapper.DepartRoleUserMapper;
 import com.lawoffice.system.mapper.UserDepartMapper;
 import com.lawoffice.system.mapper.UserMapper;
 import com.lawoffice.system.mapper.UserRoleMapper;
@@ -66,9 +68,9 @@ import com.lawoffice.workflow.vo.TaskFormVO;
 import com.lawoffice.workflow.vo.TaskReturnNodeVO;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
-import org.springframework.transaction.interceptor.TransactionAspectSupport;
+import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.util.StringUtils;
 
 import java.time.LocalDateTime;
@@ -81,6 +83,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.function.Supplier;
 
 @Service
 @Slf4j
@@ -88,6 +91,8 @@ public class RuntimeServiceImpl implements IRuntimeService {
 
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
     private static final DateTimeFormatter INSTANCE_NO_FORMATTER = DateTimeFormatter.ofPattern("yyyyMMddHHmmssSSS");
+    private static final String START_DRAFT_NODE_ID = "start_draft";
+    private static final String START_DRAFT_TASK_NAME = "提交申请";
 
     private record ResolvedAssignee(String userId, String username, String realname, String sourceType, String sourceId) {
     }
@@ -108,6 +113,8 @@ public class RuntimeServiceImpl implements IRuntimeService {
     private final UserRoleMapper userRoleMapper;
     private final UserDepartMapper userDepartMapper;
     private final UserTenantMapper userTenantMapper;
+    private final DepartRoleUserMapper departRoleUserMapper;
+    private final TransactionTemplate transactionTemplate;
 
     @Autowired
     public RuntimeServiceImpl(ProcessModelMapper processModelMapper,
@@ -125,7 +132,9 @@ public class RuntimeServiceImpl implements IRuntimeService {
             UserMapper userMapper,
             UserRoleMapper userRoleMapper,
             UserDepartMapper userDepartMapper,
-            UserTenantMapper userTenantMapper) {
+            UserTenantMapper userTenantMapper,
+            DepartRoleUserMapper departRoleUserMapper,
+            PlatformTransactionManager transactionManager) {
         this.processModelMapper = processModelMapper;
         this.formDefinitionMapper = formDefinitionMapper;
         this.processStartPermissionMapper = processStartPermissionMapper;
@@ -142,6 +151,8 @@ public class RuntimeServiceImpl implements IRuntimeService {
         this.userRoleMapper = userRoleMapper;
         this.userDepartMapper = userDepartMapper;
         this.userTenantMapper = userTenantMapper;
+        this.departRoleUserMapper = departRoleUserMapper;
+        this.transactionTemplate = new TransactionTemplate(transactionManager);
     }
 
     @Override
@@ -158,12 +169,43 @@ public class RuntimeServiceImpl implements IRuntimeService {
                     .eq("status", WorkflowConstants.Status.PUBLISHED)
                     .eq("delete_flag", 0)
                     .isNotNull("flowable_process_definition_id")
-                    .ne("flowable_process_definition_id", "");
+                    .ne("flowable_process_definition_id", "")
+                    .notExists("select 1 from wf_process_model newer "
+                            + "where newer.tenant_id = wf_process_model.tenant_id "
+                            + "and newer.process_key = wf_process_model.process_key "
+                            + "and newer.status = 'published' "
+                            + "and newer.delete_flag = 0 "
+                            + "and newer.version > wf_process_model.version");
             if (req != null && StringUtils.hasText(req.getCategoryId())) {
                 wrapper.eq("category_id", req.getCategoryId());
             }
             if (req != null && StringUtils.hasText(req.getProcessName())) {
                 wrapper.like("process_name", req.getProcessName());
+            }
+            if (req != null && StringUtils.hasText(req.getProcessKey())) {
+                wrapper.like("process_key", req.getProcessKey());
+            }
+            if (req != null && req.getProcessVersion() != null) {
+                wrapper.eq("version", req.getProcessVersion());
+            }
+            if (req != null && StringUtils.hasText(req.getDesignerType())) {
+                wrapper.eq("designer_type", req.getDesignerType());
+            }
+            if (req != null && StringUtils.hasText(req.getStartScopeType())) {
+                wrapper.eq("start_scope_type", req.getStartScopeType());
+            }
+            List<String> matchedFormIds = listMatchedFormDefinitionIds(req, tenantId);
+            if (matchedFormIds != null) {
+                if (matchedFormIds.isEmpty()) {
+                    return BaseResult.success(PageVO.empty(pageNum, pageSize));
+                }
+                wrapper.in("form_definition_id", matchedFormIds);
+            }
+            if (req != null && StringUtils.hasText(req.getPublishedTimeGe())) {
+                wrapper.ge("published_time", parseDateTime(req.getPublishedTimeGe(), "发布时间开始值不合法"));
+            }
+            if (req != null && StringUtils.hasText(req.getPublishedTimeLe())) {
+                wrapper.le("published_time", parseDateTime(req.getPublishedTimeLe(), "发布时间结束值不合法"));
             }
             wrapper.and(condition -> {
                 condition.eq("start_scope_type", WorkflowConstants.StartScopeType.ALL);
@@ -174,8 +216,9 @@ public class RuntimeServiceImpl implements IRuntimeService {
             wrapper.orderByDesc("published_time").orderByDesc("create_time");
 
             Page<ProcessModel> page = processModelMapper.selectPage(new Page<>(pageNum, pageSize), wrapper);
+            List<AvailableProcessVO> records = buildAvailableProcessRecords(page.getRecords(), tenantId);
             return BaseResult.success(new PageVO<>(
-                    buildAvailableProcessRecords(page.getRecords(), tenantId),
+                    records,
                     page.getTotal(),
                     page.getCurrent(),
                     page.getSize()));
@@ -202,9 +245,8 @@ public class RuntimeServiceImpl implements IRuntimeService {
     }
 
     @Override
-    @Transactional(rollbackFor = Exception.class)
     public BaseResult<StartProcessVO> start(StartProcessReq req, RequestContext context) {
-        try {
+        return executeInTransaction(() -> {
             validateStartReq(req);
             validateJson(req.getFormDataJson(), "表单数据JSON");
 
@@ -214,8 +256,9 @@ public class RuntimeServiceImpl implements IRuntimeService {
             checkStartPermission(model, context);
             FormDefinition form = requirePublishedForm(model.getFormDefinitionId(), tenantId);
 
-            FormInstance formInstance = createFormInstance(req, form, tenantId, context);
-            ProcessInstance processInstance = createProcessInstance(req, model, form, formInstance, tenantId, context);
+            FormInstance formInstance = createFormInstance(req, form, tenantId, context, WorkflowConstants.Status.ACTIVE);
+            ProcessInstance processInstance = createProcessInstance(req, model, form, formInstance, tenantId, context,
+                    WorkflowConstants.Status.RUNNING);
             formInstance.setProcessInstanceId(processInstance.getId());
             EntityFillUtils.fillAuditFields(formInstance, context, false);
             formInstanceMapper.updateById(formInstance);
@@ -232,14 +275,42 @@ public class RuntimeServiceImpl implements IRuntimeService {
             createStartRecord(processInstance, formInstance, tenantId, context);
 
             return BaseResult.success(buildStartResult(processInstance, formInstance));
-        } catch (IllegalArgumentException e) {
-            markRollbackOnly();
-            return BaseResult.error(400, e.getMessage());
-        } catch (Exception e) {
-            log.error("Start workflow process failed", e);
-            markRollbackOnly();
-            return BaseResult.error("发起申请失败: " + e.getMessage());
-        }
+        }, "发起申请失败");
+    }
+
+    @Override
+    public BaseResult<StartProcessVO> saveStartDraft(StartProcessReq req, RequestContext context) {
+        return executeInTransaction(() -> {
+            validateStartReq(req);
+            validateJson(req.getFormDataJson(), "表单数据JSON");
+
+            String tenantId = requireTenantId(context);
+            requireUserId(context);
+            ProcessModel model = requirePublishedModel(req.getProcessModelId(), tenantId);
+            checkStartPermission(model, context);
+            FormDefinition form = requirePublishedForm(model.getFormDefinitionId(), tenantId);
+
+            FormInstance formInstance = createFormInstance(req, form, tenantId, context, WorkflowConstants.Status.DRAFT);
+            ProcessInstance processInstance = createProcessInstance(req, model, form, formInstance, tenantId, context,
+                    WorkflowConstants.Status.DRAFT);
+            formInstance.setProcessInstanceId(processInstance.getId());
+            EntityFillUtils.fillAuditFields(formInstance, context, false);
+            formInstanceMapper.updateById(formInstance);
+            createStartDraftTask(processInstance, tenantId, context);
+            createDraftRecord(processInstance, formInstance, tenantId, context);
+
+            return BaseResult.success(buildStartResult(processInstance, formInstance));
+        }, "保存申请草稿失败");
+    }
+
+    @Override
+    public BaseResult<TaskActionVO> submitStartDraft(String taskId, TaskActionReq req, RequestContext context) {
+        return executeInTransaction(() -> BaseResult.success(handleSubmitStartDraft(taskId, req, context)), "提交申请草稿失败");
+    }
+
+    @Override
+    public BaseResult<TaskActionVO> saveStartDraftTask(String taskId, TaskActionReq req, RequestContext context) {
+        return executeInTransaction(() -> BaseResult.success(handleSaveStartDraftTask(taskId, req, context)), "保存申请草稿失败");
     }
 
     @Override
@@ -259,6 +330,30 @@ public class RuntimeServiceImpl implements IRuntimeService {
             }
             if (req != null && StringUtils.hasText(req.getInstanceTitle())) {
                 wrapper.like("instance_title", req.getInstanceTitle());
+            }
+            if (req != null && StringUtils.hasText(req.getInstanceNo())) {
+                wrapper.like("instance_no", req.getInstanceNo());
+            }
+            if (req != null && StringUtils.hasText(req.getProcessName())) {
+                wrapper.like("process_name", req.getProcessName());
+            }
+            if (req != null && StringUtils.hasText(req.getCurrentTaskNames())) {
+                wrapper.like("current_task_names", req.getCurrentTaskNames());
+            }
+            if (req != null && StringUtils.hasText(req.getCurrentAssigneeNames())) {
+                wrapper.like("current_assignee_names", req.getCurrentAssigneeNames());
+            }
+            if (req != null && StringUtils.hasText(req.getStartTimeGe())) {
+                wrapper.ge("start_time", parseDateTime(req.getStartTimeGe(), "发起时间开始值不合法"));
+            }
+            if (req != null && StringUtils.hasText(req.getStartTimeLe())) {
+                wrapper.le("start_time", parseDateTime(req.getStartTimeLe(), "发起时间结束值不合法"));
+            }
+            if (req != null && StringUtils.hasText(req.getEndTimeGe())) {
+                wrapper.ge("end_time", parseDateTime(req.getEndTimeGe(), "结束时间开始值不合法"));
+            }
+            if (req != null && StringUtils.hasText(req.getEndTimeLe())) {
+                wrapper.le("end_time", parseDateTime(req.getEndTimeLe(), "结束时间结束值不合法"));
             }
             wrapper.orderByDesc("start_time").orderByDesc("create_time");
 
@@ -305,8 +400,13 @@ public class RuntimeServiceImpl implements IRuntimeService {
             ensureTaskHandler(task, findActiveCandidate(task, context), context);
             ProcessInstance processInstance = requireProcessInstance(task.getProcessInstanceId(), tenantId);
             FormInstance formInstance = requireFormInstance(processInstance.getFormInstanceId(), tenantId);
-            List<FieldPermission> permissions = listFieldPermissions(processInstance.getProcessModelId(), task.getNodeId(), tenantId);
-            ProcessNodeConfig nodeConfig = requireNodeConfig(processInstance.getProcessModelId(), task.getNodeId(), tenantId);
+            boolean startDraftTask = WorkflowConstants.TaskType.START_DRAFT.equals(task.getTaskType());
+            List<FieldPermission> permissions = startDraftTask
+                    ? List.of()
+                    : listFieldPermissions(processInstance.getProcessModelId(), task.getNodeId(), tenantId);
+            ProcessNodeConfig nodeConfig = startDraftTask
+                    ? buildStartDraftNodeConfig()
+                    : requireNodeConfig(processInstance.getProcessModelId(), task.getNodeId(), tenantId);
             return BaseResult.success(buildTaskForm(task, processInstance, formInstance, permissions, nodeConfig));
         } catch (IllegalArgumentException e) {
             return BaseResult.error(400, e.getMessage());
@@ -316,78 +416,38 @@ public class RuntimeServiceImpl implements IRuntimeService {
     }
 
     @Override
-    @Transactional(rollbackFor = Exception.class)
     public BaseResult<TaskActionVO> approve(String taskId, TaskActionReq req, RequestContext context) {
-        try {
-            return BaseResult.success(handleTaskAction(taskId, req, context, WorkflowConstants.Action.APPROVE));
-        } catch (IllegalArgumentException e) {
-            markRollbackOnly();
-            return BaseResult.error(400, e.getMessage());
-        } catch (Exception e) {
-            log.error("Approve workflow task failed, taskId={}", taskId, e);
-            markRollbackOnly();
-            return BaseResult.error("审批通过失败: " + e.getMessage());
-        }
+        return executeInTransaction(
+                () -> BaseResult.success(handleTaskAction(taskId, req, context, WorkflowConstants.Action.APPROVE)),
+                "审批通过失败");
     }
 
     @Override
-    @Transactional(rollbackFor = Exception.class)
     public BaseResult<TaskActionVO> reject(String taskId, TaskActionReq req, RequestContext context) {
-        try {
-            return BaseResult.success(handleTaskAction(taskId, req, context, WorkflowConstants.Action.REJECT));
-        } catch (IllegalArgumentException e) {
-            markRollbackOnly();
-            return BaseResult.error(400, e.getMessage());
-        } catch (Exception e) {
-            log.error("Reject workflow task failed, taskId={}", taskId, e);
-            markRollbackOnly();
-            return BaseResult.error("审批拒绝失败: " + e.getMessage());
-        }
+        return executeInTransaction(
+                () -> BaseResult.success(handleTaskAction(taskId, req, context, WorkflowConstants.Action.REJECT)),
+                "审批拒绝失败");
     }
 
     @Override
-    @Transactional(rollbackFor = Exception.class)
     public BaseResult<TaskActionVO> transfer(String taskId, TaskActionReq req, RequestContext context) {
-        try {
-            return BaseResult.success(handleTransfer(taskId, req, context));
-        } catch (IllegalArgumentException e) {
-            markRollbackOnly();
-            return BaseResult.error(400, e.getMessage());
-        } catch (Exception e) {
-            log.error("Transfer workflow task failed, taskId={}", taskId, e);
-            markRollbackOnly();
-            return BaseResult.error("转办失败: " + e.getMessage());
-        }
+        return executeInTransaction(
+                () -> BaseResult.success(handleTransfer(taskId, req, context)),
+                "转办失败");
     }
 
     @Override
-    @Transactional(rollbackFor = Exception.class)
     public BaseResult<TaskActionVO> returnTask(String taskId, TaskActionReq req, RequestContext context) {
-        try {
-            return BaseResult.success(handleReturn(taskId, req, context));
-        } catch (IllegalArgumentException e) {
-            markRollbackOnly();
-            return BaseResult.error(400, e.getMessage());
-        } catch (Exception e) {
-            log.error("Return workflow task failed, taskId={}", taskId, e);
-            markRollbackOnly();
-            return BaseResult.error("退回失败: " + e.getMessage());
-        }
+        return executeInTransaction(
+                () -> BaseResult.success(handleReturn(taskId, req, context)),
+                "退回失败");
     }
 
     @Override
-    @Transactional(rollbackFor = Exception.class)
     public BaseResult<TaskActionVO> addSign(String taskId, TaskActionReq req, RequestContext context) {
-        try {
-            return BaseResult.success(handleAddSign(taskId, req, context));
-        } catch (IllegalArgumentException e) {
-            markRollbackOnly();
-            return BaseResult.error(400, e.getMessage());
-        } catch (Exception e) {
-            log.error("Add sign workflow task failed, taskId={}", taskId, e);
-            markRollbackOnly();
-            return BaseResult.error("加签失败: " + e.getMessage());
-        }
+        return executeInTransaction(
+                () -> BaseResult.success(handleAddSign(taskId, req, context)),
+                "加签失败");
     }
 
     @Override
@@ -744,6 +804,58 @@ public class RuntimeServiceImpl implements IRuntimeService {
         if (req != null && StringUtils.hasText(req.getProcessInstanceId())) {
             wrapper.eq("process_instance_id", req.getProcessInstanceId());
         }
+        if (req != null && StringUtils.hasText(req.getTaskType())) {
+            wrapper.eq("task_type", req.getTaskType());
+        }
+        if (req != null && StringUtils.hasText(req.getStatus())) {
+            wrapper.eq("status", req.getStatus());
+        }
+        if (req != null && StringUtils.hasText(req.getTaskName())) {
+            wrapper.like("task_name", req.getTaskName());
+        }
+        if (req != null && StringUtils.hasText(req.getAssigneeRealname())) {
+            wrapper.like("assignee_realname", req.getAssigneeRealname());
+        }
+        if (req != null && StringUtils.hasText(req.getCompleteTimeGe())) {
+            wrapper.ge("complete_time", parseDateTime(req.getCompleteTimeGe(), "办理时间开始值不合法"));
+        }
+        if (req != null && StringUtils.hasText(req.getCompleteTimeLe())) {
+            wrapper.le("complete_time", parseDateTime(req.getCompleteTimeLe(), "办理时间结束值不合法"));
+        }
+        if (req != null && (StringUtils.hasText(req.getInstanceTitle())
+                || StringUtils.hasText(req.getInstanceNo())
+                || StringUtils.hasText(req.getStarterRealname())
+                || StringUtils.hasText(req.getStartTimeGe())
+                || StringUtils.hasText(req.getStartTimeLe()))) {
+            QueryWrapper<ProcessInstance> instanceWrapper = new QueryWrapper<>();
+            instanceWrapper.select("id")
+                    .eq("tenant_id", tenantId)
+                    .eq("delete_flag", 0);
+            if (StringUtils.hasText(req.getInstanceTitle())) {
+                instanceWrapper.like("instance_title", req.getInstanceTitle());
+            }
+            if (StringUtils.hasText(req.getInstanceNo())) {
+                instanceWrapper.like("instance_no", req.getInstanceNo());
+            }
+            if (StringUtils.hasText(req.getStarterRealname())) {
+                instanceWrapper.like("starter_realname", req.getStarterRealname());
+            }
+            if (StringUtils.hasText(req.getStartTimeGe())) {
+                instanceWrapper.ge("start_time", parseDateTime(req.getStartTimeGe(), "发起时间开始值不合法"));
+            }
+            if (StringUtils.hasText(req.getStartTimeLe())) {
+                instanceWrapper.le("start_time", parseDateTime(req.getStartTimeLe(), "发起时间结束值不合法"));
+            }
+            List<String> matchedInstanceIds = processInstanceMapper.selectList(instanceWrapper)
+                    .stream()
+                    .map(ProcessInstance::getId)
+                    .filter(StringUtils::hasText)
+                    .toList();
+            if (matchedInstanceIds.isEmpty()) {
+                return new PageVO<>(List.of(), 0, pageNum, pageSize);
+            }
+            wrapper.in("process_instance_id", matchedInstanceIds);
+        }
         wrapper.and(condition -> {
             condition.eq("assignee_user_id", userId);
             if (StringUtils.hasText(context.getUsername())) {
@@ -771,6 +883,39 @@ public class RuntimeServiceImpl implements IRuntimeService {
                 .map(TaskCandidate::getTaskId)
                 .filter(StringUtils::hasText)
                 .toList();
+    }
+
+    private List<String> listMatchedFormDefinitionIds(AvailableProcessPageReq req, String tenantId) {
+        if (req == null || (!StringUtils.hasText(req.getFormName()) && req.getFormVersion() == null)) {
+            return null;
+        }
+        QueryWrapper<FormDefinition> wrapper = new QueryWrapper<>();
+        wrapper.select("id")
+                .eq("tenant_id", tenantId)
+                .eq("delete_flag", 0);
+        if (StringUtils.hasText(req.getFormName())) {
+            wrapper.like("form_name", req.getFormName());
+        }
+        if (req.getFormVersion() != null) {
+            wrapper.eq("version", req.getFormVersion());
+        }
+        return formDefinitionMapper.selectList(wrapper)
+                .stream()
+                .map(FormDefinition::getId)
+                .filter(StringUtils::hasText)
+                .toList();
+    }
+
+    private LocalDateTime parseDateTime(String value, String message) {
+        try {
+            return LocalDateTime.parse(value, DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"));
+        } catch (Exception e) {
+            try {
+                return LocalDateTime.parse(value);
+            } catch (Exception ignored) {
+                throw new IllegalArgumentException(message);
+            }
+        }
     }
 
     private List<RuntimeTaskVO> buildRuntimeTaskRecords(List<Task> tasks, String tenantId) {
@@ -850,6 +995,61 @@ public class RuntimeServiceImpl implements IRuntimeService {
             throw new IllegalArgumentException("不支持的审批动作");
         }
         createTaskRecord(task, processInstance, formInstance, req, action, tenantId, context);
+        return buildTaskActionResult(task, processInstance);
+    }
+
+    private TaskActionVO handleSubmitStartDraft(String taskId, TaskActionReq req, RequestContext context) {
+        String tenantId = requireTenantId(context);
+        Task task = requireTodoTask(taskId, tenantId);
+        if (!WorkflowConstants.TaskType.START_DRAFT.equals(task.getTaskType())) {
+            throw new IllegalArgumentException("当前任务不是发起申请草稿");
+        }
+        ensureTaskHandler(task, null, context);
+        ProcessInstance processInstance = requireProcessInstance(task.getProcessInstanceId(), tenantId);
+        if (!WorkflowConstants.Status.DRAFT.equals(processInstance.getStatus())) {
+            throw new IllegalArgumentException("申请草稿已提交或已处理");
+        }
+        FormInstance formInstance = requireFormInstance(processInstance.getFormInstanceId(), tenantId);
+        saveDraftFormData(req, formInstance, context);
+
+        ProcessModel model = requirePublishedModel(processInstance.getProcessModelId(), tenantId);
+        checkStartPermission(model, context);
+        FlowableStartResult flowableStartResult = flowableService.startProcessInstance(
+                model,
+                processInstance.getId(),
+                buildFlowableVariables(processInstance, formInstance, context));
+        processInstance.setFlowableProcessInstanceId(flowableStartResult.getProcessInstanceId());
+        processInstance.setFlowableProcessDefinitionId(flowableStartResult.getProcessDefinitionId());
+        processInstance.setStatus(WorkflowConstants.Status.RUNNING);
+        processInstance.setStartTime(LocalDateTime.now());
+        markTaskDone(task, context);
+        syncCurrentTasks(processInstance, tenantId, context);
+        EntityFillUtils.fillAuditFields(processInstance, context, false);
+        processInstanceMapper.updateById(processInstance);
+
+        formInstance.setStatus(WorkflowConstants.Status.ACTIVE);
+        formInstance.setSubmittedTime(LocalDateTime.now());
+        EntityFillUtils.fillAuditFields(formInstance, context, false);
+        formInstanceMapper.updateById(formInstance);
+
+        createStartRecord(processInstance, formInstance, tenantId, context);
+        return buildTaskActionResult(task, processInstance);
+    }
+
+    private TaskActionVO handleSaveStartDraftTask(String taskId, TaskActionReq req, RequestContext context) {
+        String tenantId = requireTenantId(context);
+        Task task = requireTodoTask(taskId, tenantId);
+        if (!WorkflowConstants.TaskType.START_DRAFT.equals(task.getTaskType())) {
+            throw new IllegalArgumentException("当前任务不是发起申请草稿");
+        }
+        ensureTaskHandler(task, null, context);
+        ProcessInstance processInstance = requireProcessInstance(task.getProcessInstanceId(), tenantId);
+        if (!WorkflowConstants.Status.DRAFT.equals(processInstance.getStatus())) {
+            throw new IllegalArgumentException("申请草稿已提交或已处理");
+        }
+        FormInstance formInstance = requireFormInstance(processInstance.getFormInstanceId(), tenantId);
+        saveDraftFormData(req, formInstance, context);
+        createTaskRecord(task, processInstance, formInstance, req, WorkflowConstants.Action.SAVE_DRAFT, tenantId, context);
         return buildTaskActionResult(task, processInstance);
     }
 
@@ -1297,6 +1497,16 @@ public class RuntimeServiceImpl implements IRuntimeService {
         formInstanceMapper.updateById(formInstance);
     }
 
+    private void saveDraftFormData(TaskActionReq req, FormInstance formInstance, RequestContext context) {
+        if (req == null || !StringUtils.hasText(req.getFormDataJson())) {
+            return;
+        }
+        validateJson(req.getFormDataJson(), "表单数据JSON");
+        formInstance.setFormDataJson(req.getFormDataJson());
+        EntityFillUtils.fillAuditFields(formInstance, context, false);
+        formInstanceMapper.updateById(formInstance);
+    }
+
     private void createTaskRecord(Task task, ProcessInstance processInstance, FormInstance formInstance,
             TaskActionReq req, String action, String tenantId, RequestContext context) {
         createTaskRecord(task, processInstance, formInstance, req, action, tenantId, context, null, null);
@@ -1334,6 +1544,7 @@ public class RuntimeServiceImpl implements IRuntimeService {
 
     private String resolveDefaultActionComment(String action) {
         return switch (action) {
+            case WorkflowConstants.Action.SAVE_DRAFT -> "保存草稿";
             case WorkflowConstants.Action.APPROVE -> "审批通过";
             case WorkflowConstants.Action.REJECT -> "审批拒绝";
             case WorkflowConstants.Action.TRANSFER -> "转办";
@@ -1354,7 +1565,10 @@ public class RuntimeServiceImpl implements IRuntimeService {
 
     private TaskFormVO buildTaskForm(Task task, ProcessInstance processInstance, FormInstance formInstance,
             List<FieldPermission> permissions, ProcessNodeConfig nodeConfig) {
-        List<ProcessNodeConfig> returnableNodes = listReturnableNodeConfigs(processInstance, nodeConfig, task.getTenantId());
+        boolean startDraftTask = WorkflowConstants.TaskType.START_DRAFT.equals(task.getTaskType());
+        List<ProcessNodeConfig> returnableNodes = startDraftTask
+                ? List.of()
+                : listReturnableNodeConfigs(processInstance, nodeConfig, task.getTenantId());
         TaskFormVO vo = new TaskFormVO();
         vo.setTaskId(task.getId());
         vo.setProcessInstanceId(processInstance.getId());
@@ -1381,6 +1595,14 @@ public class RuntimeServiceImpl implements IRuntimeService {
     private TaskActionPermissionVO buildTaskActionPermissions(Task task, ProcessNodeConfig nodeConfig,
             List<ProcessNodeConfig> returnableNodes) {
         TaskActionPermissionVO vo = new TaskActionPermissionVO();
+        if (WorkflowConstants.TaskType.START_DRAFT.equals(task.getTaskType())) {
+            vo.setAllowApprove(true);
+            vo.setAllowReject(false);
+            vo.setAllowTransfer(false);
+            vo.setAllowAddSign(false);
+            vo.setAllowReturn(false);
+            return vo;
+        }
         boolean addSignTask = WorkflowConstants.TaskType.ADD_SIGN.equals(task.getTaskType());
         vo.setAllowApprove(true);
         vo.setAllowReject(!addSignTask);
@@ -1467,6 +1689,15 @@ public class RuntimeServiceImpl implements IRuntimeService {
         if (!StringUtils.hasText(model.getFlowableProcessDefinitionId())) {
             throw new IllegalArgumentException("流程未部署到Flowable，不能发起");
         }
+        long newerPublishedCount = processModelMapper.selectCount(new QueryWrapper<ProcessModel>()
+                .eq("tenant_id", tenantId)
+                .eq("process_key", model.getProcessKey())
+                .eq("status", WorkflowConstants.Status.PUBLISHED)
+                .eq("delete_flag", 0)
+                .gt("version", model.getVersion()));
+        if (newerPublishedCount > 0) {
+            throw new IllegalArgumentException("流程已有新发布版本，请使用最新版本发起");
+        }
         return model;
     }
 
@@ -1514,7 +1745,8 @@ public class RuntimeServiceImpl implements IRuntimeService {
         };
     }
 
-    private FormInstance createFormInstance(StartProcessReq req, FormDefinition form, String tenantId, RequestContext context) {
+    private FormInstance createFormInstance(StartProcessReq req, FormDefinition form, String tenantId, RequestContext context,
+            String status) {
         FormInstance formInstance = new FormInstance();
         formInstance.setTenantId(tenantId);
         formInstance.setFormDefinitionId(form.getId());
@@ -1524,15 +1756,17 @@ public class RuntimeServiceImpl implements IRuntimeService {
         formInstance.setFormDataJson(req.getFormDataJson());
         formInstance.setFormSchemaSnapshotJson(form.getSchemaJson());
         formInstance.setFormOptionSnapshotJson(form.getOptionJson());
-        formInstance.setStatus(WorkflowConstants.Status.ACTIVE);
-        formInstance.setSubmittedTime(LocalDateTime.now());
+        formInstance.setStatus(status);
+        if (WorkflowConstants.Status.ACTIVE.equals(status)) {
+            formInstance.setSubmittedTime(LocalDateTime.now());
+        }
         EntityFillUtils.fillAuditFields(formInstance, context, true);
         formInstanceMapper.insert(formInstance);
         return formInstance;
     }
 
     private ProcessInstance createProcessInstance(StartProcessReq req, ProcessModel model, FormDefinition form,
-            FormInstance formInstance, String tenantId, RequestContext context) {
+            FormInstance formInstance, String tenantId, RequestContext context, String status) {
         ProcessInstance processInstance = new ProcessInstance();
         processInstance.setId(newId());
         processInstance.setTenantId(tenantId);
@@ -1546,7 +1780,7 @@ public class RuntimeServiceImpl implements IRuntimeService {
         processInstance.setStarterUserId(context.getUserId());
         processInstance.setStarterUsername(context.getUsername());
         processInstance.setStarterRealname(context.getUsername());
-        processInstance.setStatus(WorkflowConstants.Status.RUNNING);
+        processInstance.setStatus(status);
         processInstance.setStartTime(LocalDateTime.now());
         EntityFillUtils.fillAuditFields(processInstance, context, true);
         processInstanceMapper.insert(processInstance);
@@ -1561,6 +1795,38 @@ public class RuntimeServiceImpl implements IRuntimeService {
         variables.put("starterUserId", context.getUserId());
         variables.put("starterUsername", context.getUsername());
         return variables;
+    }
+
+    private void createStartDraftTask(ProcessInstance processInstance, String tenantId, RequestContext context) {
+        Task task = new Task();
+        task.setId(newId());
+        task.setTenantId(tenantId);
+        task.setProcessInstanceId(processInstance.getId());
+        task.setFlowableTaskId("draft:" + task.getId());
+        task.setNodeId(START_DRAFT_NODE_ID);
+        task.setTaskName(START_DRAFT_TASK_NAME);
+        task.setTaskType(WorkflowConstants.TaskType.START_DRAFT);
+        task.setAssigneeUserId(context.getUserId());
+        task.setAssigneeUsername(context.getUsername());
+        task.setAssigneeRealname(context.getUsername());
+        task.setStatus(WorkflowConstants.Status.TODO);
+        EntityFillUtils.fillAuditFields(task, context, true);
+        taskMapper.insert(task);
+        processInstance.setCurrentTaskNames(START_DRAFT_TASK_NAME);
+        processInstance.setCurrentAssigneeNames(resolveDisplayName(context.getUsername(), context.getUsername(), context.getUserId()));
+        EntityFillUtils.fillAuditFields(processInstance, context, false);
+        processInstanceMapper.updateById(processInstance);
+    }
+
+    private ProcessNodeConfig buildStartDraftNodeConfig() {
+        ProcessNodeConfig nodeConfig = new ProcessNodeConfig();
+        nodeConfig.setNodeId(START_DRAFT_NODE_ID);
+        nodeConfig.setNodeName(START_DRAFT_TASK_NAME);
+        nodeConfig.setNodeType(WorkflowConstants.NodeType.START);
+        nodeConfig.setAllowTransfer(0);
+        nodeConfig.setAllowReturn(0);
+        nodeConfig.setAllowAddSign(0);
+        return nodeConfig;
     }
 
     private void syncCurrentTasks(ProcessInstance processInstance, String tenantId, RequestContext context) {
@@ -1633,6 +1899,7 @@ public class RuntimeServiceImpl implements IRuntimeService {
             case WorkflowConstants.AssigneeType.USER -> resolveUserAssignees(nodeConfig, tenantId);
             case WorkflowConstants.AssigneeType.ROLE -> resolveRoleAssignees(nodeConfig, tenantId);
             case WorkflowConstants.AssigneeType.DEPART_LEADER -> resolveDepartLeaderAssignees(nodeConfig, processInstance, tenantId);
+            case WorkflowConstants.AssigneeType.DEPART_ROLE -> resolveDepartRoleAssignees(nodeConfig, tenantId);
             case WorkflowConstants.AssigneeType.STARTER -> resolveStarterAssignee(processInstance, tenantId);
             default -> throw new IllegalArgumentException("不支持的审批人类型: " + nodeConfig.getAssigneeType());
         };
@@ -1705,15 +1972,51 @@ public class RuntimeServiceImpl implements IRuntimeService {
                 .eq("user_identity", 2)
                 .eq("status", 1)
                 .eq("delete_flag", 0));
+        List<String> leaderUserIds = leaders.stream()
+                .map(User::getId)
+                .filter(StringUtils::hasText)
+                .toList();
+        Set<String> relationLeaderUserIds = leaderUserIds.isEmpty()
+                ? Set.of()
+                : userDepartMapper.selectList(new QueryWrapper<UserDepart>()
+                        .select("user_id")
+                        .eq("tenant_id", tenantId)
+                        .in("user_id", leaderUserIds)
+                        .in("dep_id", resolvedDepartIds)
+                        .eq("delete_flag", 0))
+                .stream()
+                .map(UserDepart::getUserId)
+                .filter(StringUtils::hasText)
+                .collect(java.util.stream.Collectors.toSet());
         Map<String, User> matchedLeaders = new LinkedHashMap<>();
         for (User leader : leaders) {
-            if (hasAnyDepart(leader.getDepartIds(), resolvedDepartIds)) {
+            if (hasAnyDepart(leader.getDepartIds(), resolvedDepartIds) || relationLeaderUserIds.contains(leader.getId())) {
                 matchedLeaders.putIfAbsent(leader.getId(), leader);
             }
         }
         return matchedLeaders.values().stream()
                 .map(user -> new ResolvedAssignee(user.getId(), user.getUsername(), user.getRealname(),
                         WorkflowConstants.AssigneeType.DEPART_LEADER, String.join(",", resolvedDepartIds)))
+                .toList();
+    }
+
+    private List<ResolvedAssignee> resolveDepartRoleAssignees(ProcessNodeConfig nodeConfig, String tenantId) {
+        List<String> departRoleIds = readIdList(nodeConfig.getAssigneeJson(), "departRoleIds", "departRoles", "ids");
+        if (departRoleIds.isEmpty()) {
+            return List.of();
+        }
+        List<DepartRoleUser> roleUsers = departRoleUserMapper.selectList(new QueryWrapper<DepartRoleUser>()
+                .in("drole_id", departRoleIds)
+                .eq("tenant_id", tenantId)
+                .eq("delete_flag", 0));
+        Map<String, String> sourceRoleByUserId = new LinkedHashMap<>();
+        for (DepartRoleUser roleUser : roleUsers) {
+            sourceRoleByUserId.putIfAbsent(roleUser.getUserId(), roleUser.getDroleId());
+        }
+        Map<String, User> users = loadTenantActiveUsers(new ArrayList<>(sourceRoleByUserId.keySet()), tenantId);
+        return users.values().stream()
+                .map(user -> new ResolvedAssignee(user.getId(), user.getUsername(), user.getRealname(),
+                        WorkflowConstants.AssigneeType.DEPART_ROLE, sourceRoleByUserId.get(user.getId())))
                 .toList();
     }
 
@@ -1892,6 +2195,21 @@ public class RuntimeServiceImpl implements IRuntimeService {
         operationRecordMapper.insert(record);
     }
 
+    private void createDraftRecord(ProcessInstance processInstance, FormInstance formInstance, String tenantId, RequestContext context) {
+        OperationRecord record = new OperationRecord();
+        record.setTenantId(tenantId);
+        record.setProcessInstanceId(processInstance.getId());
+        record.setAction(WorkflowConstants.Action.SAVE_DRAFT);
+        record.setOperatorUserId(context.getUserId());
+        record.setOperatorUsername(context.getUsername());
+        record.setOperatorRealname(context.getUsername());
+        record.setComment("保存申请草稿");
+        record.setFormDataSnapshotJson(formInstance.getFormDataJson());
+        record.setOperateTime(LocalDateTime.now());
+        EntityFillUtils.fillAuditFields(record, context, true);
+        operationRecordMapper.insert(record);
+    }
+
     private StartFormVO buildStartForm(ProcessModel model, FormDefinition form) {
         StartFormVO vo = new StartFormVO();
         vo.setProcessModelId(model.getId());
@@ -1946,13 +2264,20 @@ public class RuntimeServiceImpl implements IRuntimeService {
     }
 
     /**
-     * 发起申请需要同时写入业务表和启动 Flowable，捕获异常返回前必须显式回滚。
+     * 运行时写操作需要在捕获异常后返回 BaseResult，同时不能让 Spring 在方法返回后再提交已回滚事务。
      */
-    private void markRollbackOnly() {
-        try {
-            TransactionAspectSupport.currentTransactionStatus().setRollbackOnly();
-        } catch (Exception ignored) {
-            // No active transaction when invoked outside Spring proxy.
-        }
+    private <T> BaseResult<T> executeInTransaction(Supplier<BaseResult<T>> action, String errorMessage) {
+        return transactionTemplate.execute(status -> {
+            try {
+                return action.get();
+            } catch (IllegalArgumentException e) {
+                status.setRollbackOnly();
+                return BaseResult.error(400, e.getMessage());
+            } catch (Exception e) {
+                status.setRollbackOnly();
+                log.error(errorMessage, e);
+                return BaseResult.error(errorMessage + ": " + e.getMessage());
+            }
+        });
     }
 }

@@ -62,6 +62,7 @@ public class ProcessNodeConfigServiceImpl extends AbstractWorkflowConfigServiceI
                     WorkflowConstants.AssigneeType.USER,
                     WorkflowConstants.AssigneeType.ROLE,
                     WorkflowConstants.AssigneeType.DEPART_LEADER,
+                    WorkflowConstants.AssigneeType.DEPART_ROLE,
                     WorkflowConstants.AssigneeType.STARTER);
         }
         if (config.getAllowTransfer() == null) {

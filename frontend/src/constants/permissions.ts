@@ -21,4 +21,7 @@ export const permissionCodes = {
   role: createBasePermissionCodes('role'),
   tenant: createBasePermissionCodes('tenant'),
   user: createBasePermissionCodes('user'),
+  workflowCategory: createBasePermissionCodes('workflow:category'),
+  workflowForm: createBasePermissionCodes('workflow:form'),
+  workflowProcess: createBasePermissionCodes('workflow:process'),
 } as const;

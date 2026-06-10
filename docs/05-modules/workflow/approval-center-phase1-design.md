@@ -290,7 +290,7 @@ Flowable 负责：
 | `node_id` | 节点 ID，对应 BPMN `taskDefinitionKey` |
 | `node_name` | 节点名称 |
 | `node_type` | 节点类型：`start`、`approver`、`end` |
-| `assignee_type` | 审批人类型：`user`、`role`、`depart_leader`、`starter` |
+| `assignee_type` | 审批人类型：`user`、`role`、`depart_leader`、`depart_role`、`starter_supervisor`、`starter_select`、`starter` |
 | `assignee_json` | 审批人配置 JSON |
 | `allow_transfer` | 是否允许转办 |
 | `allow_add_sign` | 是否允许加签 |
@@ -303,7 +303,10 @@ Flowable 负责：
 - 节点配置唯一键建议使用 `tenant_id + process_model_id + node_id + delete_flag`。
 - `assignee_type=user` 时，`assignee_json` 使用 `{ "userIds": ["..."] }`。
 - `assignee_type=role` 时，`assignee_json` 使用 `{ "roleIds": ["..."] }`。
-- `assignee_type=depart_leader` 时，`assignee_json` 可使用 `{ "departIds": ["..."] }`；为空时默认取发起人所属部门的负责人。
+- `assignee_type=depart_leader` 时，基于 `sys_user_depart` 中的部门负责人字段解析；配置规则以 [审批中心组织关系增强设计](approval-center-org-relation-design.md) 为准。
+- `assignee_type=depart_role` 时，基于部门角色解析部门岗位人员；配置规则以 [审批中心组织关系增强设计](approval-center-org-relation-design.md) 为准。
+- `assignee_type=starter_supervisor` 时，基于 `sys_user_depart.supervisor_user_id` 解析发起人直属上级；配置规则以 [审批中心组织关系增强设计](approval-center-org-relation-design.md) 为准。
+- `assignee_type=starter_select` 时，发起人按管理员配置的范围自选审批人；配置规则以 [审批中心组织关系增强设计](approval-center-org-relation-design.md) 为准。
 - `assignee_type=starter` 时，`assignee_json` 可为空，运行时直接解析为发起人本人。
 
 ### `wf_field_permission`
@@ -388,7 +391,7 @@ Flowable 负责：
 
 ### `wf_task_candidate`
 
-任务候选人表。用于指定角色、部门负责人等解析出多人时，支撑“我的待办”列表和认领/处理权限判断。
+任务候选人表。用于指定角色、部门负责人、部门岗位、发起人自选等解析出多人时，支撑“我的待办”列表和认领/处理权限判断。
 
 | 字段 | 含义 |
 | --- | --- |
@@ -399,7 +402,7 @@ Flowable 负责：
 | `candidate_user_id` | 候选处理人用户 ID |
 | `candidate_username` | 候选处理人账号 |
 | `candidate_realname` | 候选处理人姓名 |
-| `source_type` | 来源类型：`user`、`role`、`depart_leader` |
+| `source_type` | 来源类型：`user`、`role`、`depart_leader`、`depart_role`、`starter_supervisor`、`starter_select` |
 | `source_id` | 来源 ID，角色或部门等 |
 | `status` | 状态：`active`、`claimed`、`canceled` |
 | `create_time/create_by/update_time/update_by/delete_flag/delete_time/delete_by` | 审计与逻辑删除 |
@@ -582,7 +585,7 @@ JSON 字段一期 SQL 类型定为 `json`，后端实体可先按 `String` 接�
 | `node_id` | `varchar(100)` | 是 | 节点 ID，对应 BPMN `taskDefinitionKey` |
 | `node_name` | `varchar(100)` | 是 | 节点名称 |
 | `node_type` | `varchar(20)` | 是 | `start`、`approver`、`end` |
-| `assignee_type` | `varchar(32)` | 否 | `user`、`role`、`depart_leader`、`starter` |
+| `assignee_type` | `varchar(32)` | 否 | `user`、`role`、`depart_leader`、`depart_role`、`starter_supervisor`、`starter_select`、`starter` |
 | `assignee_json` | `json` | 否 | 审批人配置 JSON |
 | `allow_transfer` | `tinyint(1)` | 是 | 是否允许转办，`0` 否，`1` 是 |
 | `allow_add_sign` | `tinyint(1)` | 是 | 是否允许加签，`0` 否，`1` 是 |
@@ -688,7 +691,7 @@ JSON 字段一期 SQL 类型定为 `json`，后端实体可先按 `String` 接�
 | `candidate_user_id` | `varchar(64)` | 是 | 候选处理人用户 ID |
 | `candidate_username` | `varchar(64)` | 否 | 候选处理人账号 |
 | `candidate_realname` | `varchar(100)` | 否 | 候选处理人姓名 |
-| `source_type` | `varchar(32)` | 是 | `user`、`role`、`depart_leader` |
+| `source_type` | `varchar(32)` | 是 | `user`、`role`、`depart_leader`、`depart_role`、`starter_supervisor`、`starter_select` |
 | `source_id` | `varchar(64)` | 否 | 来源 ID，角色或部门等 |
 | `status` | `varchar(20)` | 是 | `active`、`claimed`、`canceled` |
 
@@ -743,7 +746,7 @@ JSON 字段一期 SQL 类型定为 `json`，后端实体可先按 `String` 接�
 | 发起权限目标类型 | `user`、`role`、`depart`、`tenant` |
 | 发起权限状态 | `enabled`、`disabled` |
 | 节点类型 | `start`、`approver`、`end` |
-| 审批人类型 | `user`、`role`、`depart_leader`、`starter` |
+| 审批人类型 | `user`、`role`、`depart_leader`、`depart_role`、`starter_supervisor`、`starter_select`、`starter` |
 | 字段权限 | `hidden`、`readonly`、`editable` |
 | 流程实例状态 | `running`、`approved`、`rejected`、`terminated` |
 | 任务状态 | `todo`、`done`、`transferred`、`returned`、`canceled` |
@@ -1003,9 +1006,12 @@ todo -> canceled
 
 一期支持：
 
-- 指定用户
+- 指定人员
 - 指定角色
 - 部门负责人
+- 部门岗位
+- 发起人直属上级
+- 发起人自选
 - 发起人本人
 
 解析规则：
@@ -1013,8 +1019,12 @@ todo -> canceled
 - 解析结果必须落在当前租户内。
 - 指定用户按 `sys_user_tenant(status=1)` 校验当前租户有效成员，并过滤冻结或已删除用户。
 - 指定角色通过 `sys_user_role` 解析当前租户角色成员。
-- 部门负责人通过用户 `user_identity=2` 和 `depart_ids` 解析；节点未指定部门时默认使用发起人所属部门。
-- 角色和部门负责人解析出多人时，一期采用候选待办策略：候选人都能在“我的待办”看到任务，首个提交审批的人成为当前处理人并自动认领任务，其它候选记录取消。
+- 部门负责人不再通过 `sys_user.user_identity + depart_ids` 推断，必须通过 `sys_user_depart.depart_leader_flag` 解析；同一部门只允许一个负责人。
+- 部门岗位一期复用部门角色和部门角色人员关系解析，不依赖 `sys_user.post`。
+- 发起人直属上级必须通过 `sys_user_depart.supervisor_user_id` 解析，不能用部门负责人替代。
+- 发起人自选必须由流程设计阶段配置可选范围，发起页面只允许从范围内选择，后端提交时再次校验。
+- 审批人组织关系、配置 JSON、空审批人策略和实现顺序以 [审批中心组织关系增强设计](approval-center-org-relation-design.md) 为准。
+- 角色、部门负责人、部门岗位等解析出多人时，一期采用候选待办策略：候选人都能在“我的待办”看到任务，首个提交审批的人成为当前处理人并自动认领任务，其它候选记录取消。
 - 解析结果为单人时，写入 `wf_task.assignee_user_id`、`assignee_username`、`assignee_realname`，并同步 Flowable task assignee。
 - 解析结果为多人时，`wf_task.assignee_user_id` 为空，候选人写入 `wf_task_candidate(status=active)`，并同步 Flowable candidate user。
 - 找不到审批人时，发布流程或发起流程应失败，不允许生成悬空待办。

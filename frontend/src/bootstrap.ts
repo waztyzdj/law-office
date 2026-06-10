@@ -11,6 +11,7 @@ import '@vben/styles/antd';
 import '#/assets/styles/index.css';
 
 import { useTitle } from '@vueuse/core';
+import Antd from 'ant-design-vue';
 
 import { $t, setupI18n } from '#/locales';
 
@@ -37,6 +38,10 @@ async function bootstrap(namespace: string) {
   // });
 
   const app = createApp(App);
+
+  // FormCreate 设计器内部使用 a-layout、a-tabs 等字符串组件名。
+  // 业务页仍保持按需导入；这里全局注册 AntD 只用于兼容第三方设计器。
+  app.use(Antd);
 
   // 注册v-loading指令
   registerLoadingDirective(app, {

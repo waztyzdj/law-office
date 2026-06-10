@@ -53,6 +53,35 @@ public interface IRuntimeService {
     BaseResult<StartProcessVO> start(StartProcessReq req, RequestContext context);
 
     /**
+     * 保存发起申请草稿，并生成发起人的待提交任务。
+     *
+     * @param req 发起申请草稿请求
+     * @param context 当前请求上下文
+     * @return 草稿实例结果
+     */
+    BaseResult<StartProcessVO> saveStartDraft(StartProcessReq req, RequestContext context);
+
+    /**
+     * 提交发起申请草稿，启动 Flowable 流程。
+     *
+     * @param taskId 草稿待提交任务ID
+     * @param req 提交请求
+     * @param context 当前请求上下文
+     * @return 提交结果
+     */
+    BaseResult<TaskActionVO> submitStartDraft(String taskId, TaskActionReq req, RequestContext context);
+
+    /**
+     * 保存待提交的发起申请草稿，不启动 Flowable 流程。
+     *
+     * @param taskId 草稿待提交任务ID
+     * @param req 保存请求
+     * @param context 当前请求上下文
+     * @return 保存结果
+     */
+    BaseResult<TaskActionVO> saveStartDraftTask(String taskId, TaskActionReq req, RequestContext context);
+
+    /**
      * 查询当前用户发起的审批实例。
      *
      * @param req 分页筛选请求

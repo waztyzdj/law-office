@@ -14,7 +14,7 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequestMapping("/workflow/admin/node")
 @Tag(name = "流程节点配置", description = "审批中心流程节点配置管理")
-@ModuleInfo(value = "workflow:node", name = "流程节点配置", description = "审批中心流程节点配置管理")
+@ModuleInfo(value = "workflow:process", name = "流程节点配置", description = "流程设计内部节点配置能力")
 public class ProcessNodeConfigController extends BaseController<IProcessNodeConfigService, ProcessNodeConfig, ProcessNodeConfigVO, ProcessNodeConfigReq> {
 
     @Autowired

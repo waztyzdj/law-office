@@ -65,6 +65,47 @@
 - `org_code`：机构编码，唯一。
 - `depart_order`：排序。
 
+## `sys_user_depart`
+
+用户部门关系表，也是审批中心组织关系解析的基础表。
+
+重点字段：
+
+- `user_id`：用户 ID。
+- `dep_id`：部门 ID。
+- `primary_depart_flag`：是否主部门，取值 `0` 否、`1` 是。
+- `depart_leader_flag`：是否部门负责人，取值 `0` 否、`1` 是。
+- `supervisor_user_id`：直属上级用户 ID，按当前部门维度维护。
+- `tenant_id`：租户 ID。
+
+关键索引：
+
+- `idx_sud_tenant_user_primary`：按用户查询主部门。
+- `idx_sud_tenant_dep_leader`：按部门解析唯一负责人。
+- `idx_sud_tenant_supervisor`：按直属上级反查或校验组织关系。
+
+## `sys_depart_role`
+
+部门角色表，审批中心一期复用为部门岗位定义。
+
+重点字段：
+
+- `depart_id`：部门 ID。
+- `role_name`：部门角色名称。
+- `role_code`：部门角色编码。
+- `workflow_enabled`：是否可作为审批岗位，取值 `0` 否、`1` 是。
+- `tenant_id`：租户 ID。
+
+## `sys_depart_role_user`
+
+部门角色用户关系表，审批中心一期复用为部门岗位人员关系。
+
+重点字段：
+
+- `drole_id`：部门角色 ID。
+- `user_id`：用户 ID。
+- `tenant_id`：租户 ID。
+
 ## `sys_tenant`
 
 租户表。
@@ -223,7 +264,7 @@ FormCreate 表单实例表，用于保存发起后的表单数据、schema 快�
 
 - `process_model_id`：流程模型版本 ID。
 - `node_id`：节点 ID，对应 BPMN `taskDefinitionKey`。
-- `assignee_type`：审批人类型，取值 `user`、`role`、`depart_leader`、`starter`。
+- `assignee_type`：审批人类型，取值 `user`、`role`、`depart_leader`、`depart_role`、`starter_supervisor`、`starter_select`、`starter`。
 - `assignee_json`：审批人配置 JSON。
 - `allow_transfer`、`allow_add_sign`、`allow_return`：节点动作开关。
 
@@ -252,7 +293,7 @@ FormCreate 表单实例表，用于保存发起后的表单数据、schema 快�
 - `instance_no`：审批编号，同一租户内软删范围唯一。
 - `current_task_names`：当前节点名称摘要。
 - `current_assignee_names`：当前处理人姓名摘要。
-- `status`：状态，取值 `running`、`approved`、`rejected`、`terminated`。
+- `status`：状态，取值 `draft`、`running`、`approved`、`rejected`、`terminated`；`draft` 表示发起申请已保存但尚未提交到 Flowable。
 
 ### `wf_task`
 
@@ -260,10 +301,10 @@ FormCreate 表单实例表，用于保存发起后的表单数据、schema 快�
 
 重点字段：
 
-- `flowable_task_id`：Flowable 任务 ID。
+- `flowable_task_id`：Flowable 任务 ID；发起草稿待办尚未进入 Flowable，使用 `draft:{task_id}` 本地标识。
 - `node_id`：节点 ID。
 - `parent_task_id`：父任务扩展 ID，转办或加签任务关联原任务。
-- `task_type`：任务类型，取值 `normal`、`transfer`、`add_sign`。
+- `task_type`：任务类型，取值 `start_draft`、`normal`、`transfer`、`add_sign`；`start_draft` 表示发起人待提交草稿。
 - `owner_user_id`：原处理人用户 ID，转办或加签时记录。
 - `assignee_user_id`：当前处理人用户 ID；候选任务提交审批时自动认领并写入。
 - `status`：状态，取值 `todo`、`done`、`transferred`、`returned`、`canceled`。
@@ -272,13 +313,13 @@ FormCreate 表单实例表，用于保存发起后的表单数据、schema 快�
 
 ### `wf_task_candidate`
 
-任务候选人表，用于角色或部门负责人解析出多人时支撑“我的待办”和提交审批时自动认领。
+任务候选人表，用于角色、部门负责人、部门岗位或发起人自选解析出多人时支撑“我的待办”和提交审批时自动认领。
 
 重点字段：
 
 - `task_id`：任务扩展 ID。
 - `candidate_user_id`：候选处理人用户 ID。
-- `source_type`：来源类型，取值 `user`、`role`、`depart_leader`。
+- `source_type`：来源类型，取值 `user`、`role`、`depart_leader`、`depart_role`、`starter_supervisor`、`starter_select`。
 - `status`：状态，取值 `active`、`claimed`、`canceled`。
 
 ### `wf_approval_record`
@@ -315,3 +356,4 @@ FormCreate 表单实例表，用于保存发起后的表单数据、schema 快�
 
 - `sql/建表脚本.sql`：基础表结构。
 - `sql/系统权限初始化.sql`：系统管理菜单、按钮权限和管理员角色授权示例。
+- `sql/审批中心权限初始化.sql`：审批中心菜单、按钮权限和管理员角色授权示例。

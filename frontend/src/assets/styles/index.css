@@ -104,6 +104,30 @@ body {
     line-height: 1.5;
   }
 
+  .ant-table-thead > tr > th {
+    text-align: center;
+
+    .ant-table-filter-column {
+      justify-content: center;
+    }
+
+    .ant-table-column-sorters {
+      display: inline-flex;
+      justify-content: center;
+      width: auto;
+    }
+
+    .ant-table-column-title,
+    .ant-table-filter-column-title {
+      flex: 0 1 auto;
+    }
+
+    .ant-table-column-sorter,
+    .ant-table-filter-trigger {
+      flex: 0 0 auto;
+    }
+  }
+
   /* small 尺寸的表格 */
   &.ant-table-small {
     .ant-table-tbody > tr > td,
