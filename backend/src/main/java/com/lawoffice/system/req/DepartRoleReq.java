@@ -26,7 +26,8 @@ public class DepartRoleReq extends BaseReq {
     @Size(max = 64, message = "部门角色编码不能超过64个字符")
     private String roleCode;
 
+    private Integer workflowEnabled;
+
     @Size(max = 1024, message = "描述不能超过1024个字符")
     private String description;
 }
-

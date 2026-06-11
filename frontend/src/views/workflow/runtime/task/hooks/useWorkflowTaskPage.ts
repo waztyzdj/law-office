@@ -41,7 +41,7 @@ export interface WorkflowTaskFormExpose {
 
 const actionTitleMap: Record<WorkflowTaskAction, string> = {
   addSign: '加签',
-  reject: '拒绝',
+  reject: '不通过',
   return: '退回',
   transfer: '转办',
 };
@@ -218,7 +218,7 @@ export function useWorkflowTaskPage() {
         currentAction.value === 'addSign') &&
       !actionForm.value.targetUserId.trim()
     ) {
-      message.warning('请输入目标用户ID');
+      message.warning('请选择目标人员');
       return false;
     }
     return true;

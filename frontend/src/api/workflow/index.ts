@@ -120,6 +120,7 @@ export interface RuntimeTaskInfo {
   assigneeRealname?: string;
   assigneeUserId?: string;
   assigneeUsername?: string;
+  candidateAssigneeNames?: string;
   claimTime?: string;
   completeTime?: string;
   flowableTaskId?: string;
@@ -339,6 +340,11 @@ export const deleteWorkflowCategory = (id: string) =>
 
 export const pageWorkflowForms = (params: BasePageReq) =>
   formApi.page<WorkflowFormDefinitionInfo>(params);
+export const pageLatestWorkflowForms = (params: BasePageReq) =>
+  requestClient.post<WorkflowPageResult<WorkflowFormDefinitionInfo>>(
+    '/workflow/admin/form/latest-page',
+    params,
+  );
 export const listWorkflowForms = (params?: BaseQueryReq) =>
   formApi.list<WorkflowFormDefinitionInfo>(params);
 export const getWorkflowFormById = (id: string) =>
@@ -354,6 +360,11 @@ export const publishWorkflowForm = (id: string) =>
 export const copyWorkflowFormAsDraft = (id: string) =>
   requestClient.post<WorkflowFormDefinitionInfo>(
     '/workflow/admin/form/copy-as-draft',
+    { id },
+  );
+export const listWorkflowFormHistory = (id: string) =>
+  requestClient.post<WorkflowFormDefinitionInfo[]>(
+    '/workflow/admin/form/history',
     { id },
   );
 

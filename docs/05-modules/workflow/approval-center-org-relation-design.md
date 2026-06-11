@@ -94,7 +94,7 @@
 | --- | --- | --- | --- |
 | `user` | 指定人员 | 选择具体用户 | `sys_user` + `sys_user_tenant` |
 | `role` | 指定角色 | 选择系统角色 | `sys_role` + `sys_user_role` |
-| `depart_leader` | 部门负责人 | 选择指定部门或发起人所在部门 | `sys_user_depart.depart_leader_flag` |
+| `depart_leader` | 部门负责人 | 固定取发起人当前部门 | `sys_user_depart.depart_leader_flag` |
 | `depart_role` | 部门岗位 | 选择可用于审批的部门角色 | `sys_depart_role.workflow_enabled` + `sys_depart_role_user` |
 | `starter_supervisor` | 发起人直属上级 | 无需选择具体人 | `sys_user_depart.supervisor_user_id` |
 | `starter_select` | 发起人自选 | 配置可选范围 | 按配置范围解析候选用户后由发起人选择 |
@@ -118,8 +118,8 @@
 
 字段说明：
 
-- `departSource=starter`：取发起人所在部门；如果发起人有主部门，优先取主部门。
-- `departSource=specified`：取 `departIds` 指定部门。
+- 一期固定取发起人当前部门负责人；如果发起人有主部门，优先取主部门。
+- 流程设计阶段不开放指定部门负责人范围，避免把其它部门负责人错误解析为当前审批人。
 
 ### 部门岗位
 
@@ -298,7 +298,7 @@ AssigneeConfigPanel
 - 界面显示姓名、角色名、部门名和部门岗位名，不显示裸 ID。
 - 指定人员支持搜索姓名、部门、账号。
 - 指定角色选择系统角色。
-- 部门负责人可选择“发起人所在部门”或“指定部门”。
+- 部门负责人固定按发起人当前部门解析，不开放指定部门范围选择。
 - 部门岗位可选择“发起人所在部门 + 部门岗位”或“指定部门 + 部门岗位”。
 - 发起人直属上级无需选择具体人员，只显示规则说明。
 - 发起人自选必须配置选择范围，发起页面按范围展示候选用户。

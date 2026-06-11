@@ -33,6 +33,18 @@ import java.util.stream.Collectors;
 @Service
 public class PermissionServiceImpl extends TreeServiceImpl<PermissionMapper, Permission, PermissionVO> implements IPermissionService {
 
+    private static final Set<String> NON_GRANTABLE_PERMISSION_CODES = Set.of(
+            "tenant:view",
+            "tenant:edit",
+            "permission:view",
+            "permission:edit",
+            "log:edit"
+    );
+    private static final Set<String> NON_GRANTABLE_MENU_URLS = Set.of(
+            "/system/tenant",
+            "/system/menu"
+    );
+
     private final RolePermissionMapper rolePermissionMapper;
 
     private final DepartPermissionMapper departPermissionMapper;
@@ -70,15 +82,17 @@ public class PermissionServiceImpl extends TreeServiceImpl<PermissionMapper, Per
             return new ArrayList<>();
         }
 
-        Set<String> grantablePerms = userService.getUserPermissionCodesByUsername(username).stream()
+        String userId = userService.getCurrentUserInfo(username).getId();
+        Set<String> grantablePermissionIds = userService.getUserPermissionsInCurrentTenant(userId).stream()
+                .filter(this::isGrantablePermission)
+                .map(Permission::getId)
                 .filter(StringUtils::hasText)
-                .filter(this::isGrantablePermissionCode)
                 .collect(Collectors.toSet());
-        if (grantablePerms.isEmpty()) {
+        if (grantablePermissionIds.isEmpty()) {
             return new ArrayList<>();
         }
 
-        return filterGrantableTree(tree(), grantablePerms);
+        return filterGrantableTree(tree(), grantablePermissionIds);
     }
 
     @Override
@@ -295,24 +309,40 @@ public class PermissionServiceImpl extends TreeServiceImpl<PermissionMapper, Per
     }
 
     private boolean isGrantablePermissionCode(String perms) {
-        return !"tenant:view".equals(perms)
-                && !"tenant:edit".equals(perms)
-                && !"permission:view".equals(perms)
-                && !"permission:edit".equals(perms)
-                && !"log:view".equals(perms)
-                && !"log:edit".equals(perms);
+        return !NON_GRANTABLE_PERMISSION_CODES.contains(perms);
     }
 
-    private List<PermissionVO> filterGrantableTree(List<PermissionVO> nodes, Set<String> grantablePerms) {
+    private boolean isGrantablePermission(Permission permission) {
+        if (permission == null || !StringUtils.hasText(permission.getId())) {
+            return false;
+        }
+        if (isNonGrantableMenuUrl(permission.getUrl())) {
+            return false;
+        }
+        return !StringUtils.hasText(permission.getPerms()) || isGrantablePermissionCode(permission.getPerms());
+    }
+
+    private boolean isNonGrantableMenuUrl(String url) {
+        return StringUtils.hasText(url) && NON_GRANTABLE_MENU_URLS.contains(url.trim());
+    }
+
+    private boolean isNonGrantableTreeNode(PermissionVO node) {
+        return node != null && isNonGrantableMenuUrl(node.getUrl());
+    }
+
+    private List<PermissionVO> filterGrantableTree(List<PermissionVO> nodes, Set<String> grantablePermissionIds) {
         if (nodes == null || nodes.isEmpty()) {
             return new ArrayList<>();
         }
 
         List<PermissionVO> result = new ArrayList<>();
         for (PermissionVO node : nodes) {
-            List<PermissionVO> children = filterGrantableTree(node.getChildren(), grantablePerms);
-            boolean selfGrantable = !StringUtils.hasText(node.getPerms()) || grantablePerms.contains(node.getPerms());
-            if (selfGrantable && (StringUtils.hasText(node.getPerms()) || !children.isEmpty())) {
+            if (isNonGrantableTreeNode(node)) {
+                continue;
+            }
+            List<PermissionVO> children = filterGrantableTree(node.getChildren(), grantablePermissionIds);
+            boolean selfGrantable = grantablePermissionIds.contains(node.getId());
+            if (selfGrantable || !children.isEmpty()) {
                 node.setChildren(children);
                 result.add(node);
             }

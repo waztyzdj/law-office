@@ -46,7 +46,7 @@ const emit = defineEmits<{
           danger
           @click="emit('openAction', 'reject')"
         >
-          拒绝
+          不通过
         </Button>
         <Button
           v-if="actionPermissions?.allowReturn"

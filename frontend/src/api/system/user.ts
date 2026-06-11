@@ -153,6 +153,9 @@ export const getCurrentUserTenantOptions = () =>
 export const getCurrentTenantUsers = () =>
   requestClient.get<UserInfo[]>('/user/profile/tenant-users');
 
+export const getCurrentTenantRoleUsers = (roleId: string) =>
+  requestClient.post<UserInfo[]>('/user/profile/tenant-role-users', { id: roleId });
+
 export const pageCurrentUserLogs = (params: BasePageReq) =>
   requestClient.post<{
     pageNum: number;

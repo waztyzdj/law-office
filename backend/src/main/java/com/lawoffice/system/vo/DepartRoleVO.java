@@ -19,6 +19,9 @@ public class DepartRoleVO extends BaseVO {
     @Schema(description = "部门角色编码")
     private String roleCode;
 
+    @Schema(description = "是否可作为审批岗位：0-否，1-是")
+    private Integer workflowEnabled;
+
     @Schema(description = "描述")
     private String description;
 

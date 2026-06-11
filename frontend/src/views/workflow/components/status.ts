@@ -7,7 +7,7 @@ export const workflowStatusMap: Record<string, { color: string; label: string }>
   draft: { color: 'default', label: '草稿' },
   enabled: { color: 'success', label: '启用' },
   published: { color: 'processing', label: '已发布' },
-  rejected: { color: 'error', label: '已拒绝' },
+  rejected: { color: 'error', label: '不通过' },
   returned: { color: 'warning', label: '已退回' },
   running: { color: 'processing', label: '审批中' },
   terminated: { color: 'error', label: '已终止' },
@@ -70,7 +70,7 @@ export const taskTypeOptions = [
 export const workflowActionMap: Record<string, { color: string; label: string }> = {
   add_sign: { color: 'purple', label: '加签' },
   approve: { color: 'green', label: '通过' },
-  reject: { color: 'red', label: '拒绝' },
+  reject: { color: 'red', label: '不通过' },
   return: { color: 'orange', label: '退回' },
   save_draft: { color: 'default', label: '保存草稿' },
   start: { color: 'blue', label: '发起' },
@@ -81,7 +81,7 @@ export const workflowActionMap: Record<string, { color: string; label: string }>
 export const processInstanceStatusOptions = [
   { label: '审批中', value: 'running' },
   { label: '已通过', value: 'approved' },
-  { label: '已拒绝', value: 'rejected' },
+  { label: '不通过', value: 'rejected' },
   { label: '已终止', value: 'terminated' },
 ];
 

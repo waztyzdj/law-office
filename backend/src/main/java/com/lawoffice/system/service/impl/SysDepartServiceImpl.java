@@ -30,7 +30,10 @@ import com.lawoffice.system.mapper.PermissionMapper;
 import com.lawoffice.system.mapper.SysDepartMapper;
 import com.lawoffice.system.mapper.UserMapper;
 import com.lawoffice.system.mapper.UserDepartMapper;
+import com.lawoffice.system.req.DepartLeaderReq;
+import com.lawoffice.system.req.DepartMemberRelationReq;
 import com.lawoffice.system.service.ISysDepartService;
+import com.lawoffice.system.vo.DepartMemberRelationVO;
 import com.lawoffice.system.vo.DepartPermissionSourceVO;
 import com.lawoffice.system.vo.SysDepartVO;
 import com.lawoffice.system.vo.UserVO;
@@ -42,6 +45,7 @@ import org.springframework.transaction.interceptor.TransactionAspectSupport;
 import org.springframework.util.StringUtils;
 
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.Comparator;
 import java.util.HashSet;
 import java.util.List;
@@ -58,6 +62,8 @@ public class SysDepartServiceImpl extends TreeServiceImpl<SysDepartMapper, SysDe
     private static final String DEFAULT_ROLE_DESCRIPTION = "部门默认角色";
     private static final String ENABLED_STATUS = "1";
     private static final String DISABLED_STATUS = "0";
+    private static final int FLAG_NO = 0;
+    private static final int FLAG_YES = 1;
 
     private final DepartRoleMapper departRoleMapper;
     private final DepartPermissionMapper departPermissionMapper;
@@ -525,24 +531,24 @@ public class SysDepartServiceImpl extends TreeServiceImpl<SysDepartMapper, SysDe
         List<String> normalizedUserIds = normalizeIds(userIds);
         validateUsers(normalizedUserIds);
 
-        List<String> existingUserIds = getDepartUserIds(departId);
+        List<UserDepart> activeRelations = getActiveUserDepartRelations(departId);
+        Map<String, UserDepart> existingRelationMap = activeRelations.stream()
+                .filter(relation -> StringUtils.hasText(relation.getUserId()))
+                .collect(Collectors.toMap(UserDepart::getUserId, relation -> relation, (left, right) -> left));
+        List<String> existingUserIds = new ArrayList<>(existingRelationMap.keySet());
         List<String> removedUserIds = existingUserIds.stream()
                 .filter(userId -> !normalizedUserIds.contains(userId))
                 .collect(Collectors.toList());
+        List<String> addedUserIds = normalizedUserIds.stream()
+                .filter(userId -> !existingRelationMap.containsKey(userId))
+                .collect(Collectors.toList());
+
         removeDepartRoleUsers(departId, removedUserIds);
+        clearRemovedSupervisors(departId, removedUserIds);
+        removeDepartUsers(depart, removedUserIds);
 
-        LambdaUpdateWrapper<UserDepart> deleteWrapper = new LambdaUpdateWrapper<>();
-        deleteWrapper.eq(UserDepart::getDepId, departId)
-                .eq(UserDepart::getDeleteFlag, 0);
-        logicDeleteByWrapper(userDepartMapper, new UserDepart(), deleteWrapper, resolveDeleteBy(null));
-
-        String tenantId = resolveTenantId(depart, null);
-        for (String userId : normalizedUserIds) {
-            UserDepart userDepart = new UserDepart();
-            userDepart.setUserId(userId);
-            userDepart.setDepId(departId);
-            userDepart.setTenantId(tenantId);
-            userDepartMapper.insert(userDepart);
+        for (String userId : addedUserIds) {
+            upsertUserDepartRelation(depart, userId);
         }
 
         ensureDefaultDepartRole(depart, null);
@@ -576,6 +582,385 @@ public class SysDepartServiceImpl extends TreeServiceImpl<SysDepartMapper, SysDe
                 .filter(StringUtils::hasText)
                 .distinct()
                 .collect(Collectors.toList());
+    }
+
+    @Override
+    public List<DepartMemberRelationVO> getDepartMemberRelations(String departId) {
+        getActiveDepartById(departId);
+        List<UserDepart> relations = getActiveUserDepartRelations(departId);
+        if (relations.isEmpty()) {
+            return new ArrayList<>();
+        }
+
+        Set<String> userIds = new HashSet<>();
+        for (UserDepart relation : relations) {
+            if (StringUtils.hasText(relation.getUserId())) {
+                userIds.add(relation.getUserId());
+            }
+            if (StringUtils.hasText(relation.getSupervisorUserId())) {
+                userIds.add(relation.getSupervisorUserId());
+            }
+        }
+        Map<String, User> userMap = getActiveUserMap(userIds);
+        return relations.stream()
+                .map(relation -> buildMemberRelationVO(relation, userMap))
+                .sorted(Comparator.comparing(vo -> Objects.toString(vo.getRealname(), Objects.toString(vo.getUsername(), "")), String.CASE_INSENSITIVE_ORDER))
+                .collect(Collectors.toList());
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void saveDepartMemberRelations(DepartMemberRelationReq req) {
+        if (req == null) {
+            throw new IllegalArgumentException("成员关系不能为空");
+        }
+        SysDepart depart = getActiveDepartById(req.getDepartId());
+        List<UserDepart> existingRelations = getActiveUserDepartRelations(depart.getId());
+        Map<String, UserDepart> existingByUserId = toUserDepartMap(existingRelations);
+        Map<String, DepartMemberRelationReq.MemberRelation> reqByUserId = normalizeMemberRelationReq(req.getMembers());
+
+        validateRelationMembers(existingByUserId, reqByUserId);
+        validateSingleDepartLeader(reqByUserId);
+        validateSupervisors(existingByUserId, reqByUserId);
+        validateSupervisorCycles(existingByUserId, reqByUserId);
+
+        String tenantId = resolveTenantId(depart, null);
+        if (hasDepartLeader(reqByUserId)) {
+            clearDepartLeaders(depart.getId());
+        }
+        for (DepartMemberRelationReq.MemberRelation relation : reqByUserId.values()) {
+            String userId = relation.getUserId().trim();
+            int primaryDepartFlag = flagOf(relation.getPrimaryDepartFlag());
+            if (primaryDepartFlag == FLAG_YES) {
+                clearUserPrimaryDepart(tenantId, userId);
+            }
+            updateMemberRelation(depart.getId(), userId, primaryDepartFlag, flagOf(relation.getDepartLeaderFlag()),
+                    trimToNull(relation.getSupervisorUserId()));
+        }
+    }
+
+    @Override
+    public List<DepartMemberRelationVO> getDepartLeaders(String departId) {
+        return getDepartMemberRelations(departId).stream()
+                .filter(relation -> flagOf(relation.getDepartLeaderFlag()) == FLAG_YES)
+                .collect(Collectors.toList());
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void saveDepartLeader(DepartLeaderReq req) {
+        if (req == null) {
+            throw new IllegalArgumentException("部门负责人不能为空");
+        }
+        SysDepart depart = getActiveDepartById(req.getDepartId());
+        String leaderUserId = trimToNull(req.getUserId());
+        if (StringUtils.hasText(leaderUserId)) {
+            validateUserInDepart(depart.getId(), leaderUserId);
+        }
+
+        clearDepartLeaders(depart.getId());
+
+        if (!StringUtils.hasText(leaderUserId)) {
+            return;
+        }
+
+        LambdaUpdateWrapper<UserDepart> leaderWrapper = new LambdaUpdateWrapper<>();
+        leaderWrapper.eq(UserDepart::getDepId, depart.getId())
+                .eq(UserDepart::getUserId, leaderUserId)
+                .eq(UserDepart::getDeleteFlag, 0)
+                .set(UserDepart::getDepartLeaderFlag, FLAG_YES);
+        userDepartMapper.update(new UserDepart(), leaderWrapper);
+    }
+
+    private List<UserDepart> getActiveUserDepartRelations(String departId) {
+        if (!StringUtils.hasText(departId)) {
+            return new ArrayList<>();
+        }
+        LambdaQueryWrapper<UserDepart> wrapper = new LambdaQueryWrapper<>();
+        wrapper.eq(UserDepart::getDepId, departId)
+                .eq(UserDepart::getDeleteFlag, 0);
+        return userDepartMapper.selectList(wrapper);
+    }
+
+    /**
+     * 差量移除部门成员。先清理同一成员的历史删除行，再软删当前活动行，避免唯一索引在二次移除时冲突。
+     */
+    private void removeDepartUsers(SysDepart depart, List<String> userIds) {
+        List<String> normalizedUserIds = normalizeIds(userIds);
+        if (depart == null || normalizedUserIds.isEmpty()) {
+            return;
+        }
+
+        String tenantId = resolveTenantId(depart, null);
+        for (String userId : normalizedUserIds) {
+            deleteDeletedUserDepartRelation(tenantId, depart.getId(), userId);
+        }
+
+        LambdaUpdateWrapper<UserDepart> deleteWrapper = new LambdaUpdateWrapper<>();
+        deleteWrapper.eq(UserDepart::getDepId, depart.getId())
+                .in(UserDepart::getUserId, normalizedUserIds)
+                .eq(UserDepart::getDeleteFlag, 0);
+        logicDeleteByWrapper(userDepartMapper, new UserDepart(), deleteWrapper, resolveDeleteBy(null));
+    }
+
+    /**
+     * 新增部门成员时优先恢复历史关系，避免同一租户、用户、部门重复插入活动/删除两条关系。
+     */
+    private void upsertUserDepartRelation(SysDepart depart, String userId) {
+        String tenantId = resolveTenantId(depart, null);
+        UserDepart existingDeletedRelation = getDeletedUserDepartRelation(tenantId, depart.getId(), userId);
+        if (existingDeletedRelation != null) {
+            existingDeletedRelation.setDeleteFlag(FLAG_NO);
+            existingDeletedRelation.setDeleteTime(null);
+            existingDeletedRelation.setDeleteBy(null);
+            existingDeletedRelation.setPrimaryDepartFlag(FLAG_NO);
+            existingDeletedRelation.setDepartLeaderFlag(FLAG_NO);
+            existingDeletedRelation.setSupervisorUserId(null);
+            userDepartMapper.updateById(existingDeletedRelation);
+            return;
+        }
+
+        UserDepart userDepart = new UserDepart();
+        userDepart.setUserId(userId);
+        userDepart.setDepId(depart.getId());
+        userDepart.setPrimaryDepartFlag(FLAG_NO);
+        userDepart.setDepartLeaderFlag(FLAG_NO);
+        userDepart.setSupervisorUserId(null);
+        userDepart.setTenantId(tenantId);
+        userDepartMapper.insert(userDepart);
+    }
+
+    private UserDepart getDeletedUserDepartRelation(String tenantId, String departId, String userId) {
+        LambdaQueryWrapper<UserDepart> wrapper = new LambdaQueryWrapper<>();
+        wrapper.eq(UserDepart::getDepId, departId)
+                .eq(UserDepart::getUserId, userId)
+                .eq(UserDepart::getDeleteFlag, 1);
+        if (StringUtils.hasText(tenantId)) {
+            wrapper.eq(UserDepart::getTenantId, tenantId);
+        }
+        wrapper.last("LIMIT 1");
+        return userDepartMapper.selectOne(wrapper);
+    }
+
+    /**
+     * 当前唯一索引只允许一条删除态关系。移除活动关系前物理清理旧删除态关系，保留本次删除作为最新审计记录。
+     */
+    private void deleteDeletedUserDepartRelation(String tenantId, String departId, String userId) {
+        LambdaQueryWrapper<UserDepart> wrapper = new LambdaQueryWrapper<>();
+        wrapper.eq(UserDepart::getDepId, departId)
+                .eq(UserDepart::getUserId, userId)
+                .eq(UserDepart::getDeleteFlag, 1);
+        if (StringUtils.hasText(tenantId)) {
+            wrapper.eq(UserDepart::getTenantId, tenantId);
+        }
+        userDepartMapper.delete(wrapper);
+    }
+
+    /**
+     * 成员被移出部门后，剩余成员不能继续把直属上级指向已移除成员。
+     */
+    private void clearRemovedSupervisors(String departId, List<String> removedUserIds) {
+        List<String> normalizedUserIds = normalizeIds(removedUserIds);
+        if (!StringUtils.hasText(departId) || normalizedUserIds.isEmpty()) {
+            return;
+        }
+
+        LambdaUpdateWrapper<UserDepart> wrapper = new LambdaUpdateWrapper<>();
+        wrapper.eq(UserDepart::getDepId, departId)
+                .in(UserDepart::getSupervisorUserId, normalizedUserIds)
+                .eq(UserDepart::getDeleteFlag, 0)
+                .set(UserDepart::getSupervisorUserId, null);
+        userDepartMapper.update(new UserDepart(), wrapper);
+    }
+
+    private Map<String, UserDepart> toUserDepartMap(List<UserDepart> relations) {
+        if (relations == null || relations.isEmpty()) {
+            return new LinkedHashMap<>();
+        }
+        return relations.stream()
+                .filter(relation -> StringUtils.hasText(relation.getUserId()))
+                .collect(Collectors.toMap(UserDepart::getUserId, relation -> relation, (left, right) -> left, LinkedHashMap::new));
+    }
+
+    private Map<String, DepartMemberRelationReq.MemberRelation> normalizeMemberRelationReq(
+            List<DepartMemberRelationReq.MemberRelation> relations) {
+        Map<String, DepartMemberRelationReq.MemberRelation> relationMap = new LinkedHashMap<>();
+        if (relations == null || relations.isEmpty()) {
+            return relationMap;
+        }
+        for (DepartMemberRelationReq.MemberRelation relation : relations) {
+            if (relation == null || !StringUtils.hasText(relation.getUserId())) {
+                throw new IllegalArgumentException("成员用户ID不能为空");
+            }
+            String userId = relation.getUserId().trim();
+            if (relationMap.containsKey(userId)) {
+                throw new IllegalArgumentException("成员关系存在重复用户");
+            }
+            relation.setUserId(userId);
+            relation.setSupervisorUserId(trimToNull(relation.getSupervisorUserId()));
+            relationMap.put(userId, relation);
+        }
+        return relationMap;
+    }
+
+    private void validateRelationMembers(
+            Map<String, UserDepart> existingByUserId,
+            Map<String, DepartMemberRelationReq.MemberRelation> reqByUserId) {
+        for (String userId : reqByUserId.keySet()) {
+            if (!existingByUserId.containsKey(userId)) {
+                throw new IllegalArgumentException("成员关系只能维护当前部门已有成员");
+            }
+        }
+    }
+
+    private void validateSingleDepartLeader(Map<String, DepartMemberRelationReq.MemberRelation> reqByUserId) {
+        long leaderCount = reqByUserId.values().stream()
+                .filter(relation -> flagOf(relation.getDepartLeaderFlag()) == FLAG_YES)
+                .count();
+        if (leaderCount > 1) {
+            throw new IllegalArgumentException("一个部门只能设置一个负责人");
+        }
+    }
+
+    private boolean hasDepartLeader(Map<String, DepartMemberRelationReq.MemberRelation> reqByUserId) {
+        return reqByUserId.values().stream()
+                .anyMatch(relation -> flagOf(relation.getDepartLeaderFlag()) == FLAG_YES);
+    }
+
+    private void clearDepartLeaders(String departId) {
+        LambdaUpdateWrapper<UserDepart> clearWrapper = new LambdaUpdateWrapper<>();
+        clearWrapper.eq(UserDepart::getDepId, departId)
+                .eq(UserDepart::getDeleteFlag, 0)
+                .set(UserDepart::getDepartLeaderFlag, FLAG_NO);
+        userDepartMapper.update(new UserDepart(), clearWrapper);
+    }
+
+    private void validateSupervisors(
+            Map<String, UserDepart> existingByUserId,
+            Map<String, DepartMemberRelationReq.MemberRelation> reqByUserId) {
+        for (DepartMemberRelationReq.MemberRelation relation : reqByUserId.values()) {
+            String supervisorUserId = trimToNull(relation.getSupervisorUserId());
+            if (!StringUtils.hasText(supervisorUserId)) {
+                continue;
+            }
+            if (relation.getUserId().equals(supervisorUserId)) {
+                throw new IllegalArgumentException("直属上级不能是自己");
+            }
+            if (!existingByUserId.containsKey(supervisorUserId)) {
+                throw new IllegalArgumentException("直属上级必须是当前部门成员");
+            }
+        }
+    }
+
+    /**
+     * 保存直属上级前合并待保存关系和数据库现有关系检查环路，避免形成 A -> B -> A 的组织链。
+     */
+    private void validateSupervisorCycles(
+            Map<String, UserDepart> existingByUserId,
+            Map<String, DepartMemberRelationReq.MemberRelation> reqByUserId) {
+        for (String userId : reqByUserId.keySet()) {
+            Set<String> visitedUserIds = new HashSet<>();
+            String supervisorUserId = resolveSupervisorUserId(userId, existingByUserId, reqByUserId);
+            while (StringUtils.hasText(supervisorUserId)) {
+                if (userId.equals(supervisorUserId)) {
+                    throw new IllegalArgumentException("直属上级关系不能形成循环");
+                }
+                if (!visitedUserIds.add(supervisorUserId)) {
+                    throw new IllegalArgumentException("直属上级关系不能形成循环");
+                }
+                supervisorUserId = resolveSupervisorUserId(supervisorUserId, existingByUserId, reqByUserId);
+            }
+        }
+    }
+
+    private String resolveSupervisorUserId(
+            String userId,
+            Map<String, UserDepart> existingByUserId,
+            Map<String, DepartMemberRelationReq.MemberRelation> reqByUserId) {
+        DepartMemberRelationReq.MemberRelation pendingRelation = reqByUserId.get(userId);
+        if (pendingRelation != null) {
+            return trimToNull(pendingRelation.getSupervisorUserId());
+        }
+        UserDepart existingRelation = existingByUserId.get(userId);
+        return existingRelation == null ? null : trimToNull(existingRelation.getSupervisorUserId());
+    }
+
+    private void validateUserInDepart(String departId, String userId) {
+        LambdaQueryWrapper<UserDepart> wrapper = new LambdaQueryWrapper<>();
+        wrapper.eq(UserDepart::getDepId, departId)
+                .eq(UserDepart::getUserId, userId)
+                .eq(UserDepart::getDeleteFlag, 0);
+        if (userDepartMapper.selectCount(wrapper) <= 0) {
+            throw new IllegalArgumentException("部门负责人必须是当前部门成员");
+        }
+    }
+
+    private void clearUserPrimaryDepart(String tenantId, String userId) {
+        LambdaUpdateWrapper<UserDepart> wrapper = new LambdaUpdateWrapper<>();
+        wrapper.eq(UserDepart::getUserId, userId)
+                .eq(UserDepart::getDeleteFlag, 0)
+                .set(UserDepart::getPrimaryDepartFlag, FLAG_NO);
+        if (StringUtils.hasText(tenantId)) {
+            wrapper.eq(UserDepart::getTenantId, tenantId);
+        }
+        userDepartMapper.update(new UserDepart(), wrapper);
+    }
+
+    private void updateMemberRelation(
+            String departId,
+            String userId,
+            int primaryDepartFlag,
+            int departLeaderFlag,
+            String supervisorUserId) {
+        LambdaUpdateWrapper<UserDepart> wrapper = new LambdaUpdateWrapper<>();
+        wrapper.eq(UserDepart::getDepId, departId)
+                .eq(UserDepart::getUserId, userId)
+                .eq(UserDepart::getDeleteFlag, 0)
+                .set(UserDepart::getPrimaryDepartFlag, primaryDepartFlag)
+                .set(UserDepart::getDepartLeaderFlag, departLeaderFlag)
+                .set(UserDepart::getSupervisorUserId, supervisorUserId);
+        userDepartMapper.update(new UserDepart(), wrapper);
+    }
+
+    private DepartMemberRelationVO buildMemberRelationVO(UserDepart relation, Map<String, User> userMap) {
+        DepartMemberRelationVO vo = new DepartMemberRelationVO();
+        vo.setDepartId(relation.getDepId());
+        vo.setUserId(relation.getUserId());
+        vo.setPrimaryDepartFlag(flagOf(relation.getPrimaryDepartFlag()));
+        vo.setDepartLeaderFlag(flagOf(relation.getDepartLeaderFlag()));
+        vo.setSupervisorUserId(trimToNull(relation.getSupervisorUserId()));
+
+        User user = userMap.get(relation.getUserId());
+        if (user != null) {
+            vo.setUsername(user.getUsername());
+            vo.setRealname(user.getRealname());
+        }
+        User supervisor = userMap.get(vo.getSupervisorUserId());
+        if (supervisor != null) {
+            vo.setSupervisorUsername(supervisor.getUsername());
+            vo.setSupervisorRealname(supervisor.getRealname());
+        }
+        return vo;
+    }
+
+    private Map<String, User> getActiveUserMap(Set<String> userIds) {
+        if (userIds == null || userIds.isEmpty()) {
+            return new LinkedHashMap<>();
+        }
+        LambdaQueryWrapper<User> wrapper = new LambdaQueryWrapper<>();
+        wrapper.in(User::getId, userIds)
+                .eq(User::getDeleteFlag, 0);
+        return userMapper.selectList(wrapper).stream()
+                .filter(user -> StringUtils.hasText(user.getId()))
+                .collect(Collectors.toMap(User::getId, user -> user, (left, right) -> left));
+    }
+
+    private int flagOf(Integer flag) {
+        return Objects.equals(flag, FLAG_YES) ? FLAG_YES : FLAG_NO;
+    }
+
+    private String trimToNull(String value) {
+        return StringUtils.hasText(value) ? value.trim() : null;
     }
 
     private void normalizeDepart(SysDepart depart) {
@@ -711,6 +1096,7 @@ public class SysDepartServiceImpl extends TreeServiceImpl<SysDepartMapper, SysDe
             role.setDepartId(depart.getId());
             role.setRoleCode(roleCode);
             role.setRoleName(roleName);
+            role.setWorkflowEnabled(FLAG_NO);
             role.setDescription(DEFAULT_ROLE_DESCRIPTION);
             role.setTenantId(resolveTenantId(depart, saveDTO));
             role.setCreateBy(depart.getCreateBy());

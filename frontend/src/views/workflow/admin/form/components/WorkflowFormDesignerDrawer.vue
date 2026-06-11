@@ -18,6 +18,7 @@ interface DesignerExpose {
 }
 
 interface DrawerPayload {
+  readonly?: boolean;
   record: WorkflowFormDefinitionInfo;
 }
 
@@ -29,6 +30,7 @@ const designerRef = ref<DesignerExpose>();
 const currentForm = ref<WorkflowFormDefinitionInfo>();
 const hasSyncedDesigner = ref(false);
 const designerReady = ref(false);
+const readonlyMode = ref(false);
 const designerConfig = computed(() => {
   const token = import.meta.env.VITE_FORM_CREATE_AI_TOKEN;
   const api = import.meta.env.VITE_FORM_CREATE_AI_API;
@@ -46,8 +48,8 @@ const designerConfig = computed(() => {
 
 const drawerTitle = computed(() =>
   currentForm.value?.formName
-    ? `设计表单：${currentForm.value.formName}`
-    : '设计表单',
+    ? `${readonlyMode.value ? '查看设计' : '设计表单'}：${currentForm.value.formName}`
+    : readonlyMode.value ? '查看设计' : '设计表单',
 );
 
 const [Drawer, drawerApi] = useVbenDrawer({
@@ -105,6 +107,11 @@ function buildSavePayload(): WorkflowFormDefinitionInfo {
 }
 
 async function handleSubmit() {
+  if (readonlyMode.value) {
+    drawerApi.close();
+    return;
+  }
+
   try {
     drawerApi.lock();
     await saveWorkflowForm(buildSavePayload());
@@ -118,9 +125,11 @@ async function handleSubmit() {
 
 async function open(payload: DrawerPayload) {
   currentForm.value = payload.record;
+  readonlyMode.value = payload.readonly === true;
   hasSyncedDesigner.value = false;
   designerReady.value = false;
   updateDrawerTitle();
+  drawerApi.setState({ footer: !readonlyMode.value, title: drawerTitle.value });
   drawerApi.setData(payload).open();
 
   await nextTick();

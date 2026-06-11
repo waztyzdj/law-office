@@ -20,4 +20,16 @@ public class UserDepart extends BaseTenantEntity {
     @ExcelProperty("部门ID")
     @Schema(description = "部门id")
     private String depId;
+
+    @ExcelProperty("是否主部门")
+    @Schema(description = "是否主部门：0-否，1-是")
+    private Integer primaryDepartFlag;
+
+    @ExcelProperty("是否部门负责人")
+    @Schema(description = "是否部门负责人：0-否，1-是")
+    private Integer departLeaderFlag;
+
+    @ExcelProperty("直属上级用户ID")
+    @Schema(description = "直属上级用户ID，按当前部门维度维护")
+    private String supervisorUserId;
 }

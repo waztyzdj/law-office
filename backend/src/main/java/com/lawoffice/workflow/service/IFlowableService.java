@@ -72,7 +72,7 @@ public interface IFlowableService {
     void completeTask(String flowableTaskId, Map<String, Object> variables);
 
     /**
-     * 终止 Flowable 流程实例，用于拒绝等结束类动作。
+     * 终止 Flowable 流程实例，用于不通过等结束类动作。
      *
      * @param flowableProcessInstanceId Flowable流程实例ID
      * @param reason 终止原因

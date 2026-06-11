@@ -2,19 +2,19 @@
 import { onMounted, ref } from 'vue';
 
 import type { AvailableProcessInfo } from '#/api/workflow';
+import type { WorkflowStartSearchForm } from './hooks/useWorkflowStartTable';
 
 import WorkflowRuntimeFormDrawer from '../components/WorkflowRuntimeFormDrawer.vue';
-import WorkflowStartTable from './components/WorkflowStartTable.vue';
+import WorkflowStartCatalog from './components/WorkflowStartCatalog.vue';
 import { useWorkflowStartTable } from './hooks/useWorkflowStartTable';
 
 const {
-  activeFilters,
-  categoryOptions,
   handleRefresh,
-  handleTableChange,
+  handleResetSearch,
+  handleSearch,
   loading,
-  pagination,
   records,
+  searchForm,
 } = useWorkflowStartTable();
 
 const drawerRef = ref<InstanceType<typeof WorkflowRuntimeFormDrawer>>();
@@ -23,19 +23,23 @@ function handleStart(record: AvailableProcessInfo) {
   drawerRef.value?.open({ mode: 'start', process: record });
 }
 
+function handleUpdateSearchForm(value: WorkflowStartSearchForm) {
+  Object.assign(searchForm, value);
+}
+
 onMounted(handleRefresh);
 </script>
 
 <template>
   <div class="workflow-start-page">
-    <WorkflowStartTable
-      :active-filters="activeFilters"
-      :category-options="categoryOptions"
+    <WorkflowStartCatalog
       :data-source="records"
       :loading="loading"
-      :pagination="pagination"
-      @change="handleTableChange"
+      :search-form="searchForm"
+      @reset="handleResetSearch"
+      @search="handleSearch"
       @start="handleStart"
+      @update-search-form="handleUpdateSearchForm"
     />
     <WorkflowRuntimeFormDrawer
       ref="drawerRef"
@@ -46,6 +50,10 @@ onMounted(handleRefresh);
 
 <style scoped>
 .workflow-start-page {
+  display: flex;
+  height: 100%;
+  min-height: 0;
+  box-sizing: border-box;
   padding: 16px;
 }
 </style>

@@ -221,13 +221,44 @@ class WorkflowSmokeIT {
         assertTrue(actions.stream().filter(WorkflowConstants.Action.APPROVE::equals).count() >= 4);
     }
 
+    @Test
+    void shouldReturnStartDraftTaskToStarter() {
+        String categoryId = seedCategory();
+        String formId = seedAndPublishForm(categoryId);
+        String processModelId = seedAndPublishProcess(categoryId, formId);
+
+        StartProcessReq startReq = new StartProcessReq();
+        startReq.setProcessModelId(processModelId);
+        startReq.setInstanceTitle(PREFIX + "RETURN_START_DRAFT");
+        startReq.setBusinessKey(PREFIX + UUID.randomUUID().toString().replace("-", ""));
+        startReq.setFormDataJson("{\"reason\":\"return-to-starter\",\"amount\":100}");
+        success(runtimeService.start(startReq, starterContext));
+
+        RuntimeTaskVO firstTask = firstTodo(approver1Context);
+        success(runtimeService.approve(firstTask.getId(), action(firstTask.getId(), "approve first"), approver1Context));
+
+        RuntimeTaskVO secondTask = firstTodo(approver2Context);
+        TaskActionReq returnReq = action(secondTask.getId(), "return to submitter");
+        returnReq.setTargetNodeId("start_draft");
+        success(runtimeService.returnTask(secondTask.getId(), returnReq, approver2Context));
+
+        RuntimeTaskVO returnedTask = firstTodo(starterContext);
+        assertEquals("start_draft", returnedTask.getNodeId());
+        assertEquals(STARTER_ID, returnedTask.getAssigneeUserId());
+        assertEquals(0, todoPage(approver2Context).getTotal());
+    }
+
     private RuntimeTaskVO firstTodo(RequestContext context) {
+        PageVO<RuntimeTaskVO> page = todoPage(context);
+        assertTrue(page.getTotal() > 0, "expected todo task for " + context.getUsername());
+        return page.getRecords().get(0);
+    }
+
+    private PageVO<RuntimeTaskVO> todoPage(RequestContext context) {
         TaskPageReq req = new TaskPageReq();
         req.setPageNum(1);
         req.setPageSize(10);
-        PageVO<RuntimeTaskVO> page = success(runtimeService.pageTodo(req, context));
-        assertTrue(page.getTotal() > 0, "expected todo task for " + context.getUsername());
-        return page.getRecords().get(0);
+        return success(runtimeService.pageTodo(req, context));
     }
 
     private TaskActionReq action(String taskId, String comment) {

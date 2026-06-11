@@ -86,7 +86,6 @@ const permissionOptions = [
 
 const columns = [
   { dataIndex: 'fieldTitle', title: '字段名称', width: 220 },
-  { dataIndex: 'fieldKey', title: '字段标识', width: 220 },
   { dataIndex: 'fieldType', title: '组件', width: 140 },
   { dataIndex: 'permission', title: '权限', width: 260 },
   { dataIndex: 'requiredFlag', title: '必填', width: 100 },
@@ -347,16 +346,13 @@ defineExpose({
         :data-source="rows"
         :loading="loading"
         :pagination="false"
-        :scroll="{ x: 940, y: 520 }"
+        :scroll="{ x: 720, y: 520 }"
         row-key="fieldKey"
         size="small"
       >
         <template #bodyCell="{ column, record }">
           <span v-if="column.dataIndex === 'fieldTitle'">
             {{ record.fieldTitle }}
-          </span>
-          <span v-else-if="column.dataIndex === 'fieldKey'">
-            {{ record.fieldKey }}
           </span>
           <Tag v-else-if="column.dataIndex === 'fieldType'">
             {{ record.fieldType }}

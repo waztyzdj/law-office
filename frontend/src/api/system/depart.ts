@@ -29,6 +29,7 @@ export interface DepartRoleInfo {
   departId?: string;
   roleName?: string;
   roleCode?: string;
+  workflowEnabled?: number;
   description?: string;
   defaultRole?: boolean;
 }
@@ -43,6 +44,18 @@ export interface DepartUserInfo {
   status?: number;
   workNo?: string;
   post?: string;
+}
+
+export interface DepartMemberRelationInfo {
+  departId?: string;
+  userId?: string;
+  username?: string;
+  realname?: string;
+  primaryDepartFlag?: number;
+  departLeaderFlag?: number;
+  supervisorUserId?: string;
+  supervisorUsername?: string;
+  supervisorRealname?: string;
 }
 
 const departApi = new BaseApi('/depart');
@@ -61,6 +74,21 @@ export const getDepartUsers = (id: string) =>
   requestClient.post<DepartUserInfo[]>('/depart/users', { id });
 export const assignDepartUsers = (id: string, ids: string[]) =>
   requestClient.post<void>('/depart/assignUsers', { id, ids });
+export const getDepartMemberRelations = (id: string) =>
+  requestClient.post<DepartMemberRelationInfo[]>('/depart/member-relation/list', { id });
+export const saveDepartMemberRelations = (data: {
+  departId: string;
+  members: Array<{
+    departLeaderFlag?: number;
+    primaryDepartFlag?: number;
+    supervisorUserId?: string;
+    userId: string;
+  }>;
+}) => requestClient.post<void>('/depart/member-relation/save', data);
+export const getDepartLeaders = (id: string) =>
+  requestClient.post<DepartMemberRelationInfo[]>('/depart/leader/list', { id });
+export const saveDepartLeader = (departId: string, userId?: string) =>
+  requestClient.post<void>('/depart/leader/save', { departId, userId });
 
 export const getDepartRoles = (id: string) =>
   requestClient.post<DepartRoleInfo[]>('/depart/roles', { id });

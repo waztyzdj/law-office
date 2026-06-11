@@ -58,7 +58,7 @@
 9. 审批详情
 10. 审批记录
 11. 通过
-12. 拒绝
+12. 不通过
 13. 退回
 14. 转办
 15. 加签
@@ -500,7 +500,7 @@ JSON 字段一期 SQL 类型定为 `json`，后端实体可先按 `String` 接�
 索引：
 
 - 主键：`pk_wf_form_definition(id)`。
-- 唯一键：`uk_wffd_tenant_key_version_active(tenant_id, form_key, version, delete_flag)`。
+- 普通索引：`idx_wffd_tenant_key_version(tenant_id, form_key, version, delete_flag)`。版本唯一性由应用层按 `delete_flag = 0` 的有效版本校验，已删除草稿不占用版本号。
 - 普通索引：`idx_wffd_tenant_category_status(tenant_id, category_id, status, delete_flag)`。
 - 普通索引：`idx_wffd_tenant_key_status(tenant_id, form_key, status, delete_flag)`。
 
@@ -552,7 +552,7 @@ JSON 字段一期 SQL 类型定为 `json`，后端实体可先按 `String` 接�
 索引：
 
 - 主键：`pk_wf_process_model(id)`。
-- 唯一键：`uk_wfpm_tenant_key_version_active(tenant_id, process_key, version, delete_flag)`。
+- 普通索引：`idx_wfpm_tenant_key_version(tenant_id, process_key, version, delete_flag)`。版本唯一性由应用层按 `delete_flag = 0` 的有效版本校验，已删除草稿不占用版本号。
 - 普通索引：`idx_wfpm_tenant_category_status(tenant_id, category_id, status, delete_flag)`。
 - 普通索引：`idx_wfpm_tenant_form_status(tenant_id, form_definition_id, status, delete_flag)`。
 - 普通索引：`idx_wfpm_flowable_definition(flowable_process_definition_id)`。
@@ -805,8 +805,8 @@ todo -> canceled
 动作说明：
 
 - `approve`：完成当前任务，流转到下一节点；若流程结束，实例变为 `approved`。
-- `reject`：结束流程，实例变为 `rejected`。
-- `return`：退回到指定目标节点，一期通过 Flowable change-state 跳转到目标用户任务节点。
+- `reject`：不通过并结束流程，实例变为 `rejected`。
+- `return`：退回到指定目标节点；退回发起人时回到本地提交申请草稿，退回前序审批节点时通过 Flowable change-state 跳转。
 - `transfer`：当前任务转给其他用户处理。
 - `add_sign`：当前任务加签给其他用户处理；一期采用当前节点内加签子任务，加签人处理完成后回到原处理人。
 
@@ -821,7 +821,9 @@ todo -> canceled
 | `POST` | `/category/page` | 分页查询流程分类 |
 | `POST` | `/category/save` | 新增或编辑流程分类 |
 | `POST` | `/category/delete` | 删除流程分类 |
-| `POST` | `/form/page` | 分页查询表单 |
+| `POST` | `/form/page` | 分页查询表单版本，主要用于内部兼容和精确查询 |
+| `POST` | `/form/latest-page` | 分页查询每个表单编码的最新版本，用于表单设计主列表 |
+| `POST` | `/form/history` | 查询指定表单编码下的历史版本，`id` 放在 body |
 | `POST` | `/form/getById` | 查询表单详情 |
 | `POST` | `/form/save` | 新增或编辑表单草稿 |
 | `POST` | `/form/publish` | 发布表单版本，`id` 放在 body |
@@ -868,7 +870,7 @@ todo -> canceled
 | `POST` | `/instance/records` | 审批记录，`id` 放在 body，按操作时间升序返回 |
 | `POST` | `/task/form` | 查询任务表单、字段权限、动作权限和可退回节点，`taskId` 放在 body |
 | `POST` | `/task/approve` | 通过，`taskId` 放在 body，完成 Flowable 用户任务并同步后续待办 |
-| `POST` | `/task/reject` | 拒绝，`taskId` 放在 body，终止 Flowable 流程实例并结束业务实例 |
+| `POST` | `/task/reject` | 不通过，`taskId` 放在 body，终止 Flowable 流程实例并结束业务实例 |
 | `POST` | `/task/return` | 退回，`taskId`、`targetNodeId` 放在 body |
 | `POST` | `/task/transfer` | 转办，`taskId`、`targetUserId` 放在 body |
 | `POST` | `/task/add-sign` | 加签，`taskId`、`targetUserId` 放在 body |
@@ -961,7 +963,7 @@ todo -> canceled
 3. 后端按节点字段权限清洗和保存表单数据。
 4. 多人候选任务由候选人提交时自动认领，其它候选记录改为 `canceled`。
 5. 通过时后端调用 Flowable `TaskService.complete(...)` 完成当前用户任务。
-6. 拒绝时后端调用 Flowable `RuntimeService.deleteProcessInstance(...)` 终止流程实例，并将业务实例标记为 `rejected`。
+6. 不通过时后端调用 Flowable `RuntimeService.deleteProcessInstance(...)` 终止流程实例，并将业务实例标记为 `rejected`。
 7. 后端写入审批记录。
 8. 后端同步任务扩展表、候选人状态、实例状态、当前节点摘要和当前处理人摘要。
 
@@ -974,18 +976,18 @@ todo -> canceled
 - 任务表单返回 FormCreate schema/option 快照、当前表单数据、当前节点字段权限、动作权限和可退回节点列表。
 - 提交表单时仅 `editable` 字段允许覆盖 `wf_form_instance.form_data_json`；`readonly` 和 `hidden` 字段即使被提交也忽略。
 - 完成任务后如果 Flowable 流程实例已结束，则业务实例标记为 `approved` 并归档表单实例。
-- 拒绝动作直接结束流程实例，取消同一流程实例下其它待办任务和有效候选记录。
+- 不通过动作直接结束流程实例，取消同一流程实例下其它待办任务和有效候选记录。
 - 转办动作校验 `allow_transfer=1`，将当前 Flowable task assignee 改为目标用户，并更新当前 `wf_task` 的处理人，`owner_user_id` 记录原处理人。
-- 退回动作校验 `allow_return=1`，目标节点必须来自 `task/form.returnNodes`，一期只允许退回到同一流程模型中顺序在当前节点之前的审批节点；通过 Flowable change-state 从当前节点跳转到目标节点，当前任务标记为 `returned`，再同步目标节点待办。
-- 加签动作校验 `allow_add_sign=1`，创建 `task_type=add_sign` 的本地子任务并临时挂起原任务；加签子任务只允许通过完成，不允许拒绝、退回、转办或再次加签；加签任务通过后恢复原任务继续处理。
+- 退回动作校验 `allow_return=1`，目标节点必须来自 `task/form.returnNodes`；一期支持退回发起人重新提交，以及退回到同一流程模型中顺序在当前节点之前的审批节点。
+- 加签动作校验 `allow_add_sign=1`，创建 `task_type=add_sign` 的本地子任务并临时挂起原任务；加签子任务只允许通过完成，不允许不通过、退回、转办或再次加签；加签任务通过后恢复原任务继续处理。
 
 任务表单动作配置返回：
 
 - `actionPermissions.allowApprove`：是否允许通过。普通任务和加签子任务均允许。
-- `actionPermissions.allowReject`：是否允许拒绝。加签子任务不允许拒绝整个流程。
+- `actionPermissions.allowReject`：是否允许不通过。加签子任务不允许将整个流程处理为不通过。
 - `actionPermissions.allowTransfer`：是否允许转办，由当前节点 `allow_transfer` 控制，加签子任务固定不允许。
 - `actionPermissions.allowAddSign`：是否允许加签，由当前节点 `allow_add_sign` 控制，加签子任务固定不允许。
-- `actionPermissions.allowReturn`：是否允许退回，由当前节点 `allow_return` 且 `returnNodes` 非空共同决定。
+- `actionPermissions.allowReturn`：是否允许退回，由当前节点 `allow_return` 控制；退回节点列表至少包含发起人重新提交节点。
 - `returnNodes`：可退回节点列表，包含 `nodeId`、`nodeName`、`nodeType`、`sortOrder`，前端退回弹窗只能选择此列表中的节点。
 
 ### 审批详情与记录
@@ -1181,7 +1183,7 @@ frontend/src/api/workflow.ts
 ### 阶段 6：审批动作和字段权限
 
 - 通过。
-- 拒绝。
+- 不通过。
 - 退回。
 - 转办。
 - 加签。

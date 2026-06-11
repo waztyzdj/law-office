@@ -1,9 +1,11 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 
-import { Form, Input, Modal, Select, Textarea } from 'ant-design-vue';
+import { Form, Modal, Select, Textarea } from 'ant-design-vue';
 
 import type { TaskReturnNodeInfo } from '#/api/workflow';
+
+import { UserPicker } from '#/components/user-picker';
 
 import type {
   WorkflowTaskAction,
@@ -72,13 +74,13 @@ function updateField(field: keyof WorkflowTaskActionForm, value: string) {
       </Form.Item>
       <Form.Item
         v-if="action === 'transfer' || action === 'addSign'"
-        label="目标用户ID"
+        label="目标人员"
         required
       >
-        <Input
+        <UserPicker
           :value="actionForm.targetUserId"
-          placeholder="请输入目标用户ID"
-          @update:value="(value) => updateField('targetUserId', String(value ?? ''))"
+          placeholder="请选择目标人员"
+          @update:value="(value) => updateField('targetUserId', Array.isArray(value) ? (value[0] ?? '') : (value ?? ''))"
         />
       </Form.Item>
       <Form.Item label="审批意见">

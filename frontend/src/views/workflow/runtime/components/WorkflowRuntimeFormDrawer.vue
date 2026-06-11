@@ -20,7 +20,6 @@ import {
   Button,
   Descriptions,
   Empty,
-  Input,
   message,
   Modal,
   Select,
@@ -45,6 +44,7 @@ import {
   submitWorkflowStartDraft,
   transferWorkflowTask,
 } from '#/api/workflow';
+import { UserPicker } from '#/components/user-picker';
 
 import { getStatusMeta, getWorkflowActionMeta } from '../../components/status';
 import RuntimeFormRenderer from './RuntimeFormRenderer.vue';
@@ -58,7 +58,8 @@ interface ProcessProgressNode {
   comment?: string;
   id: string;
   name: string;
-  status: 'current' | 'done';
+  resultStatus?: string;
+  status: 'current' | 'done' | 'end';
   time?: string;
 }
 
@@ -159,31 +160,12 @@ const formDataJson = computed(
 );
 const fieldPermissions = computed(() => taskForm.value?.fieldPermissions ?? []);
 const processInstance = computed(() => detail.value?.processInstance);
-const records = computed(() =>
-  [...(detail.value?.records ?? [])].sort((a, b) =>
-    String(b.operateTime ?? '').localeCompare(String(a.operateTime ?? '')),
-  ),
-);
 const chronologicalRecords = computed(() =>
   [...(detail.value?.records ?? [])].sort((a, b) =>
     String(a.operateTime ?? '').localeCompare(String(b.operateTime ?? '')),
   ),
 );
 const currentTasks = computed(() => detail.value?.currentTasks ?? []);
-const approvalStats = computed(() => {
-  const actionCounts = records.value.reduce<Record<string, number>>((acc, record) => {
-    const action = record.action || 'unknown';
-    acc[action] = (acc[action] ?? 0) + 1;
-    return acc;
-  }, {});
-  return {
-    currentTaskCount: currentTasks.value.length,
-    recordCount: records.value.length,
-    startTime: processInstance.value?.startTime ?? '-',
-    status: getStatusMeta(processInstance.value?.status || taskForm.value?.taskType).label,
-    actionCounts,
-  };
-});
 const processProgressNodes = computed<ProcessProgressNode[]>(() => {
   const nodes: ProcessProgressNode[] = chronologicalRecords.value.map((record, index) => ({
     action: record.action,
@@ -205,6 +187,19 @@ const processProgressNodes = computed<ProcessProgressNode[]>(() => {
     });
   });
 
+  if (isProcessFinished(processInstance.value?.status)) {
+    const lastRecord = chronologicalRecords.value.at(-1);
+    nodes.push({
+      actor: '系统',
+      comment: getProcessEndComment(processInstance.value?.status),
+      id: `${processInstance.value?.id ?? 'process'}-end`,
+      name: '流程结束',
+      resultStatus: processInstance.value?.status,
+      status: 'end',
+      time: processInstance.value?.endTime || lastRecord?.operateTime,
+    });
+  }
+
   return nodes;
 });
 const actionPermissions = computed(() => taskForm.value?.actionPermissions);
@@ -217,7 +212,7 @@ const returnNodeOptions = computed(() =>
 const actionModalTitle = computed(() => {
   const titleMap: Record<WorkflowAction, string> = {
     addSign: '加签',
-    reject: '拒绝',
+    reject: '不通过',
     return: '退回',
     transfer: '转办',
   };
@@ -448,7 +443,7 @@ function validateActionForm() {
     (currentAction.value === 'transfer' || currentAction.value === 'addSign') &&
     !actionForm.value.targetUserId.trim()
   ) {
-    message.warning('请输入目标用户ID');
+    message.warning('请选择目标人员');
     return false;
   }
   return true;
@@ -491,7 +486,12 @@ function formatActor(record: OperationRecordInfo) {
 }
 
 function formatTaskActor(task: RuntimeTaskInfo) {
-  return task.assigneeRealname ?? task.assigneeUsername ?? '-';
+  return (
+    task.assigneeRealname ||
+    task.assigneeUsername ||
+    task.candidateAssigneeNames ||
+    '-'
+  );
 }
 
 function formatRecordNode(record: OperationRecordInfo) {
@@ -502,29 +502,28 @@ function formatRecordComment(record: OperationRecordInfo) {
   return record.comment?.trim() || '无';
 }
 
-function formatActionCount(action: string, count: number) {
-  return `${getWorkflowActionMeta(action).label} ${count}`;
+function isProcessFinished(status?: string) {
+  return ['approved', 'rejected', 'terminated'].includes(status || '');
+}
+
+function getProcessEndComment(status?: string) {
+  const statusLabel = getStatusMeta(status).label;
+  return statusLabel === '-' ? '流程已结束' : `流程${statusLabel}`;
 }
 
 function getTimelineColor(action?: string) {
-  const color = getWorkflowActionMeta(action).color;
-  const colorMap: Record<string, string> = {
-    cyan: 'blue',
-    default: 'gray',
-    error: 'red',
-    green: 'green',
-    orange: 'orange',
-    purple: 'purple',
-    red: 'red',
-    success: 'green',
-    warning: 'orange',
-  };
-  return colorMap[color] ?? color;
+  if (action === 'reject' || action === 'return') {
+    return 'red';
+  }
+  return 'green';
 }
 
 function getProgressNodeColor(node: ProcessProgressNode) {
   if (node.status === 'current') {
     return 'blue';
+  }
+  if (node.status === 'end') {
+    return 'green';
   }
   return getTimelineColor(node.action);
 }
@@ -539,22 +538,6 @@ defineExpose({
     <Spin :spinning="loading">
       <div class="runtime-drawer-body">
         <section class="runtime-form-section">
-          <div
-            v-if="isStartMode"
-            class="start-title-row"
-          >
-            <Input
-              v-model:value="instanceTitle"
-              :maxlength="200"
-              placeholder="请输入申请标题"
-            />
-          </div>
-          <div
-            v-if="formTitle"
-            class="form-title"
-          >
-            {{ formTitle }}
-          </div>
           <RuntimeFormRenderer
             :ref="handleRuntimeFormRef"
             :field-permissions="fieldPermissions"
@@ -582,15 +565,6 @@ defineExpose({
                     按处理时间展示审批记录和当前待办
                   </div>
                 </div>
-                <div class="process-action-tags">
-                  <Tag
-                    v-for="(count, action) in approvalStats.actionCounts"
-                    :key="action"
-                    :color="getWorkflowActionMeta(String(action)).color"
-                  >
-                    {{ formatActionCount(String(action), count) }}
-                  </Tag>
-                </div>
               </div>
 
               <Timeline class="process-progress-timeline">
@@ -615,12 +589,15 @@ defineExpose({
                         {{ getWorkflowActionMeta(node.action).label }}
                       </Tag>
                     </div>
-                    <div class="progress-node-meta">
+                    <div
+                      v-if="node.status !== 'end'"
+                      class="progress-node-meta"
+                    >
                       <span>处理人：{{ node.actor || '-' }}</span>
                       <span>时间：{{ node.time || '-' }}</span>
                     </div>
                     <div
-                      v-if="node.comment"
+                      v-if="node.comment && node.status !== 'end'"
                       class="progress-node-comment"
                     >
                       {{ node.comment }}
@@ -748,7 +725,7 @@ defineExpose({
               danger
               @click="openActionModal('reject')"
             >
-              拒绝
+              不通过
             </Button>
             <Button
               v-if="!isStartDraftTask && actionPermissions?.allowReturn"
@@ -793,11 +770,12 @@ defineExpose({
           placeholder="请选择退回节点"
           @update:value="(value) => updateActionField('targetNodeId', String(value ?? ''))"
         />
-        <Input
+        <UserPicker
           v-if="currentAction === 'transfer' || currentAction === 'addSign'"
+          :exclude-user-ids="currentTask?.assigneeUserId ? [currentTask.assigneeUserId] : []"
           :value="actionForm.targetUserId"
-          placeholder="请输入目标用户ID"
-          @update:value="(value) => updateActionField('targetUserId', String(value ?? ''))"
+          placeholder="请选择目标人员"
+          @update:value="(value) => updateActionField('targetUserId', Array.isArray(value) ? (value[0] ?? '') : (value ?? ''))"
         />
         <Textarea
           :maxlength="500"
@@ -857,19 +835,6 @@ defineExpose({
   padding-bottom: 18px;
 }
 
-.start-title-row {
-  margin-bottom: 16px;
-  max-width: 520px;
-}
-
-.form-title {
-  color: #1f2937;
-  font-size: 18px;
-  font-weight: 600;
-  margin-bottom: 18px;
-  text-align: center;
-}
-
 .process-progress-subtitle,
 .progress-node-meta {
   color: #6b7280;
@@ -924,13 +889,6 @@ defineExpose({
   color: #1f2937;
   font-size: 15px;
   font-weight: 600;
-}
-
-.process-action-tags {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  justify-content: flex-end;
 }
 
 .process-progress-timeline {

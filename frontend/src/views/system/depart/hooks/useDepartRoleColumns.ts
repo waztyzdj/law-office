@@ -40,6 +40,18 @@ export function getDepartRoleColumns(
       options: { width: 320 },
     },
     {
+      dataIndex: 'workflowEnabled',
+      title: '审批岗位',
+      options: {
+        align: 'center',
+        width: 120,
+        customRender: ({ record }: { record: DepartRoleInfo }) =>
+          record.workflowEnabled === 1
+            ? h(Tag, { color: 'green' }, () => '是')
+            : h(Tag, () => '否'),
+      },
+    },
+    {
       dataIndex: 'description',
       title: '描述',
       options: { width: 260 },

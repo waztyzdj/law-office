@@ -156,6 +156,15 @@ public interface IUserService extends IBaseService<User, UserVO> {
     List<UserVO> getCurrentTenantUsers(String username);
 
     /**
+     * 查询当前租户指定角色下的有效用户列表。
+     *
+     * @param username 用户名
+     * @param roleId 角色 ID
+     * @return 当前租户角色用户列表
+     */
+    List<UserVO> getCurrentTenantRoleUsers(String username, String roleId);
+
+    /**
      * 移除用户的指定租户关系。
      *
      * @param userId 用户 ID

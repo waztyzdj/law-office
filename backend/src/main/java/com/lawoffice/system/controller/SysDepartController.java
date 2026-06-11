@@ -7,6 +7,8 @@ import com.lawoffice.system.entity.SysDepart;
 import com.lawoffice.system.entity.DepartRole;
 import com.lawoffice.system.entity.Permission;
 import com.lawoffice.system.req.AssignIdsReq;
+import com.lawoffice.system.req.DepartLeaderReq;
+import com.lawoffice.system.req.DepartMemberRelationReq;
 import com.lawoffice.system.req.SysDepartReq;
 import com.lawoffice.system.service.ISysDepartService;
 import com.lawoffice.system.service.IPermissionService;
@@ -14,6 +16,7 @@ import com.lawoffice.system.annotation.RequiresPermission;
 import com.lawoffice.system.vo.PermissionVO;
 import com.lawoffice.system.vo.SysDepartVO;
 import com.lawoffice.system.vo.DepartPermissionSourceVO;
+import com.lawoffice.system.vo.DepartMemberRelationVO;
 import com.lawoffice.system.vo.UserVO;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -61,6 +64,36 @@ public class SysDepartController extends BaseController<ISysDepartService, SysDe
     @RequiresPermission("depart:edit")
     public BaseResult<Void> assignUsers(@Valid @RequestBody AssignIdsReq req) {
         baseService.assignUsers(req.getId(), req.getIds());
+        return BaseResult.success();
+    }
+
+    @PostMapping("/member-relation/list")
+    @Operation(summary = "获取部门成员组织关系", description = "获取部门成员的主部门、部门负责人和直属上级关系")
+    @RequiresPermission("depart:view")
+    public BaseResult<List<DepartMemberRelationVO>> getMemberRelations(@Valid @RequestBody AssignIdsReq req) {
+        return BaseResult.success(baseService.getDepartMemberRelations(req.getId()));
+    }
+
+    @PostMapping("/member-relation/save")
+    @Operation(summary = "保存部门成员组织关系", description = "覆盖保存部门成员的主部门、部门负责人和直属上级关系")
+    @RequiresPermission("depart:edit")
+    public BaseResult<Void> saveMemberRelations(@Valid @RequestBody DepartMemberRelationReq req) {
+        baseService.saveDepartMemberRelations(req);
+        return BaseResult.success();
+    }
+
+    @PostMapping("/leader/list")
+    @Operation(summary = "获取部门负责人", description = "获取指定部门唯一负责人")
+    @RequiresPermission("depart:view")
+    public BaseResult<List<DepartMemberRelationVO>> getDepartLeaders(@Valid @RequestBody AssignIdsReq req) {
+        return BaseResult.success(baseService.getDepartLeaders(req.getId()));
+    }
+
+    @PostMapping("/leader/save")
+    @Operation(summary = "保存部门负责人", description = "保存指定部门唯一负责人，用户ID为空时清空负责人")
+    @RequiresPermission("depart:edit")
+    public BaseResult<Void> saveDepartLeader(@Valid @RequestBody DepartLeaderReq req) {
+        baseService.saveDepartLeader(req);
         return BaseResult.success();
     }
 

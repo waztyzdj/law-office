@@ -335,16 +335,25 @@ async function loadProcess(record: WorkflowProcessModelInfo) {
   }
 }
 
+function updateDrawerState(loading = false) {
+  drawerApi.setState({
+    footer: !isPublished.value,
+    loading,
+    title: drawerTitle.value,
+  });
+}
+
 async function open(payload: DrawerPayload) {
   hasSyncedMountedValues.value = false;
-  drawerApi.setState({ loading: true, title: drawerTitle.value });
+  currentProcess.value = payload.record;
+  updateDrawerState(true);
   drawerApi.setData(payload).open();
 
   try {
     await loadProcess(payload.record);
-    drawerApi.setState({ loading: false, title: drawerTitle.value });
+    updateDrawerState(false);
   } catch {
-    drawerApi.setState({ loading: false, title: drawerTitle.value });
+    updateDrawerState(false);
   }
 
   await nextTick();

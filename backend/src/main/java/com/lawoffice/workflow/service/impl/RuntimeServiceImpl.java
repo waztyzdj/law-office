@@ -81,6 +81,7 @@ import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
 import java.util.function.Supplier;
@@ -426,7 +427,7 @@ public class RuntimeServiceImpl implements IRuntimeService {
     public BaseResult<TaskActionVO> reject(String taskId, TaskActionReq req, RequestContext context) {
         return executeInTransaction(
                 () -> BaseResult.success(handleTaskAction(taskId, req, context, WorkflowConstants.Action.REJECT)),
-                "审批拒绝失败");
+                "审批不通过失败");
     }
 
     @Override
@@ -628,8 +629,9 @@ public class RuntimeServiceImpl implements IRuntimeService {
         InstanceDetailVO vo = new InstanceDetailVO();
         vo.setProcessInstance(buildProcessInstanceVO(processInstance));
         vo.setFormInstance(buildFormInstanceVO(formInstance));
+        Map<String, String> candidateNamesByTaskId = buildCandidateNamesByTaskId(currentTasks, processInstance.getTenantId());
         vo.setCurrentTasks(currentTasks.stream()
-                .map(task -> buildRuntimeTaskVO(task, processInstance))
+                .map(task -> buildRuntimeTaskVO(task, processInstance, candidateNamesByTaskId.get(task.getId())))
                 .toList());
         vo.setRecords(records.stream()
                 .map(this::buildOperationRecordVO)
@@ -677,12 +679,7 @@ public class RuntimeServiceImpl implements IRuntimeService {
                 .eq("tenant_id", tenantId)
                 .eq("process_instance_id", processInstanceId)
                 .eq("delete_flag", 0)
-                .and(condition -> {
-                    condition.eq("assignee_user_id", context.getUserId());
-                    if (StringUtils.hasText(context.getUsername())) {
-                        condition.or().eq("assignee_username", context.getUsername());
-                    }
-                });
+                .eq("assignee_user_id", context.getUserId());
         if (taskMapper.selectCount(taskWrapper) > 0) {
             return true;
         }
@@ -858,9 +855,6 @@ public class RuntimeServiceImpl implements IRuntimeService {
         }
         wrapper.and(condition -> {
             condition.eq("assignee_user_id", userId);
-            if (StringUtils.hasText(context.getUsername())) {
-                condition.or().eq("assignee_username", context.getUsername());
-            }
             if (!candidateTaskIds.isEmpty()) {
                 condition.or().in("id", candidateTaskIds);
             }
@@ -941,6 +935,10 @@ public class RuntimeServiceImpl implements IRuntimeService {
     }
 
     private RuntimeTaskVO buildRuntimeTaskVO(Task task, ProcessInstance processInstance) {
+        return buildRuntimeTaskVO(task, processInstance, null);
+    }
+
+    private RuntimeTaskVO buildRuntimeTaskVO(Task task, ProcessInstance processInstance, String candidateAssigneeNames) {
         RuntimeTaskVO vo = new RuntimeTaskVO();
         vo.setId(task.getId());
         vo.setCreateTime(task.getCreateTime());
@@ -955,6 +953,7 @@ public class RuntimeServiceImpl implements IRuntimeService {
         vo.setAssigneeUserId(task.getAssigneeUserId());
         vo.setAssigneeUsername(task.getAssigneeUsername());
         vo.setAssigneeRealname(task.getAssigneeRealname());
+        vo.setCandidateAssigneeNames(candidateAssigneeNames);
         vo.setStatus(task.getStatus());
         vo.setClaimTime(task.getClaimTime());
         vo.setCompleteTime(task.getCompleteTime());
@@ -967,6 +966,38 @@ public class RuntimeServiceImpl implements IRuntimeService {
             vo.setStartTime(processInstance.getStartTime());
         }
         return vo;
+    }
+
+    private Map<String, String> buildCandidateNamesByTaskId(List<Task> tasks, String tenantId) {
+        if (tasks == null || tasks.isEmpty()) {
+            return Map.of();
+        }
+        Set<String> taskIds = tasks.stream()
+                .map(Task::getId)
+                .filter(StringUtils::hasText)
+                .collect(java.util.stream.Collectors.toSet());
+        if (taskIds.isEmpty()) {
+            return Map.of();
+        }
+        Map<String, List<String>> candidateNames = new HashMap<>();
+        taskCandidateMapper.selectList(new QueryWrapper<TaskCandidate>()
+                        .in("task_id", taskIds)
+                        .eq("tenant_id", tenantId)
+                        .eq("status", WorkflowConstants.Status.ACTIVE)
+                        .eq("delete_flag", 0))
+                .forEach(candidate -> candidateNames
+                        .computeIfAbsent(candidate.getTaskId(), key -> new ArrayList<>())
+                        .add(resolveDisplayName(
+                                candidate.getCandidateRealname(),
+                                candidate.getCandidateUsername(),
+                                candidate.getCandidateUserId())));
+        return candidateNames.entrySet().stream()
+                .collect(java.util.stream.Collectors.toMap(
+                        Map.Entry::getKey,
+                        entry -> String.join(",", entry.getValue().stream()
+                                .filter(StringUtils::hasText)
+                                .distinct()
+                                .toList())));
     }
 
     private TaskActionVO handleTaskAction(String taskId, TaskActionReq req, RequestContext context, String action) {
@@ -988,7 +1019,7 @@ public class RuntimeServiceImpl implements IRuntimeService {
                 completeApprove(task, processInstance, formInstance, req, tenantId, context);
             }
         } else if (WorkflowConstants.Action.REJECT.equals(action)) {
-            ensureNotAddSignTask(task, "加签任务不允许拒绝流程");
+            ensureNotAddSignTask(task, "加签任务不允许不通过流程");
             ensureNoActiveAddSignChild(task);
             completeReject(task, processInstance, formInstance, req, tenantId, context);
         } else {
@@ -1097,21 +1128,27 @@ public class RuntimeServiceImpl implements IRuntimeService {
         if (req == null || !StringUtils.hasText(req.getTargetNodeId())) {
             throw new IllegalArgumentException("退回目标节点不能为空");
         }
-        ProcessNodeConfig targetNodeConfig = requireNodeConfig(processInstance.getProcessModelId(), req.getTargetNodeId(), tenantId);
+        ProcessNodeConfig targetNodeConfig = START_DRAFT_NODE_ID.equals(req.getTargetNodeId())
+                ? buildStartDraftNodeConfig()
+                : requireNodeConfig(processInstance.getProcessModelId(), req.getTargetNodeId(), tenantId);
         ensureReturnTargetAllowed(processInstance, currentNodeConfig, targetNodeConfig, tenantId);
         FormInstance formInstance = requireFormInstance(processInstance.getFormInstanceId(), tenantId);
         saveTaskFormData(req, formInstance, listFieldPermissions(processInstance.getProcessModelId(), task.getNodeId(), tenantId), context);
 
         autoClaimIfNeeded(task, candidate, context);
-        flowableService.moveActivityTo(processInstance.getFlowableProcessInstanceId(), task.getNodeId(), req.getTargetNodeId());
         task.setStatus(WorkflowConstants.Status.RETURNED);
         task.setCompleteTime(LocalDateTime.now());
         EntityFillUtils.fillAuditFields(task, context, false);
         taskMapper.updateById(task);
         cancelActiveCandidates(task, context);
-        syncCurrentTasks(processInstance, tenantId, context);
-        EntityFillUtils.fillAuditFields(processInstance, context, false);
-        processInstanceMapper.updateById(processInstance);
+        if (START_DRAFT_NODE_ID.equals(targetNodeConfig.getNodeId())) {
+            returnToStartDraft(processInstance, formInstance, tenantId, context);
+        } else {
+            flowableService.moveActivityTo(processInstance.getFlowableProcessInstanceId(), task.getNodeId(), targetNodeConfig.getNodeId());
+            syncCurrentTasks(processInstance, tenantId, context);
+            EntityFillUtils.fillAuditFields(processInstance, context, false);
+            processInstanceMapper.updateById(processInstance);
+        }
         createTaskRecord(task, processInstance, formInstance, req, WorkflowConstants.Action.RETURN, tenantId, context, targetNodeConfig, null);
         return buildTaskActionResult(task, processInstance);
     }
@@ -1161,7 +1198,7 @@ public class RuntimeServiceImpl implements IRuntimeService {
 
     private void completeReject(Task task, ProcessInstance processInstance, FormInstance formInstance,
             TaskActionReq req, String tenantId, RequestContext context) {
-        flowableService.terminateProcessInstance(processInstance.getFlowableProcessInstanceId(), resolveActionComment(req, "审批拒绝"));
+        flowableService.terminateProcessInstance(processInstance.getFlowableProcessInstanceId(), resolveActionComment(req, "审批不通过"));
         markTaskDone(task, context);
         cancelTodoTasks(processInstance.getId(), task.getId(), tenantId, context);
         processInstance.setStatus(WorkflowConstants.Status.REJECTED);
@@ -1205,6 +1242,9 @@ public class RuntimeServiceImpl implements IRuntimeService {
 
     private void ensureReturnTargetAllowed(ProcessInstance processInstance, ProcessNodeConfig currentNodeConfig,
             ProcessNodeConfig targetNodeConfig, String tenantId) {
+        if (START_DRAFT_NODE_ID.equals(targetNodeConfig.getNodeId())) {
+            return;
+        }
         boolean allowed = listReturnableNodeConfigs(processInstance, currentNodeConfig, tenantId).stream()
                 .anyMatch(nodeConfig -> nodeConfig.getNodeId().equals(targetNodeConfig.getNodeId()));
         if (!allowed) {
@@ -1390,8 +1430,7 @@ public class RuntimeServiceImpl implements IRuntimeService {
     }
 
     private boolean isDirectAssignee(Task task, RequestContext context) {
-        return (StringUtils.hasText(context.getUserId()) && context.getUserId().equals(task.getAssigneeUserId()))
-                || (StringUtils.hasText(context.getUsername()) && context.getUsername().equals(task.getAssigneeUsername()));
+        return StringUtils.hasText(context.getUserId()) && context.getUserId().equals(task.getAssigneeUserId());
     }
 
     /**
@@ -1405,7 +1444,7 @@ public class RuntimeServiceImpl implements IRuntimeService {
         LocalDateTime now = LocalDateTime.now();
         task.setAssigneeUserId(context.getUserId());
         task.setAssigneeUsername(context.getUsername());
-        task.setAssigneeRealname(context.getUsername());
+        task.setAssigneeRealname(resolveCurrentUserRealname(context));
         task.setClaimTime(now);
         EntityFillUtils.fillAuditFields(task, context, false);
         taskMapper.updateById(task);
@@ -1443,13 +1482,16 @@ public class RuntimeServiceImpl implements IRuntimeService {
     }
 
     private void cancelTodoTasks(String processInstanceId, String completedTaskId, String tenantId, RequestContext context) {
-        List<String> canceledTaskIds = taskMapper.selectList(new QueryWrapper<Task>()
-                        .select("id")
-                        .eq("tenant_id", tenantId)
-                        .eq("process_instance_id", processInstanceId)
-                        .ne("id", completedTaskId)
-                        .eq("status", WorkflowConstants.Status.TODO)
-                        .eq("delete_flag", 0))
+        QueryWrapper<Task> wrapper = new QueryWrapper<Task>()
+                .select("id")
+                .eq("tenant_id", tenantId)
+                .eq("process_instance_id", processInstanceId)
+                .eq("status", WorkflowConstants.Status.TODO)
+                .eq("delete_flag", 0);
+        if (StringUtils.hasText(completedTaskId)) {
+            wrapper.ne("id", completedTaskId);
+        }
+        List<String> canceledTaskIds = taskMapper.selectList(wrapper)
                 .stream()
                 .map(Task::getId)
                 .toList();
@@ -1469,6 +1511,39 @@ public class RuntimeServiceImpl implements IRuntimeService {
                 .eq("status", WorkflowConstants.Status.ACTIVE)
                 .eq("delete_flag", 0)
                 .set("status", WorkflowConstants.Status.CANCELED)
+                .set("update_by", context.getUsername())
+                .set("update_time", LocalDateTime.now()));
+    }
+
+    /**
+     * 退回到发起人时回到本地草稿任务，重新提交时再启动新的 Flowable 实例。
+     */
+    private void returnToStartDraft(ProcessInstance processInstance, FormInstance formInstance, String tenantId, RequestContext context) {
+        flowableService.terminateProcessInstance(processInstance.getFlowableProcessInstanceId(), "退回发起人重新提交");
+        cancelTodoTasks(processInstance.getId(), null, tenantId, context);
+        formInstance.setStatus(WorkflowConstants.Status.DRAFT);
+        formInstance.setSubmittedTime(null);
+        EntityFillUtils.fillAuditFields(formInstance, context, false);
+        formInstanceMapper.updateById(formInstance);
+        formInstanceMapper.update(null, new UpdateWrapper<FormInstance>()
+                .eq("id", formInstance.getId())
+                .eq("tenant_id", tenantId)
+                .eq("delete_flag", 0)
+                .set("status", WorkflowConstants.Status.DRAFT)
+                .set("submitted_time", null)
+                .set("update_by", context.getUsername())
+                .set("update_time", LocalDateTime.now()));
+        processInstance.setStatus(WorkflowConstants.Status.DRAFT);
+        processInstance.setFlowableProcessInstanceId(null);
+        processInstance.setEndTime(null);
+        createStartDraftTask(processInstance, tenantId, context);
+        processInstanceMapper.update(null, new UpdateWrapper<ProcessInstance>()
+                .eq("id", processInstance.getId())
+                .eq("tenant_id", tenantId)
+                .eq("delete_flag", 0)
+                .set("status", WorkflowConstants.Status.DRAFT)
+                .set("flowable_process_instance_id", null)
+                .set("end_time", null)
                 .set("update_by", context.getUsername())
                 .set("update_time", LocalDateTime.now()));
     }
@@ -1525,7 +1600,7 @@ public class RuntimeServiceImpl implements IRuntimeService {
         record.setAction(action);
         record.setOperatorUserId(context.getUserId());
         record.setOperatorUsername(context.getUsername());
-        record.setOperatorRealname(context.getUsername());
+        record.setOperatorRealname(resolveCurrentUserRealname(context));
         if (targetUser != null) {
             record.setTargetUserId(targetUser.getId());
             record.setTargetUsername(targetUser.getUsername());
@@ -1546,7 +1621,7 @@ public class RuntimeServiceImpl implements IRuntimeService {
         return switch (action) {
             case WorkflowConstants.Action.SAVE_DRAFT -> "保存草稿";
             case WorkflowConstants.Action.APPROVE -> "审批通过";
-            case WorkflowConstants.Action.REJECT -> "审批拒绝";
+            case WorkflowConstants.Action.REJECT -> "审批不通过";
             case WorkflowConstants.Action.TRANSFER -> "转办";
             case WorkflowConstants.Action.RETURN -> "退回";
             case WorkflowConstants.Action.ADD_SIGN -> "加签";
@@ -1587,7 +1662,12 @@ public class RuntimeServiceImpl implements IRuntimeService {
         vo.setOptionJson(formInstance.getFormOptionSnapshotJson());
         vo.setFormDataJson(formInstance.getFormDataJson());
         vo.setActionPermissions(buildTaskActionPermissions(task, nodeConfig, returnableNodes));
-        vo.setReturnNodes(returnableNodes.stream().map(this::buildTaskReturnNode).toList());
+        List<TaskReturnNodeVO> returnNodes = new ArrayList<>();
+        if (!startDraftTask && isEnabled(nodeConfig.getAllowReturn())) {
+            returnNodes.add(buildStartDraftReturnNode());
+        }
+        returnNodes.addAll(returnableNodes.stream().map(this::buildTaskReturnNode).toList());
+        vo.setReturnNodes(returnNodes);
         vo.setFieldPermissions(permissions.stream().map(this::buildRuntimeFieldPermission).toList());
         return vo;
     }
@@ -1608,7 +1688,7 @@ public class RuntimeServiceImpl implements IRuntimeService {
         vo.setAllowReject(!addSignTask);
         vo.setAllowTransfer(!addSignTask && isEnabled(nodeConfig.getAllowTransfer()));
         vo.setAllowAddSign(!addSignTask && isEnabled(nodeConfig.getAllowAddSign()));
-        vo.setAllowReturn(!addSignTask && isEnabled(nodeConfig.getAllowReturn()) && !returnableNodes.isEmpty());
+        vo.setAllowReturn(!addSignTask && isEnabled(nodeConfig.getAllowReturn()));
         return vo;
     }
 
@@ -1618,6 +1698,15 @@ public class RuntimeServiceImpl implements IRuntimeService {
         vo.setNodeName(nodeConfig.getNodeName());
         vo.setNodeType(nodeConfig.getNodeType());
         vo.setSortOrder(nodeConfig.getSortOrder());
+        return vo;
+    }
+
+    private TaskReturnNodeVO buildStartDraftReturnNode() {
+        TaskReturnNodeVO vo = new TaskReturnNodeVO();
+        vo.setNodeId(START_DRAFT_NODE_ID);
+        vo.setNodeName(START_DRAFT_TASK_NAME);
+        vo.setNodeType(WorkflowConstants.NodeType.START);
+        vo.setSortOrder(0);
         return vo;
     }
 
@@ -1767,6 +1856,7 @@ public class RuntimeServiceImpl implements IRuntimeService {
 
     private ProcessInstance createProcessInstance(StartProcessReq req, ProcessModel model, FormDefinition form,
             FormInstance formInstance, String tenantId, RequestContext context, String status) {
+        String currentUserRealname = resolveCurrentUserRealname(context);
         ProcessInstance processInstance = new ProcessInstance();
         processInstance.setId(newId());
         processInstance.setTenantId(tenantId);
@@ -1779,7 +1869,7 @@ public class RuntimeServiceImpl implements IRuntimeService {
         processInstance.setBusinessKey(StringUtils.hasText(req.getBusinessKey()) ? req.getBusinessKey() : processInstance.getId());
         processInstance.setStarterUserId(context.getUserId());
         processInstance.setStarterUsername(context.getUsername());
-        processInstance.setStarterRealname(context.getUsername());
+        processInstance.setStarterRealname(currentUserRealname);
         processInstance.setStatus(status);
         processInstance.setStartTime(LocalDateTime.now());
         EntityFillUtils.fillAuditFields(processInstance, context, true);
@@ -1798,6 +1888,10 @@ public class RuntimeServiceImpl implements IRuntimeService {
     }
 
     private void createStartDraftTask(ProcessInstance processInstance, String tenantId, RequestContext context) {
+        String starterDisplayName = resolveDisplayName(
+                processInstance.getStarterRealname(),
+                processInstance.getStarterUsername(),
+                processInstance.getStarterUserId());
         Task task = new Task();
         task.setId(newId());
         task.setTenantId(tenantId);
@@ -1806,14 +1900,14 @@ public class RuntimeServiceImpl implements IRuntimeService {
         task.setNodeId(START_DRAFT_NODE_ID);
         task.setTaskName(START_DRAFT_TASK_NAME);
         task.setTaskType(WorkflowConstants.TaskType.START_DRAFT);
-        task.setAssigneeUserId(context.getUserId());
-        task.setAssigneeUsername(context.getUsername());
-        task.setAssigneeRealname(context.getUsername());
+        task.setAssigneeUserId(processInstance.getStarterUserId());
+        task.setAssigneeUsername(processInstance.getStarterUsername());
+        task.setAssigneeRealname(starterDisplayName);
         task.setStatus(WorkflowConstants.Status.TODO);
         EntityFillUtils.fillAuditFields(task, context, true);
         taskMapper.insert(task);
         processInstance.setCurrentTaskNames(START_DRAFT_TASK_NAME);
-        processInstance.setCurrentAssigneeNames(resolveDisplayName(context.getUsername(), context.getUsername(), context.getUserId()));
+        processInstance.setCurrentAssigneeNames(starterDisplayName);
         EntityFillUtils.fillAuditFields(processInstance, context, false);
         processInstanceMapper.updateById(processInstance);
     }
@@ -1940,64 +2034,47 @@ public class RuntimeServiceImpl implements IRuntimeService {
 
     private List<ResolvedAssignee> resolveDepartLeaderAssignees(ProcessNodeConfig nodeConfig,
             ProcessInstance processInstance, String tenantId) {
-        List<String> departIds = readIdList(nodeConfig.getAssigneeJson(), "departIds", "departs", "ids");
-        if (departIds.isEmpty()) {
-            departIds = userDepartMapper.selectList(new QueryWrapper<UserDepart>()
-                            .select("dep_id")
-                            .eq("tenant_id", tenantId)
-                            .eq("user_id", processInstance.getStarterUserId())
-                            .eq("delete_flag", 0))
-                    .stream()
-                    .map(UserDepart::getDepId)
-                    .filter(StringUtils::hasText)
-                    .toList();
-        }
-        if (departIds.isEmpty()) {
+        String departId = resolveStarterCurrentDepartId(processInstance, tenantId);
+        if (!StringUtils.hasText(departId)) {
             return List.of();
         }
-        List<String> resolvedDepartIds = departIds;
-        List<String> tenantUserIds = userTenantMapper.selectList(new QueryWrapper<UserTenant>()
+        List<String> leaderUserIds = userDepartMapper.selectList(new QueryWrapper<UserDepart>()
                         .select("user_id")
                         .eq("tenant_id", tenantId)
-                        .eq("status", "1")
-                        .eq("delete_flag", 0))
-                .stream()
-                .map(UserTenant::getUserId)
-                .toList();
-        if (tenantUserIds.isEmpty()) {
-            return List.of();
-        }
-        List<User> leaders = userMapper.selectList(new QueryWrapper<User>()
-                .in("id", tenantUserIds)
-                .eq("user_identity", 2)
-                .eq("status", 1)
-                .eq("delete_flag", 0));
-        List<String> leaderUserIds = leaders.stream()
-                .map(User::getId)
-                .filter(StringUtils::hasText)
-                .toList();
-        Set<String> relationLeaderUserIds = leaderUserIds.isEmpty()
-                ? Set.of()
-                : userDepartMapper.selectList(new QueryWrapper<UserDepart>()
-                        .select("user_id")
-                        .eq("tenant_id", tenantId)
-                        .in("user_id", leaderUserIds)
-                        .in("dep_id", resolvedDepartIds)
+                        .eq("dep_id", departId)
+                        .eq("depart_leader_flag", 1)
                         .eq("delete_flag", 0))
                 .stream()
                 .map(UserDepart::getUserId)
                 .filter(StringUtils::hasText)
-                .collect(java.util.stream.Collectors.toSet());
-        Map<String, User> matchedLeaders = new LinkedHashMap<>();
-        for (User leader : leaders) {
-            if (hasAnyDepart(leader.getDepartIds(), resolvedDepartIds) || relationLeaderUserIds.contains(leader.getId())) {
-                matchedLeaders.putIfAbsent(leader.getId(), leader);
-            }
-        }
-        return matchedLeaders.values().stream()
-                .map(user -> new ResolvedAssignee(user.getId(), user.getUsername(), user.getRealname(),
-                        WorkflowConstants.AssigneeType.DEPART_LEADER, String.join(",", resolvedDepartIds)))
+                .distinct()
                 .toList();
+        if (leaderUserIds.isEmpty()) {
+            return List.of();
+        }
+        Map<String, User> leaders = loadTenantActiveUsers(leaderUserIds, tenantId);
+        return leaderUserIds.stream()
+                .map(leaders::get)
+                .filter(Objects::nonNull)
+                .distinct()
+                .map(user -> new ResolvedAssignee(user.getId(), user.getUsername(), user.getRealname(),
+                        WorkflowConstants.AssigneeType.DEPART_LEADER, departId))
+                .toList();
+    }
+
+    private String resolveStarterCurrentDepartId(ProcessInstance processInstance, String tenantId) {
+        List<UserDepart> starterDeparts = userDepartMapper.selectList(new QueryWrapper<UserDepart>()
+                .select("dep_id", "primary_depart_flag")
+                .eq("tenant_id", tenantId)
+                .eq("user_id", processInstance.getStarterUserId())
+                .eq("delete_flag", 0)
+                .orderByDesc("primary_depart_flag")
+                .orderByAsc("create_time"));
+        return starterDeparts.stream()
+                .map(UserDepart::getDepId)
+                .filter(StringUtils::hasText)
+                .findFirst()
+                .orElse(null);
     }
 
     private List<ResolvedAssignee> resolveDepartRoleAssignees(ProcessNodeConfig nodeConfig, String tenantId) {
@@ -2091,17 +2168,6 @@ public class RuntimeServiceImpl implements IRuntimeService {
         }
     }
 
-    private boolean hasAnyDepart(String leaderDepartIds, List<String> departIds) {
-        if (!StringUtils.hasText(leaderDepartIds) || departIds == null || departIds.isEmpty()) {
-            return false;
-        }
-        Set<String> leaderDepartIdSet = java.util.Arrays.stream(leaderDepartIds.split(","))
-                .map(String::trim)
-                .filter(StringUtils::hasText)
-                .collect(java.util.stream.Collectors.toSet());
-        return departIds.stream().anyMatch(leaderDepartIdSet::contains);
-    }
-
     private void applyFlowableAssignees(String flowableTaskId, List<ResolvedAssignee> assignees) {
         if (assignees.size() == 1) {
             flowableService.setTaskAssignee(flowableTaskId, assignees.get(0).userId());
@@ -2180,6 +2246,23 @@ public class RuntimeServiceImpl implements IRuntimeService {
         return userId;
     }
 
+    private String resolveCurrentUserRealname(RequestContext context) {
+        String userId = context == null ? null : context.getUserId();
+        String username = context == null ? null : context.getUsername();
+        User user = null;
+        if (StringUtils.hasText(userId)) {
+            user = userMapper.selectOne(new QueryWrapper<User>()
+                    .select("id", "username", "realname")
+                    .eq("id", userId)
+                    .eq("delete_flag", 0)
+                    .last("limit 1"));
+        }
+        if (user != null) {
+            return resolveDisplayName(user.getRealname(), user.getUsername(), user.getId());
+        }
+        return resolveDisplayName(null, username, userId);
+    }
+
     private void createStartRecord(ProcessInstance processInstance, FormInstance formInstance, String tenantId, RequestContext context) {
         OperationRecord record = new OperationRecord();
         record.setTenantId(tenantId);
@@ -2187,7 +2270,7 @@ public class RuntimeServiceImpl implements IRuntimeService {
         record.setAction(WorkflowConstants.Action.START);
         record.setOperatorUserId(context.getUserId());
         record.setOperatorUsername(context.getUsername());
-        record.setOperatorRealname(context.getUsername());
+        record.setOperatorRealname(resolveCurrentUserRealname(context));
         record.setComment("发起申请");
         record.setFormDataSnapshotJson(formInstance.getFormDataJson());
         record.setOperateTime(LocalDateTime.now());
@@ -2202,7 +2285,7 @@ public class RuntimeServiceImpl implements IRuntimeService {
         record.setAction(WorkflowConstants.Action.SAVE_DRAFT);
         record.setOperatorUserId(context.getUserId());
         record.setOperatorUsername(context.getUsername());
-        record.setOperatorRealname(context.getUsername());
+        record.setOperatorRealname(resolveCurrentUserRealname(context));
         record.setComment("保存申请草稿");
         record.setFormDataSnapshotJson(formInstance.getFormDataJson());
         record.setOperateTime(LocalDateTime.now());

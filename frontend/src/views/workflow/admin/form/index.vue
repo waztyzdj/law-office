@@ -7,6 +7,7 @@ import type { WorkflowFormDefinitionInfo } from '#/api/workflow';
 
 import WorkflowFormDesignerDrawer from './components/WorkflowFormDesignerDrawer.vue';
 import WorkflowFormDrawer from './components/WorkflowFormDrawer.vue';
+import WorkflowFormHistoryDrawer from './components/WorkflowFormHistoryDrawer.vue';
 import WorkflowFormTable from './components/WorkflowFormTable.vue';
 import { useWorkflowFormTable } from './hooks/useWorkflowFormTable';
 
@@ -26,6 +27,7 @@ const {
 
 const formDrawerRef = ref<InstanceType<typeof WorkflowFormDrawer>>();
 const designerDrawerRef = ref<InstanceType<typeof WorkflowFormDesignerDrawer>>();
+const historyDrawerRef = ref<InstanceType<typeof WorkflowFormHistoryDrawer>>();
 
 function handleAdd() {
   formDrawerRef.value?.open({ mode: 'create' });
@@ -47,6 +49,14 @@ function handleDesign(record: WorkflowFormDefinitionInfo) {
   designerDrawerRef.value?.open({ record });
 }
 
+function handleViewDesign(record: WorkflowFormDefinitionInfo) {
+  designerDrawerRef.value?.open({ readonly: true, record });
+}
+
+function handleHistory(record: WorkflowFormDefinitionInfo) {
+  historyDrawerRef.value?.open(record);
+}
+
 onMounted(handleRefresh);
 </script>
 
@@ -64,7 +74,9 @@ onMounted(handleRefresh);
       @delete="handleDelete"
       @design="handleDesign"
       @edit="handleEdit"
+      @history="handleHistory"
       @publish="handlePublish"
+      @view-design="handleViewDesign"
     />
 
     <WorkflowFormDrawer
@@ -74,6 +86,11 @@ onMounted(handleRefresh);
     <WorkflowFormDesignerDrawer
       ref="designerDrawerRef"
       @success="loadData"
+    />
+    <WorkflowFormHistoryDrawer
+      ref="historyDrawerRef"
+      :category-map="categoryMap"
+      @view-design="handleViewDesign"
     />
   </div>
 </template>

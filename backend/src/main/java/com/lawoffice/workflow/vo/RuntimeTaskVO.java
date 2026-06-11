@@ -37,6 +37,8 @@ public class RuntimeTaskVO extends BaseVO {
 
     private String assigneeRealname;
 
+    private String candidateAssigneeNames;
+
     private String status;
 
     @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss", timezone = "GMT+8")

@@ -150,7 +150,7 @@ public class RuntimeController {
     }
 
     @PostMapping("/task/reject")
-    @Operation(summary = "审批拒绝")
+    @Operation(summary = "审批不通过")
     public BaseResult<TaskActionVO> reject(@RequestBody(required = false) TaskActionReq req,
             HttpServletRequest request) {
         RequestContext context = RequestContextUtils.buildContext(request);

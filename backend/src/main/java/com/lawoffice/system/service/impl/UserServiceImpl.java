@@ -16,6 +16,7 @@ import com.lawoffice.framework.service.impl.BaseServiceImpl;
 import com.lawoffice.framework.util.QueryWrapperBuilderUtils;
 import com.lawoffice.framework.vo.PageVO;
 import com.lawoffice.system.constant.DepartRoleCodes;
+import com.lawoffice.system.constant.PermissionMenuTypes;
 import com.lawoffice.system.req.CurrentUserProfileReq;
 import com.lawoffice.system.req.FileUploadReq;
 import com.lawoffice.system.vo.CurrentUserLogVO;
@@ -59,6 +60,7 @@ public class UserServiceImpl extends BaseServiceImpl<UserMapper, User, UserVO> i
     private static final String PLATFORM_ADMIN_ROLE_CODE = "ADMIN";
     private static final String SYSTEM_TENANT_ID = "0";
     private static final String TENANT_ADMIN_ROLE_CODE_PREFIX = "ADMIN_";
+    private static final String DEFAULT_HOME_PATH = "/analytics";
     private static final String PASSWORD_PATTERN = "^(?=.*[a-z])(?=.*[A-Z])(?=.*\\d)(?=.*[^\\dA-Za-z]).{8,20}$";
     private static final String PHONE_PATTERN = "^1[3-9]\\d{9}$";
     private static final String EMAIL_PATTERN = "^[A-Za-z0-9+_.-]+@[A-Za-z0-9.-]+$";
@@ -922,6 +924,50 @@ public class UserServiceImpl extends BaseServiceImpl<UserMapper, User, UserVO> i
     }
 
     @Override
+    public List<UserVO> getCurrentTenantRoleUsers(String username, String roleId) {
+        if (!StringUtils.hasText(username)) {
+            throw new IllegalArgumentException("未登录或登录已过期");
+        }
+        if (!StringUtils.hasText(roleId)) {
+            throw new IllegalArgumentException("角色ID不能为空");
+        }
+
+        String tenantId = getRequiredTenantId();
+        Role role = roleMapper.selectById(roleId);
+        if (role == null
+                || (role.getDeleteFlag() != null && role.getDeleteFlag() != 0)
+                || !tenantId.equals(role.getTenantId())) {
+            return new ArrayList<>();
+        }
+
+        List<String> tenantUserIds = getTenantMemberUserIds(tenantId);
+        if (tenantUserIds.isEmpty()) {
+            return new ArrayList<>();
+        }
+
+        LambdaQueryWrapper<UserRole> roleUserWrapper = new LambdaQueryWrapper<>();
+        roleUserWrapper.eq(UserRole::getRoleId, roleId)
+                .eq(UserRole::getTenantId, tenantId)
+                .eq(UserRole::getDeleteFlag, 0)
+                .in(UserRole::getUserId, tenantUserIds);
+        List<String> roleUserIds = userRoleMapper.selectList(roleUserWrapper).stream()
+                .map(UserRole::getUserId)
+                .filter(StringUtils::hasText)
+                .distinct()
+                .collect(Collectors.toList());
+        if (roleUserIds.isEmpty()) {
+            return new ArrayList<>();
+        }
+
+        LambdaQueryWrapper<User> wrapper = new LambdaQueryWrapper<>();
+        wrapper.in(User::getId, roleUserIds)
+                .eq(User::getDeleteFlag, 0)
+                .eq(User::getStatus, 1)
+                .orderByAsc(User::getUsername);
+        return BeanUtil.copyToList(userMapper.selectList(wrapper), UserVO.class);
+    }
+
+    @Override
     @Transactional(rollbackFor = Exception.class)
     public void removeTenants(String userId, List<String> tenantIds) {
         if (tenantIds == null || tenantIds.isEmpty()) {
@@ -1173,8 +1219,7 @@ public class UserServiceImpl extends BaseServiceImpl<UserMapper, User, UserVO> i
         if (currentTenant != null) {
             userInfoVO.setTenantName(currentTenant.getName());
         }
-        // homePath 可以根据业务需求设置
-        userInfoVO.setHomePath("/system/user");
+        userInfoVO.setHomePath(resolveHomePath(user.getId(), currentTenantId));
         
         log.info("获取用户详细信息成功：{}, 权限数量: {}, 角色数量: {}", username, permissionCodes.size(), roleCodes.size());
         return userInfoVO;
@@ -1396,6 +1441,68 @@ public class UserServiceImpl extends BaseServiceImpl<UserMapper, User, UserVO> i
                 .filter(StringUtils::hasText)
                 .distinct()
                 .collect(Collectors.toList());
+    }
+
+    /**
+     * 首页路径必须来自当前租户实际可访问菜单，避免低权限用户登录后跳到无菜单入口的历史页面。
+     */
+    private String resolveHomePath(String userId, String tenantId) {
+        List<Permission> menuPermissions = getUserPermissionsInTenant(userId, tenantId).stream()
+                .filter(permission -> PermissionMenuTypes.isMenu(permission.getMenuType()))
+                .filter(permission -> permission.getHidden() == null || permission.getHidden() != 1)
+                .filter(permission -> StringUtils.hasText(permission.getUrl()))
+                .toList();
+        if (menuPermissions.isEmpty()) {
+            return DEFAULT_HOME_PATH;
+        }
+
+        Map<String, List<Permission>> childrenByParentId = menuPermissions.stream()
+                .filter(permission -> StringUtils.hasText(permission.getParentId()))
+                .collect(Collectors.groupingBy(Permission::getParentId));
+
+        return menuPermissions.stream()
+                .filter(permission -> !StringUtils.hasText(permission.getParentId()))
+                .sorted(this::comparePermissionSort)
+                .map(permission -> resolveFirstOpenableMenuPath(permission, childrenByParentId))
+                .filter(StringUtils::hasText)
+                .findFirst()
+                .orElseGet(() -> menuPermissions.stream()
+                        .sorted(this::comparePermissionSort)
+                        .map(Permission::getUrl)
+                        .filter(StringUtils::hasText)
+                        .findFirst()
+                        .orElse(DEFAULT_HOME_PATH));
+    }
+
+    private String resolveFirstOpenableMenuPath(Permission permission, Map<String, List<Permission>> childrenByParentId) {
+        List<Permission> children = childrenByParentId.getOrDefault(permission.getId(), List.of()).stream()
+                .sorted(this::comparePermissionSort)
+                .toList();
+        if (children.isEmpty()) {
+            return permission.getUrl();
+        }
+        return children.stream()
+                .map(child -> resolveFirstOpenableMenuPath(child, childrenByParentId))
+                .filter(StringUtils::hasText)
+                .findFirst()
+                .orElse(permission.getUrl());
+    }
+
+    private int comparePermissionSort(Permission left, Permission right) {
+        if (left.getSortNo() == null && right.getSortNo() == null) {
+            return Objects.toString(left.getCreateTime(), "").compareTo(Objects.toString(right.getCreateTime(), ""));
+        }
+        if (left.getSortNo() == null) {
+            return 1;
+        }
+        if (right.getSortNo() == null) {
+            return -1;
+        }
+        int sortCompare = left.getSortNo().compareTo(right.getSortNo());
+        if (sortCompare != 0) {
+            return sortCompare;
+        }
+        return Objects.toString(left.getCreateTime(), "").compareTo(Objects.toString(right.getCreateTime(), ""));
     }
 
     /**

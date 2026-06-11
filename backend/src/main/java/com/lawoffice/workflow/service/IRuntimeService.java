@@ -128,7 +128,7 @@ public interface IRuntimeService {
     BaseResult<TaskActionVO> approve(String taskId, TaskActionReq req, RequestContext context);
 
     /**
-     * 拒绝当前流程实例。
+     * 将当前流程实例处理为不通过。
      *
      * @param taskId 本地任务ID
      * @param req 审批动作请求

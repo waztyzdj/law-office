@@ -24,7 +24,9 @@ const emit = defineEmits<{
   delete: [record: WorkflowFormDefinitionInfo];
   design: [record: WorkflowFormDefinitionInfo];
   edit: [record: WorkflowFormDefinitionInfo];
+  history: [record: WorkflowFormDefinitionInfo];
   publish: [record: WorkflowFormDefinitionInfo];
+  viewDesign: [record: WorkflowFormDefinitionInfo];
 }>();
 
 const filterStateRef = toRef(props, 'activeFilters');

@@ -17,6 +17,15 @@ import {
   taskTypeOptions,
 } from '../../../components/status';
 
+const doneTaskTypeMap: Record<string, string> = {
+  ...taskTypeMap,
+  start_draft: '已提交',
+};
+
+const doneTaskTypeOptions = taskTypeOptions.map((option) =>
+  option.value === 'start_draft' ? { ...option, label: '已提交' } : option,
+);
+
 export function getWorkflowDoneColumns(
   filterState: any,
   emit: any,
@@ -24,7 +33,6 @@ export function getWorkflowDoneColumns(
 ): TableColumnsResult {
   const columns = [
     { dataIndex: 'instanceTitle', options: { width: 260 }, title: '标题' },
-    { dataIndex: 'instanceNo', options: { width: 190 }, title: '审批编号' },
     {
       dataIndex: 'taskName',
       options: { width: 160 },
@@ -35,8 +43,8 @@ export function getWorkflowDoneColumns(
       options: {
         columnType: 'select' as const,
         customRender: ({ record }: { record: RuntimeTaskInfo }) =>
-          taskTypeMap[record.taskType ?? ''] ?? record.taskType ?? '-',
-        selectOptions: taskTypeOptions,
+          doneTaskTypeMap[record.taskType ?? ''] ?? record.taskType ?? '-',
+        selectOptions: doneTaskTypeOptions,
         width: 110,
       },
       title: '任务类型',
@@ -98,6 +106,6 @@ export function getWorkflowDoneColumns(
     filterState,
     emit,
     pagination,
-    { minTableWidth: 1390 },
+    { minTableWidth: 1200 },
   );
 }

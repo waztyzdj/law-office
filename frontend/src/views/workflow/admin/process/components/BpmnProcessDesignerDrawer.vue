@@ -213,7 +213,7 @@ const [Drawer, drawerApi] = useVbenDrawer({
   class: 'w-full sm:w-[92vw]! sm:max-w-none!',
   closeOnClickModal: true,
   confirmText: '保存设计',
-  contentClass: 'px-4 py-4 sm:px-5',
+  contentClass: 'workflow-bpmn-designer-drawer px-4 py-4 sm:px-5',
   onClosed: destroyModeler,
   onConfirm: handleSubmit,
   onOpened: syncModeler,
@@ -560,11 +560,20 @@ function destroyModeler() {
   nodeConfigs.value = {};
 }
 
+function updateDrawerState(loadingValue = false) {
+  drawerApi.setState({
+    footer: !isPublished.value,
+    loading: loadingValue,
+    title: drawerTitle.value,
+  });
+}
+
 async function open(payload: DrawerPayload) {
   loading.value = true;
   importError.value = '';
   existingNodeConfigs.value = [];
-  drawerApi.setState({ loading: true, title: drawerTitle.value });
+  currentProcess.value = payload.record;
+  updateDrawerState(true);
   drawerApi.setData(payload).open();
 
   try {
@@ -578,11 +587,11 @@ async function open(payload: DrawerPayload) {
           sortOrder: 'asc',
         })
       : [];
-    drawerApi.setState({ loading: false, title: drawerTitle.value });
+    updateDrawerState(false);
     await syncModeler();
   } finally {
     loading.value = false;
-    drawerApi.setState({ loading: false, title: drawerTitle.value });
+    updateDrawerState(false);
   }
 }
 
@@ -717,8 +726,17 @@ defineExpose({
 <style scoped>
 .bpmn-designer {
   display: flex;
+  flex: 1;
+  min-height: 0;
   flex-direction: column;
   gap: 12px;
+}
+
+:global(.workflow-bpmn-designer-drawer) {
+  display: flex;
+  flex-direction: column;
+  height: calc(100vh - 110px);
+  overflow: hidden;
 }
 
 .designer-toolbar {
@@ -737,9 +755,9 @@ defineExpose({
   border: 1px solid #e5e7eb;
   border-radius: 6px;
   display: grid;
+  flex: 1;
   grid-template-columns: minmax(0, 1fr) 320px;
-  height: min(72vh, 680px);
-  min-height: 520px;
+  min-height: 0;
   overflow: hidden;
 }
 

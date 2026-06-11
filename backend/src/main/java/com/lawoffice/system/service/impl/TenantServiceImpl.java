@@ -40,6 +40,18 @@ import java.util.stream.Collectors;
 @Service
 public class TenantServiceImpl extends BaseServiceImpl<TenantMapper, Tenant, TenantVO> implements ITenantService {
 
+    private static final Set<String> NON_GRANTABLE_PERMISSION_CODES = Set.of(
+            "tenant:view",
+            "tenant:edit",
+            "permission:view",
+            "permission:edit",
+            "log:edit"
+    );
+    private static final Set<String> NON_GRANTABLE_MENU_URLS = Set.of(
+            "/system/tenant",
+            "/system/menu"
+    );
+
     @Autowired
     private UserMapper userMapper;
 
@@ -225,12 +237,17 @@ public class TenantServiceImpl extends BaseServiceImpl<TenantMapper, Tenant, Ten
      * 判断权限编码是否允许下放给租户默认管理员角色。
      */
     private boolean isGrantableToTenantAdmin(String perms) {
-        return !"tenant:view".equals(perms)
-                && !"tenant:edit".equals(perms)
-                && !"permission:view".equals(perms)
-                && !"permission:edit".equals(perms)
-                && !"log:view".equals(perms)
-                && !"log:edit".equals(perms);
+        return !NON_GRANTABLE_PERMISSION_CODES.contains(perms);
+    }
+
+    private boolean isGrantableToTenantAdmin(Permission permission) {
+        if (permission == null) {
+            return false;
+        }
+        if (StringUtils.hasText(permission.getUrl()) && NON_GRANTABLE_MENU_URLS.contains(permission.getUrl().trim())) {
+            return false;
+        }
+        return !StringUtils.hasText(permission.getPerms()) || isGrantableToTenantAdmin(permission.getPerms());
     }
 
     /**
@@ -241,22 +258,23 @@ public class TenantServiceImpl extends BaseServiceImpl<TenantMapper, Tenant, Ten
             return;
         }
 
-        Set<String> operatorPerms = userService.getUserPermissionCodesByUsername(operatorUsername).stream()
-                .filter(StringUtils::hasText)
+        User operator = userService.getCurrentUserInfo(operatorUsername);
+        Set<String> operatorPermissionIds = userService.getUserPermissionsInCurrentTenant(operator.getId()).stream()
                 .filter(this::isGrantableToTenantAdmin)
+                .map(Permission::getId)
                 .collect(Collectors.toSet());
 
         LambdaQueryWrapper<Permission> wrapper = new LambdaQueryWrapper<>();
         wrapper.in(Permission::getId, permissionIds)
                 .eq(Permission::getDeleteFlag, 0);
-        List<String> overLimitPerms = permissionMapper.selectList(wrapper).stream()
-                .map(Permission::getPerms)
+        List<String> overLimitPermissions = permissionMapper.selectList(wrapper).stream()
+                .filter(permission -> !isGrantableToTenantAdmin(permission) || !operatorPermissionIds.contains(permission.getId()))
+                .map(permission -> StringUtils.hasText(permission.getPerms()) ? permission.getPerms() : permission.getName())
                 .filter(StringUtils::hasText)
-                .filter(perms -> !operatorPerms.contains(perms))
                 .distinct()
                 .collect(Collectors.toList());
-        if (!overLimitPerms.isEmpty()) {
-            throw new IllegalArgumentException("Cannot grant permissions beyond current user scope: " + String.join(",", overLimitPerms));
+        if (!overLimitPermissions.isEmpty()) {
+            throw new IllegalArgumentException("Cannot grant permissions beyond current user scope: " + String.join(",", overLimitPermissions));
         }
     }
 

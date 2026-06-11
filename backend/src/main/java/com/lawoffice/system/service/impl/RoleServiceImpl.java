@@ -35,6 +35,10 @@ public class RoleServiceImpl extends BaseServiceImpl<RoleMapper, Role, RoleVO> i
 
     private static final String SUPER_ADMIN_ROLE_CODE = "ADMIN";
     private static final String TENANT_ADMIN_ROLE_CODE_PREFIX = "ADMIN_";
+    private static final Set<String> NON_GRANTABLE_MENU_URLS = Set.of(
+            "/system/tenant",
+            "/system/menu"
+    );
 
     @Autowired
     private RolePermissionMapper rolePermissionMapper;
@@ -288,22 +292,33 @@ public class RoleServiceImpl extends BaseServiceImpl<RoleMapper, Role, RoleVO> i
             return;
         }
 
-        Set<String> operatorPerms = userService.getUserPermissionCodesByUsername(operatorUsername).stream()
+        User operator = userService.getCurrentUserInfo(operatorUsername);
+        Set<String> operatorPermissionIds = userService.getUserPermissionsInCurrentTenant(operator.getId()).stream()
+                .filter(this::isGrantableToRole)
+                .map(Permission::getId)
                 .filter(StringUtils::hasText)
                 .collect(Collectors.toSet());
 
         LambdaQueryWrapper<Permission> wrapper = new LambdaQueryWrapper<>();
         wrapper.in(Permission::getId, permissionIds)
                 .eq(Permission::getDeleteFlag, 0);
-        List<String> overLimitPerms = permissionMapper.selectList(wrapper).stream()
-                .map(Permission::getPerms)
+        List<String> overLimitPermissions = permissionMapper.selectList(wrapper).stream()
+                .filter(permission -> !isGrantableToRole(permission) || !operatorPermissionIds.contains(permission.getId()))
+                .map(permission -> StringUtils.hasText(permission.getPerms()) ? permission.getPerms() : permission.getName())
                 .filter(StringUtils::hasText)
-                .filter(perms -> !operatorPerms.contains(perms))
                 .distinct()
                 .collect(Collectors.toList());
-        if (!overLimitPerms.isEmpty()) {
-            throw new IllegalArgumentException("不能授予超出自身范围的权限: " + String.join(",", overLimitPerms));
+        if (!overLimitPermissions.isEmpty()) {
+            throw new IllegalArgumentException("不能授予超出自身范围的权限: " + String.join(",", overLimitPermissions));
         }
+    }
+
+    /**
+     * 平台级菜单不允许下放给普通角色，避免误授权后修改租户和菜单配置。
+     */
+    private boolean isGrantableToRole(Permission permission) {
+        return permission != null
+                && (!StringUtils.hasText(permission.getUrl()) || !NON_GRANTABLE_MENU_URLS.contains(permission.getUrl().trim()));
     }
 
     /**

@@ -5,14 +5,16 @@ import type { UserInfo } from '#/api/system/user';
 
 import { computed, onMounted, ref, watch } from 'vue';
 
-import { FormItem, Select, Tag, TreeSelect } from 'ant-design-vue';
+import { FormItem, Select, Tag } from 'ant-design-vue';
 
-import { getDepartRoles, listDeparts } from '#/api/system/depart';
-import { listRoles } from '#/api/system/role';
-import { pageUsers } from '#/api/system/user';
+import { getDepartRoles } from '#/api/system/depart';
+import {
+  listPickerDeparts,
+  listPickerRoles,
+  listPickerUsers,
+} from '#/api/system/picker';
 
 interface AssigneeJson {
-  departIds?: string[];
   departRoleIds?: string[];
   roleIds?: string[];
   userIds?: string[];
@@ -20,12 +22,6 @@ interface AssigneeJson {
 
 interface SelectOption {
   label: string;
-  value: string;
-}
-
-interface DepartTreeOption {
-  children?: DepartTreeOption[];
-  title: string;
   value: string;
 }
 
@@ -65,7 +61,6 @@ const departs = ref<DepartInfo[]>([]);
 const departRoles = ref<DepartRoleOption[]>([]);
 const selectedUserIds = ref<string[]>([]);
 const selectedRoleIds = ref<string[]>([]);
-const selectedDepartIds = ref<string[]>([]);
 const selectedDepartRoleIds = ref<string[]>([]);
 const syncing = ref(false);
 
@@ -87,10 +82,6 @@ const roleOptions = computed<SelectOption[]>(() =>
       value: role.id!,
     })),
 );
-const departTreeData = computed<DepartTreeOption[]>(() =>
-  buildDepartTree(departs.value),
-);
-
 watch(
   () => [props.type, props.modelValue],
   () => syncFromModel(),
@@ -129,18 +120,17 @@ function syncFromModel() {
   const value = props.modelValue || {};
   selectedUserIds.value = readIds(value, 'userIds', 'users', 'ids');
   selectedRoleIds.value = readIds(value, 'roleIds', 'roles', 'ids');
-  selectedDepartIds.value = readIds(value, 'departIds', 'departs');
   selectedDepartRoleIds.value = readIds(value, 'departRoleIds', 'departRoles');
   syncing.value = false;
 }
 
 async function loadOptions() {
-  const [userPage, roleList, departList] = await Promise.all([
-    pageUsers({ pageNum: 1, pageSize: 1000 }),
-    listRoles(),
-    listDeparts(),
+  const [userList, roleList, departList] = await Promise.all([
+    listPickerUsers(),
+    listPickerRoles(),
+    listPickerDeparts(),
   ]);
-  users.value = ((userPage as any)?.records ?? []) as UserInfo[];
+  users.value = userList ?? [];
   roles.value = roleList ?? [];
   departs.value = departList ?? [];
   await loadDepartRoles();
@@ -170,34 +160,6 @@ async function loadDepartRoles() {
   );
 }
 
-function buildDepartTree(items: DepartInfo[]) {
-  const childrenMap = new Map<string, DepartInfo[]>();
-  const ids = new Set(items.map((item) => item.id).filter(Boolean));
-  const roots: DepartInfo[] = [];
-
-  for (const item of items) {
-    const parentId = item.parentId || '';
-    if (!parentId || !ids.has(parentId)) {
-      roots.push(item);
-      continue;
-    }
-    const siblings = childrenMap.get(parentId) ?? [];
-    siblings.push(item);
-    childrenMap.set(parentId, siblings);
-  }
-
-  const toTree = (item: DepartInfo): DepartTreeOption => {
-    const children = (childrenMap.get(item.id || '') ?? []).map(toTree);
-    return {
-      ...(children.length > 0 ? { children } : {}),
-      title: item.departName ?? item.orgCode ?? item.id ?? '',
-      value: item.id ?? '',
-    };
-  };
-
-  return roots.filter((item) => item.id).map(toTree);
-}
-
 function emitAssigneeJson(type = props.type) {
   if (syncing.value) {
     return;
@@ -211,7 +173,7 @@ function emitAssigneeJson(type = props.type) {
     return;
   }
   if (type === 'depart_leader') {
-    emit('update:modelValue', { departIds: selectedDepartIds.value });
+    emit('update:modelValue', {});
     return;
   }
   if (type === 'depart_role') {
@@ -235,7 +197,6 @@ function handleTypeChange(value: unknown) {
   const nextType = typeof value === 'string' ? value : 'starter';
   selectedUserIds.value = [];
   selectedRoleIds.value = [];
-  selectedDepartIds.value = [];
   selectedDepartRoleIds.value = [];
   emit('update:type', nextType);
   emitAssigneeJson(nextType);
@@ -249,11 +210,6 @@ function handleUserChange(value: unknown) {
 function handleRoleChange(value: unknown) {
   selectedRoleIds.value = normalizeSelectValues(value);
   emitAssigneeJson('role');
-}
-
-function handleDepartChange(value: unknown) {
-  selectedDepartIds.value = normalizeSelectValues(value);
-  emitAssigneeJson('depart_leader');
 }
 
 function handleDepartRoleChange(value: unknown) {
@@ -314,20 +270,8 @@ function handleDepartRoleChange(value: unknown) {
       v-else-if="type === 'depart_leader'"
       label="负责人范围"
     >
-      <TreeSelect
-        :disabled="disabled"
-        :tree-data="departTreeData"
-        :value="selectedDepartIds"
-        allow-clear
-        multiple
-        placeholder="不选择时默认取发起人所在部门负责人"
-        tree-checkable
-        tree-default-expand-all
-        @change="handleDepartChange"
-      />
-      <div class="assignee-tip">
-        不选择部门时，运行时自动取发起人所在部门负责人。
-      </div>
+      <Tag color="blue">发起人当前部门负责人</Tag>
+      <div class="assignee-tip">运行时按发起人主部门解析唯一部门负责人。</div>
     </FormItem>
 
     <FormItem

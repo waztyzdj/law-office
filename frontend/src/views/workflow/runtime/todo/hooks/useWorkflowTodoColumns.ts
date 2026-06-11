@@ -24,7 +24,6 @@ export function getWorkflowTodoColumns(
 ): TableColumnsResult {
   const columns = [
     { dataIndex: 'instanceTitle', options: { width: 260 }, title: '标题' },
-    { dataIndex: 'instanceNo', options: { width: 190 }, title: '审批编号' },
     {
       dataIndex: 'taskName',
       options: { width: 160 },
@@ -104,6 +103,6 @@ export function getWorkflowTodoColumns(
     filterState,
     emit,
     pagination,
-    { minTableWidth: 1390 },
+    { minTableWidth: 1200 },
   );
 }

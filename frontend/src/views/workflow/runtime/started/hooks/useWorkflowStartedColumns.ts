@@ -13,6 +13,12 @@ import { defineTableColumns } from '#/composables/Table';
 import WorkflowStatusTag from '../../../components/WorkflowStatusTag.vue';
 import { processInstanceStatusOptions } from '../../../components/status';
 
+const finishedStatuses = new Set(['approved', 'rejected', 'terminated']);
+
+function isFinished(status?: string) {
+  return finishedStatuses.has(status || '');
+}
+
 export function getWorkflowStartedColumns(
   filterState: any,
   emit: any,
@@ -20,7 +26,6 @@ export function getWorkflowStartedColumns(
 ): TableColumnsResult {
   const columns = [
     { dataIndex: 'instanceTitle', options: { width: 260 }, title: '标题' },
-    { dataIndex: 'instanceNo', options: { width: 190 }, title: '审批编号' },
     {
       dataIndex: 'processName',
       options: { width: 180 },
@@ -30,7 +35,7 @@ export function getWorkflowStartedColumns(
       dataIndex: 'currentTaskNames',
       options: {
         customRender: ({ record }: { record: StartedInstanceInfo }) =>
-          record.currentTaskNames || '-',
+          isFinished(record.status) ? '已结束' : record.currentTaskNames || '-',
         width: 180,
       },
       title: '当前节点',
@@ -39,7 +44,7 @@ export function getWorkflowStartedColumns(
       dataIndex: 'currentAssigneeNames',
       options: {
         customRender: ({ record }: { record: StartedInstanceInfo }) =>
-          record.currentAssigneeNames || '-',
+          isFinished(record.status) ? '' : record.currentAssigneeNames || '-',
         width: 180,
       },
       title: '当前处理人',
@@ -94,6 +99,6 @@ export function getWorkflowStartedColumns(
     filterState,
     emit,
     pagination,
-    { minTableWidth: 1570 },
+    { minTableWidth: 1380 },
   );
 }

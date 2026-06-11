@@ -17,6 +17,7 @@ import {
   Modal,
   Space,
   Spin,
+  Switch,
   Transfer,
   Tree,
   message,
@@ -299,6 +300,7 @@ function openCreateRole() {
     departId: currentDepart.value.id,
     roleCode: '',
     roleName: '',
+    workflowEnabled: 0,
     description: '',
   };
   roleModalOpen.value = true;
@@ -339,6 +341,7 @@ async function handleSaveRole() {
       description: roleForm.value.description?.trim() || undefined,
       roleCode: roleForm.value.roleCode.trim(),
       roleName: roleForm.value.roleName.trim(),
+      workflowEnabled: roleForm.value.workflowEnabled === 1 ? 1 : 0,
     };
     await saveDepartRole(payload);
     message.success(roleModalMode.value === 'create' ? '部门角色已新增' : '部门角色已保存');
@@ -442,6 +445,14 @@ defineExpose({
             v-model:value="roleForm.roleCode"
             :disabled="roleModalMode === 'edit'"
             :maxlength="64"
+          />
+        </FormItem>
+        <FormItem label="审批岗位">
+          <Switch
+            :checked="roleForm.workflowEnabled === 1"
+            checked-children="是"
+            un-checked-children="否"
+            @change="(checked) => (roleForm.workflowEnabled = checked ? 1 : 0)"
           />
         </FormItem>
         <FormItem label="描述">

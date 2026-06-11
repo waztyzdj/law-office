@@ -11,7 +11,7 @@ import {
   copyWorkflowFormAsDraft,
   deleteWorkflowForm,
   listWorkflowCategories,
-  pageWorkflowForms,
+  pageLatestWorkflowForms,
   publishWorkflowForm,
 } from '#/api/workflow';
 import { useTable } from '#/composables/Table';
@@ -19,7 +19,7 @@ import { useTable } from '#/composables/Table';
 export function useWorkflowFormTable() {
   const table = useTable({
     apiConfig: {
-      fetchData: pageWorkflowForms,
+      fetchData: pageLatestWorkflowForms,
     },
     storageConfig: {
       filtersKey: 'workflow_form_list_filters',
@@ -68,7 +68,7 @@ export function useWorkflowFormTable() {
     }
 
     await copyWorkflowFormAsDraft(record.id);
-    message.success('已复制为草稿');
+    message.success('已新建版本');
     await table.loadData();
   }
 

@@ -2,9 +2,12 @@ package com.lawoffice.workflow.service.impl;
 
 import cn.hutool.core.bean.BeanUtil;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.lawoffice.framework.dto.BaseDTO;
+import com.lawoffice.framework.dto.BasePageDTO;
 import com.lawoffice.framework.dto.RequestContext;
 import com.lawoffice.framework.result.BaseResult;
+import com.lawoffice.framework.vo.PageVO;
 import com.lawoffice.util.EntityFillUtils;
 import com.lawoffice.workflow.constant.WorkflowConstants;
 import com.lawoffice.workflow.entity.FormDefinition;
@@ -20,9 +23,25 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
 import java.time.LocalDateTime;
+import java.util.List;
 
 @Service
 public class FormDefinitionServiceImpl extends AbstractWorkflowConfigServiceImpl<FormDefinitionMapper, FormDefinition, FormDefinitionVO> implements IFormDefinitionService {
+
+    private static final String LATEST_VERSION_ID_SQL = """
+            SELECT latest_form.id
+            FROM wf_form_definition latest_form
+            INNER JOIN (
+                SELECT tenant_id, form_key, MAX(version) AS max_version
+                FROM wf_form_definition
+                WHERE delete_flag = 0
+                GROUP BY tenant_id, form_key
+            ) latest_version
+                ON latest_version.tenant_id = latest_form.tenant_id
+                AND latest_version.form_key = latest_form.form_key
+                AND latest_version.max_version = latest_form.version
+            WHERE latest_form.delete_flag = 0
+            """;
 
     private final ProcessCategoryMapper processCategoryMapper;
     private final ProcessModelMapper processModelMapper;
@@ -35,6 +54,54 @@ public class FormDefinitionServiceImpl extends AbstractWorkflowConfigServiceImpl
         this.processCategoryMapper = processCategoryMapper;
         this.processModelMapper = processModelMapper;
         this.formInstanceMapper = formInstanceMapper;
+    }
+
+    @Override
+    protected void doBeforeList(BaseDTO<FormDefinition> baseDTO) {
+        applyTenantAndDefaultSort(baseDTO);
+    }
+
+    @Override
+    protected void doBeforePage(BasePageDTO<FormDefinition> basePageDTO) {
+        applyTenantAndDefaultSort(basePageDTO);
+    }
+
+    @Override
+    public BaseResult<PageVO<FormDefinitionVO>> pageLatest(BasePageDTO<FormDefinition> basePageDTO) {
+        try {
+            QueryWrapper<FormDefinition> wrapper = ensureQueryWrapper(basePageDTO);
+            wrapper.inSql("id", LATEST_VERSION_ID_SQL);
+            applyTenantAndDefaultSort(basePageDTO);
+            wrapper.eq("delete_flag", 0);
+
+            Page<FormDefinition> page = new Page<>(basePageDTO.getPageNum(), basePageDTO.getPageSize());
+            Page<FormDefinition> resultPage = baseMapper.selectPage(page, wrapper);
+            List<FormDefinitionVO> voList = BeanUtil.copyToList(resultPage.getRecords(), FormDefinitionVO.class);
+            PageVO<FormDefinitionVO> pageVO = new PageVO<>(voList, resultPage.getTotal(), resultPage.getCurrent(), resultPage.getSize());
+            return BaseResult.success(pageVO);
+        } catch (Exception e) {
+            return BaseResult.error("查询表单最新版本失败: " + e.getMessage());
+        }
+    }
+
+    @Override
+    public BaseResult<List<FormDefinitionVO>> listHistory(String id, RequestContext context) {
+        try {
+            String tenantId = resolveTenantId(null, context);
+            FormDefinition current = requireCurrent(id, tenantId, "表单定义不存在");
+            QueryWrapper<FormDefinition> wrapper = new QueryWrapper<>();
+            wrapper.eq("tenant_id", tenantId)
+                    .eq("form_key", current.getFormKey())
+                    .eq("delete_flag", 0)
+                    .orderByDesc("version")
+                    .orderByDesc("create_time");
+            List<FormDefinition> forms = baseMapper.selectList(wrapper);
+            return BaseResult.success(BeanUtil.copyToList(forms, FormDefinitionVO.class));
+        } catch (IllegalArgumentException e) {
+            return BaseResult.error(400, e.getMessage());
+        } catch (Exception e) {
+            return BaseResult.error("查询表单历史版本失败: " + e.getMessage());
+        }
     }
 
     @Override
@@ -150,5 +217,20 @@ public class FormDefinitionServiceImpl extends AbstractWorkflowConfigServiceImpl
                 .eq("delete_flag", 0);
         FormDefinition latest = baseMapper.selectOne(wrapper);
         return latest == null || latest.getVersion() == null ? 1 : latest.getVersion() + 1;
+    }
+
+    private void applyTenantAndDefaultSort(BaseDTO<FormDefinition> baseDTO) {
+        QueryWrapper<FormDefinition> wrapper = ensureQueryWrapper(baseDTO);
+        wrapper.eq("tenant_id", resolveTenantId(null, baseDTO.getContext()))
+                .orderByDesc("create_time");
+    }
+
+    private QueryWrapper<FormDefinition> ensureQueryWrapper(BaseDTO<FormDefinition> baseDTO) {
+        QueryWrapper<FormDefinition> wrapper = (QueryWrapper<FormDefinition>) baseDTO.getQueryWrapper();
+        if (wrapper == null) {
+            wrapper = new QueryWrapper<>();
+            baseDTO.setQueryWrapper(wrapper);
+        }
+        return wrapper;
     }
 }

@@ -30,6 +30,7 @@ import org.springframework.util.StringUtils;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 import java.util.stream.Collectors;
 
 @Slf4j
@@ -65,6 +66,7 @@ public class DepartRoleServiceImpl extends BaseServiceImpl<DepartRoleMapper, Dep
         role.setRoleCode(trimToNull(role.getRoleCode()));
         role.setRoleName(trimToNull(role.getRoleName()));
         role.setDescription(trimToNull(role.getDescription()));
+        role.setWorkflowEnabled(Objects.equals(role.getWorkflowEnabled(), 1) ? 1 : 0);
 
         if (!StringUtils.hasText(role.getDepartId())) {
             throw new IllegalArgumentException("部门ID不能为空");

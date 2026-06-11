@@ -177,7 +177,7 @@ public class BaseServiceImpl<M extends BaseMapper<E>, E extends BaseEntity, V ex
                 return BaseResult.error("数据不存在");
             }
 
-            if (entity.getDeleteFlag() != null && entity.getDeleteFlag() == 1) {
+            if (entity.getDeleteFlag() != null && entity.getDeleteFlag() != 0) {
                 return BaseResult.error("数据已被删除");
             }
 

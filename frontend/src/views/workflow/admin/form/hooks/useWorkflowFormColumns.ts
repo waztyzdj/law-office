@@ -103,17 +103,22 @@ export function getWorkflowFormColumns(
                 '删除',
               ),
             );
+          } else {
+            actions.push(
+              h('a', { onClick: () => emit('viewDesign', record) }, '查看设计'),
+            );
           }
 
           actions.push(
-            h('a', { onClick: () => emit('copyAsDraft', record) }, '复制草稿'),
+            h('a', { onClick: () => emit('history', record) }, '历史版本'),
+            h('a', { onClick: () => emit('copyAsDraft', record) }, '新建版本'),
           );
 
           return h(Space, { size: 'middle' }, () => actions);
         },
         fixed: 'right' as const,
         hasFilter: false,
-        width: 320,
+        width: 420,
       },
       title: '操作',
     },
@@ -124,6 +129,6 @@ export function getWorkflowFormColumns(
     filterState,
     emit,
     pagination,
-    { minTableWidth: 1480 },
+    { minTableWidth: 1580 },
   );
 }

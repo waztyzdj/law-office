@@ -3,6 +3,7 @@ package com.lawoffice.framework.aspect;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.lawoffice.framework.annotation.AutoLog;
 import com.lawoffice.framework.annotation.ModuleInfo;
+import com.lawoffice.framework.config.TenantContextHolder;
 import com.lawoffice.framework.entity.SysLog;
 import com.lawoffice.framework.enums.LogType;
 import com.lawoffice.framework.enums.OperateType;
@@ -53,6 +54,7 @@ public class AutoLogAspect {
         
         SysLog sysLog = new SysLog();
         sysLog.setId(UUID.randomUUID().toString().replace("-", ""));
+        sysLog.setTenantId(resolveTenantId());
         sysLog.setLogType(logType.getCode());
         sysLog.setOperateType(operateType.getCode());
         
@@ -340,5 +342,10 @@ public class AutoLogAspect {
             }
         }
         return "pc";
+    }
+
+    private String resolveTenantId() {
+        String tenantId = TenantContextHolder.getCurrentTenantId();
+        return tenantId != null && !tenantId.isEmpty() ? tenantId : "0";
     }
 }

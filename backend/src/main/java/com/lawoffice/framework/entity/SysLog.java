@@ -7,7 +7,7 @@ import lombok.EqualsAndHashCode;
 @Data
 @EqualsAndHashCode(callSuper = true)
 @TableName("sys_log")
-public class SysLog extends BaseEntity {
+public class SysLog extends BaseTenantEntity {
     
     private Integer logType;
     

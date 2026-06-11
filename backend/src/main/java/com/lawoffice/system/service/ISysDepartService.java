@@ -4,8 +4,11 @@ import com.lawoffice.framework.service.ITreeService;
 import com.lawoffice.system.entity.DepartRole;
 import com.lawoffice.system.entity.Permission;
 import com.lawoffice.system.entity.SysDepart;
+import com.lawoffice.system.req.DepartLeaderReq;
+import com.lawoffice.system.req.DepartMemberRelationReq;
 import com.lawoffice.system.vo.SysDepartVO;
 import com.lawoffice.system.vo.DepartPermissionSourceVO;
+import com.lawoffice.system.vo.DepartMemberRelationVO;
 import com.lawoffice.system.vo.UserVO;
 
 import java.util.List;
@@ -98,4 +101,36 @@ public interface ISysDepartService extends ITreeService<SysDepart, SysDepartVO> 
      * @return 用户 ID 列表
      */
     List<String> getDepartUserIds(String departId);
+
+    /**
+     * 查询部门成员组织关系。
+     *
+     * @param departId 部门 ID
+     * @return 部门成员组织关系列表
+     */
+    List<DepartMemberRelationVO> getDepartMemberRelations(String departId);
+
+    /**
+     * 覆盖保存部门成员组织关系。
+     * <p>
+     * 该接口只维护已有部门成员的主部门、部门负责人和直属上级，不新增或移除部门成员。
+     *
+     * @param req 保存请求
+     */
+    void saveDepartMemberRelations(DepartMemberRelationReq req);
+
+    /**
+     * 查询部门负责人。
+     *
+     * @param departId 部门 ID
+     * @return 部门负责人列表，当前规则下最多一条
+     */
+    List<DepartMemberRelationVO> getDepartLeaders(String departId);
+
+    /**
+     * 保存部门唯一负责人。
+     *
+     * @param req 保存请求，userId 为空时清空负责人
+     */
+    void saveDepartLeader(DepartLeaderReq req);
 }

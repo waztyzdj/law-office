@@ -173,6 +173,26 @@ public class ProcessModelServiceImpl extends AbstractWorkflowConfigServiceImpl<P
 
     @Override
     @Transactional(rollbackFor = Exception.class)
+    public BaseResult<Void> delete(BaseDTO<ProcessModel> deleteDTO) {
+        try {
+            doBeforeDelete(deleteDTO);
+            String tenantId = resolveTenantId(null, deleteDTO.getContext());
+            for (String id : resolveDeleteIds(deleteDTO)) {
+                ProcessModel model = requireCurrent(id, tenantId, "流程模型不存在");
+                EntityFillUtils.fillDeleteFields(model, deleteDTO.getContext() == null ? "system" : deleteDTO.getContext().getUsername());
+                baseMapper.updateById(model);
+            }
+            doAfterDelete(deleteDTO);
+            return BaseResult.success();
+        } catch (IllegalArgumentException e) {
+            return BaseResult.error(400, e.getMessage());
+        } catch (Exception e) {
+            return BaseResult.error("删除流程失败: " + e.getMessage());
+        }
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
     protected void doAfterDelete(BaseDTO<ProcessModel> deleteDTO) {
         String tenantId = resolveTenantId(null, deleteDTO.getContext());
         for (String id : resolveDeleteIds(deleteDTO)) {

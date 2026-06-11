@@ -11,7 +11,7 @@ defineProps<{
 </script>
 
 <template>
-  <Card title="申请表单">
+  <Card :bordered="false">
     <RuntimeFormRenderer
       :form-data-json="formDataJson"
       :option-json="optionJson"
