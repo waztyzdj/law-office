@@ -176,6 +176,7 @@ public class FormDefinitionServiceImpl extends AbstractWorkflowConfigServiceImpl
         try {
             String tenantId = resolveTenantId(null, context);
             FormDefinition source = requireCurrent(id, tenantId, "表单定义不存在");
+            ensureNoDraftVersion(source.getTenantId(), source.getFormKey());
             FormDefinition draft = BeanUtil.copyProperties(source, FormDefinition.class);
             draft.setId(null);
             draft.setVersion(resolveNextVersion(source.getTenantId(), source.getFormKey()));
@@ -217,6 +218,23 @@ public class FormDefinitionServiceImpl extends AbstractWorkflowConfigServiceImpl
                 .eq("delete_flag", 0);
         FormDefinition latest = baseMapper.selectOne(wrapper);
         return latest == null || latest.getVersion() == null ? 1 : latest.getVersion() + 1;
+    }
+
+    /**
+     * 同一个表单编码只允许存在一个草稿，避免同时维护多份未发布设计导致版本链混乱。
+     */
+    private void ensureNoDraftVersion(String tenantId, String formKey) {
+        if (!StringUtils.hasText(formKey)) {
+            return;
+        }
+        Long draftCount = baseMapper.selectCount(new QueryWrapper<FormDefinition>()
+                .eq("tenant_id", tenantId)
+                .eq("form_key", formKey)
+                .eq("status", WorkflowConstants.Status.DRAFT)
+                .eq("delete_flag", 0));
+        if (draftCount != null && draftCount > 0) {
+            throw new IllegalArgumentException("该表单已存在草稿版本，请先发布或删除草稿后再新建版本");
+        }
     }
 
     private void applyTenantAndDefaultSort(BaseDTO<FormDefinition> baseDTO) {

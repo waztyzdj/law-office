@@ -1,5 +1,3 @@
-import type { VNodeChild } from 'vue';
-
 import { h } from 'vue';
 
 import { Space, Tag } from 'ant-design-vue';
@@ -20,6 +18,7 @@ import {
   startScopeTypeMap,
   startScopeTypeOptions,
 } from '../../../components/status';
+import { buildVersionActionLinks } from '../../utils/rowActions';
 
 interface WorkflowProcessColumnContext {
   categoryMap: Record<string, string>;
@@ -131,38 +130,25 @@ export function getWorkflowProcessColumns(
       dataIndex: 'action',
       options: {
         customRender: ({ record }: { record: WorkflowProcessModelInfo }) => {
-          const actions: VNodeChild[] = [];
-
-          if (record.status === 'draft') {
-            actions.push(
-              h('a', { onClick: () => emit('design', record) }, '设计'),
-              h('a', { onClick: () => emit('edit', record) }, '编辑'),
-              h('a', { onClick: () => emit('publish', record) }, '发布'),
+          const actions = buildVersionActionLinks(
+            record,
+            {
+              copyAsDraft: (item) => emit('copyAsDraft', item),
+              delete: (item) => emit('delete', item),
+              design: (item) => emit('design', item),
+              edit: (item) => emit('edit', item),
+              history: (item) => emit('history', item),
+              publish: (item) => emit('publish', item),
+              viewDesign: (item) => emit('viewDesign', item),
+            },
+            [
               h(
                 'a',
-                {
-                  onClick: () => emit('delete', record),
-                  style: { color: '#ff4d4f' },
-                },
-                '删除',
+                { onClick: () => emit('fieldPermission', record) },
+                '字段权限',
               ),
-            );
-          } else {
-            actions.push(
-              h('a', { onClick: () => emit('viewDesign', record) }, '查看设计'),
-            );
-          }
-
-          actions.push(
-            h(
-              'a',
-              { onClick: () => emit('fieldPermission', record) },
-              '字段权限',
-            ),
-            h('a', { onClick: () => emit('history', record) }, '历史版本'),
-            h('a', { onClick: () => emit('copyAsDraft', record) }, '新建版本'),
+            ],
           );
-
           return h(Space, { size: 'middle' }, () => actions);
         },
         fixed: 'right' as const,

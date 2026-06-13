@@ -237,6 +237,7 @@ public class ProcessModelServiceImpl extends AbstractWorkflowConfigServiceImpl<P
         try {
             String tenantId = resolveTenantId(null, context);
             ProcessModel source = requireCurrent(id, tenantId, "流程模型不存在");
+            ensureNoDraftVersion(source.getTenantId(), source.getProcessKey());
             ProcessModel draft = BeanUtil.copyProperties(source, ProcessModel.class);
             draft.setId(null);
             draft.setVersion(resolveNextVersion(source.getTenantId(), source.getProcessKey()));
@@ -389,6 +390,23 @@ public class ProcessModelServiceImpl extends AbstractWorkflowConfigServiceImpl<P
                 .eq("delete_flag", 0);
         ProcessModel latest = baseMapper.selectOne(wrapper);
         return latest == null || latest.getVersion() == null ? 1 : latest.getVersion() + 1;
+    }
+
+    /**
+     * 同一个流程编码只允许存在一个草稿，避免同时维护多份未发布设计导致发布和发起版本混乱。
+     */
+    private void ensureNoDraftVersion(String tenantId, String processKey) {
+        if (!StringUtils.hasText(processKey)) {
+            return;
+        }
+        Long draftCount = baseMapper.selectCount(new QueryWrapper<ProcessModel>()
+                .eq("tenant_id", tenantId)
+                .eq("process_key", processKey)
+                .eq("status", WorkflowConstants.Status.DRAFT)
+                .eq("delete_flag", 0));
+        if (draftCount != null && draftCount > 0) {
+            throw new IllegalArgumentException("该流程已存在草稿版本，请先发布或删除草稿后再新建版本");
+        }
     }
 
     private void copyChildren(String sourceModelId, String targetModelId, String tenantId, RequestContext context) {

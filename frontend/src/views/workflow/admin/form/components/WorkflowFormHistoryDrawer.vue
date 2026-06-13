@@ -1,8 +1,7 @@
 <script setup lang="ts">
 import type { WorkflowFormDefinitionInfo } from '#/api/workflow';
-import type { TablePaginationConfig } from '#/composables/Table';
 
-import { computed, h, reactive, ref } from 'vue';
+import { computed, h, ref } from 'vue';
 
 import { useVbenDrawer } from '@vben/common-ui';
 
@@ -14,23 +13,11 @@ import { defineTableColumns } from '#/composables/Table';
 
 import WorkflowStatusTag from '../../../components/WorkflowStatusTag.vue';
 import { formDefinitionStatusOptions } from '../../../components/status';
+import { useWorkflowHistoryTable } from '../../hooks/useWorkflowHistoryTable';
 
 interface Props {
   categoryMap: Record<string, string>;
 }
-
-interface HistoryTableFilter {
-  apiCondition?: string;
-  condition?: string;
-  value?: unknown;
-}
-
-interface HistoryTableSorter {
-  field?: unknown;
-  order?: unknown;
-}
-
-type HistoryTableFilters = Record<string, HistoryTableFilter | null | unknown[]>;
 
 const props = defineProps<Props>();
 const emit = defineEmits<{
@@ -40,13 +27,15 @@ const emit = defineEmits<{
 const currentForm = ref<WorkflowFormDefinitionInfo>();
 const records = ref<WorkflowFormDefinitionInfo[]>([]);
 const loading = ref(false);
-const activeFilters = ref<HistoryTableFilters>({});
-const activeSorter = ref<HistoryTableSorter>({});
-const tablePagination = reactive<TablePaginationConfig>({
-  pageNum: 1,
-  pageSize: 1000,
-  total: 0,
-});
+const {
+  activeFilters,
+  displayedRecords,
+  handleColumnEmit,
+  handleTableChange,
+  resetHistoryTable,
+  setHistoryTotal,
+  tablePagination,
+} = useWorkflowHistoryTable(records);
 
 const drawerTitle = computed(() =>
   currentForm.value?.formName
@@ -121,21 +110,6 @@ const tableConfig = computed(() =>
   ),
 );
 const tableScroll = computed(() => tableConfig.value.scroll ?? { x: 760 });
-const displayedRecords = computed(() => {
-  const filtered = records.value.filter((record) => matchesFilters(record));
-  const sorter = activeSorter.value;
-  if (!sorter?.field || !sorter?.order) {
-    return filtered;
-  }
-
-  const direction = sorter.order === 'ascend' ? 1 : -1;
-  const field = String(sorter.field);
-  return [...filtered].sort(
-    (left, right) =>
-      compareValues(resolveFieldValue(left, field), resolveFieldValue(right, field)) *
-      direction,
-  );
-});
 
 const [Drawer, drawerApi] = useVbenDrawer({
   class: 'w-full sm:w-[60%]! sm:max-w-none!',
@@ -159,113 +133,16 @@ async function loadData(record: WorkflowFormDefinitionInfo) {
   loading.value = true;
   try {
     records.value = await listWorkflowFormHistory(record.id);
-    tablePagination.total = records.value.length;
+    setHistoryTotal(records.value.length);
   } finally {
     loading.value = false;
   }
 }
 
-function handleColumnEmit(
-  event: string,
-  pagination: unknown,
-  filters: HistoryTableFilters,
-  sorter: HistoryTableSorter,
-) {
-  if (event === 'change') {
-    handleTableChange(pagination, filters, sorter);
-  }
-}
-
-function handleTableChange(
-  _pagination: unknown,
-  filters?: HistoryTableFilters,
-  sorter?: HistoryTableSorter | HistoryTableSorter[],
-) {
-  activeFilters.value = filters || {};
-  const nextSorter = Array.isArray(sorter) ? sorter[0] : sorter;
-  if (nextSorter?.field && nextSorter?.order) {
-    activeSorter.value = {
-      field: String(nextSorter.field),
-      order: String(nextSorter.order),
-    };
-  } else if (nextSorter && Object.keys(nextSorter).length > 0) {
-    activeSorter.value = {};
-  }
-}
-
-function matchesFilters(record: WorkflowFormDefinitionInfo) {
-  return Object.entries(activeFilters.value).every(([field, filter]) => {
-    if (
-      !isHistoryTableFilter(filter) ||
-      filter.value === undefined ||
-      filter.value === null ||
-      (Array.isArray(filter.value) && filter.value.length === 0)
-    ) {
-      return true;
-    }
-    const value = resolveFieldValue(record, field);
-    if (filter.condition === 'in') {
-      return Array.isArray(filter.value) && filter.value.includes(value);
-    }
-    return matchesCondition(
-      value,
-      filter.condition || filter.apiCondition || 'like',
-      filter.value,
-    );
-  });
-}
-
-function isHistoryTableFilter(
-  filter: HistoryTableFilters[string],
-): filter is HistoryTableFilter {
-  return Boolean(
-    filter && !Array.isArray(filter) && typeof filter === 'object' && 'value' in filter,
-  );
-}
-
-function matchesCondition(value: unknown, condition: string, filterValue: unknown) {
-  const text = String(value ?? '').toLowerCase();
-  const target = String(filterValue ?? '').toLowerCase();
-  if (condition === 'like') {
-    return text.includes(target);
-  }
-  if (condition === 'ne') {
-    return text !== target;
-  }
-  if (condition === 'eq') {
-    return text === target;
-  }
-  const left = Number(value);
-  const right = Number(filterValue);
-  if (Number.isFinite(left) && Number.isFinite(right)) {
-    if (condition === 'gt') return left > right;
-    if (condition === 'ge') return left >= right;
-    if (condition === 'lt') return left < right;
-    if (condition === 'le') return left <= right;
-  }
-  return true;
-}
-
-function resolveFieldValue(record: WorkflowFormDefinitionInfo, field: string) {
-  return record[field as keyof WorkflowFormDefinitionInfo];
-}
-
-function compareValues(left: unknown, right: unknown) {
-  if (left == null && right == null) return 0;
-  if (left == null) return -1;
-  if (right == null) return 1;
-  if (typeof left === 'number' && typeof right === 'number') {
-    return left - right;
-  }
-  return String(left).localeCompare(String(right), 'zh-CN');
-}
-
 async function open(record: WorkflowFormDefinitionInfo) {
   currentForm.value = record;
   records.value = [];
-  activeFilters.value = {};
-  activeSorter.value = {};
-  tablePagination.total = 0;
+  resetHistoryTable();
   drawerApi.setState({ loading: true, title: drawerTitle.value }).open();
 
   try {

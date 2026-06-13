@@ -1,5 +1,3 @@
-import type { VNodeChild } from 'vue';
-
 import { h } from 'vue';
 
 import { Space } from 'ant-design-vue';
@@ -14,6 +12,7 @@ import { defineTableColumns } from '#/composables/Table';
 
 import WorkflowStatusTag from '../../../components/WorkflowStatusTag.vue';
 import { formDefinitionStatusOptions } from '../../../components/status';
+import { buildVersionActionLinks } from '../../utils/rowActions';
 
 export function getWorkflowFormColumns(
   categoryMap: Record<string, string>,
@@ -87,33 +86,15 @@ export function getWorkflowFormColumns(
       dataIndex: 'action',
       options: {
         customRender: ({ record }: { record: WorkflowFormDefinitionInfo }) => {
-          const actions: VNodeChild[] = [];
-
-          if (record.status === 'draft') {
-            actions.push(
-              h('a', { onClick: () => emit('design', record) }, '设计'),
-              h('a', { onClick: () => emit('edit', record) }, '编辑'),
-              h('a', { onClick: () => emit('publish', record) }, '发布'),
-              h(
-                'a',
-                {
-                  onClick: () => emit('delete', record),
-                  style: { color: '#ff4d4f' },
-                },
-                '删除',
-              ),
-            );
-          } else {
-            actions.push(
-              h('a', { onClick: () => emit('viewDesign', record) }, '查看设计'),
-            );
-          }
-
-          actions.push(
-            h('a', { onClick: () => emit('history', record) }, '历史版本'),
-            h('a', { onClick: () => emit('copyAsDraft', record) }, '新建版本'),
-          );
-
+          const actions = buildVersionActionLinks(record, {
+            copyAsDraft: (item) => emit('copyAsDraft', item),
+            delete: (item) => emit('delete', item),
+            design: (item) => emit('design', item),
+            edit: (item) => emit('edit', item),
+            history: (item) => emit('history', item),
+            publish: (item) => emit('publish', item),
+            viewDesign: (item) => emit('viewDesign', item),
+          });
           return h(Space, { size: 'middle' }, () => actions);
         },
         fixed: 'right' as const,
