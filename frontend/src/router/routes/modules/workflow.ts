@@ -74,24 +74,6 @@ const routes: RouteRecordRaw[] = [
           title: '流程设计',
         },
       },
-      {
-        name: 'WorkflowInstanceDetail',
-        path: '/workflow/detail',
-        component: () => import('#/views/workflow/runtime/detail/index.vue'),
-        meta: {
-          hideInMenu: true,
-          title: '审批详情',
-        },
-      },
-      {
-        name: 'WorkflowTaskHandle',
-        path: '/workflow/task',
-        component: () => import('#/views/workflow/runtime/task/index.vue'),
-        meta: {
-          hideInMenu: true,
-          title: '任务办理',
-        },
-      },
     ],
   },
 ];

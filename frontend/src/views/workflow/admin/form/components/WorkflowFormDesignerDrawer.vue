@@ -60,6 +60,7 @@ const [Drawer, drawerApi] = useVbenDrawer({
   onOpened: syncDesigner,
   onConfirm: handleSubmit,
   title: drawerTitle.value,
+  zIndex: 3000,
 });
 
 function parseJsonValue<T>(value: string | undefined, fallback: T): T {

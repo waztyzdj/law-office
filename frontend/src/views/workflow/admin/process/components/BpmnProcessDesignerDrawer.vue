@@ -343,6 +343,7 @@ const [Drawer, drawerApi] = useVbenDrawer({
   onConfirm: handleSubmit,
   onOpened: syncModeler,
   title: drawerTitle.value,
+  zIndex: 3000,
 });
 
 function createDefaultBpmnXml(process: WorkflowProcessModelInfo) {

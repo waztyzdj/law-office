@@ -448,11 +448,6 @@ export const pageAvailableProcesses = (params: AvailableProcessPageReq) =>
   );
 export const getStartForm = (processModelId: string) =>
   requestClient.post<StartFormInfo>('/workflow/start/form', { processModelId });
-export const previewWorkflowStartAssignees = (processModelId: string) =>
-  requestClient.post<AssigneeSelectNodeInfo[]>(
-    '/workflow/start/assignee-preview',
-    { processModelId },
-  );
 export const startWorkflowProcess = (data: StartProcessReq) =>
   requestClient.post<StartProcessResult>('/workflow/start', data);
 export const saveWorkflowStartDraft = (data: StartProcessReq) =>

@@ -53,6 +53,9 @@ const drawerTitle = computed(() =>
     ? `历史版本 - ${currentForm.value.formName}`
     : '历史版本',
 );
+const currentCategoryLabel = computed(() =>
+  currentForm.value ? resolveCategory(currentForm.value) : '-',
+);
 
 const tableConfig = computed(() =>
   defineTableColumns<WorkflowFormDefinitionInfo>(
@@ -79,19 +82,6 @@ const tableConfig = computed(() =>
         },
       },
       {
-        dataIndex: 'categoryId',
-        title: '流程分类',
-        options: {
-          columnType: 'select',
-          customRender: ({ record }) => resolveCategory(record),
-          selectOptions: Object.entries(props.categoryMap).map(([value, label]) => ({
-            label,
-            value,
-          })),
-          width: 160,
-        },
-      },
-      {
         dataIndex: 'publishedTime',
         title: '发布时间',
         options: {
@@ -113,11 +103,12 @@ const tableConfig = computed(() =>
         dataIndex: 'historyAction',
         title: '操作',
         options: {
+          align: 'center',
           fixed: 'right',
           hasFilter: false,
-          width: 90,
+          width: 120,
           customRender: ({ record }) =>
-            h(Space, { size: 'middle' }, () => [
+            h(Space, { class: 'form-history__action', size: 'middle' }, () => [
               h('a', { onClick: () => emit('viewDesign', record) }, '查看设计'),
             ]),
         },
@@ -126,13 +117,10 @@ const tableConfig = computed(() =>
     activeFilters,
     handleColumnEmit,
     tablePagination,
-    { minTableWidth: 940 },
+    { minTableWidth: 760 },
   ),
 );
-const tableScroll = computed(() => ({
-  ...(tableConfig.value.scroll ?? { x: 940 }),
-  y: 'calc(100vh - 240px)',
-}));
+const tableScroll = computed(() => tableConfig.value.scroll ?? { x: 760 });
 const displayedRecords = computed(() => {
   const filtered = records.value.filter((record) => matchesFilters(record));
   const sorter = activeSorter.value;
@@ -155,6 +143,7 @@ const [Drawer, drawerApi] = useVbenDrawer({
   contentClass: 'px-5 py-4 sm:px-6',
   footer: false,
   title: drawerTitle.value,
+  zIndex: 1000,
 });
 
 function resolveCategory(record: WorkflowFormDefinitionInfo) {
@@ -295,9 +284,21 @@ defineExpose({
   <Drawer>
     <div class="form-history">
       <div class="form-history__summary">
-        <Space wrap>
+        <Space
+          class="form-history__summary-main"
+          wrap
+        >
           <span>{{ currentForm?.formKey ?? '-' }}</span>
           <span>{{ currentForm?.formName ?? '-' }}</span>
+        </Space>
+        <Space
+          class="form-history__summary-meta"
+          wrap
+        >
+          <span class="form-history__meta-item">
+            <span class="form-history__meta-label">流程分类</span>
+            <span>{{ currentCategoryLabel }}</span>
+          </span>
         </Space>
       </div>
 
@@ -329,6 +330,27 @@ defineExpose({
   color: #374151;
   display: flex;
   font-size: 14px;
+  gap: 12px 24px;
   justify-content: space-between;
+}
+
+.form-history__summary-main,
+.form-history__summary-meta {
+  min-width: 0;
+}
+
+.form-history__meta-item {
+  align-items: center;
+  display: inline-flex;
+  gap: 6px;
+}
+
+.form-history__meta-label {
+  color: #6b7280;
+}
+
+.form-history__action {
+  justify-content: center;
+  width: 100%;
 }
 </style>

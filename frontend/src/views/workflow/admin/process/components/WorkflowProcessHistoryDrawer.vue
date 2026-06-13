@@ -15,7 +15,6 @@ import { defineTableColumns } from '#/composables/Table';
 import WorkflowStatusTag from '../../../components/WorkflowStatusTag.vue';
 import {
   designerTypeMap,
-  designerTypeOptions,
   processModelStatusOptions,
 } from '../../../components/status';
 
@@ -58,6 +57,12 @@ const drawerTitle = computed(() =>
     ? `历史版本 - ${currentProcess.value.processName}`
     : '历史版本',
 );
+const currentDesignerTypeLabel = computed(() =>
+  currentProcess.value ? resolveDesignerType(currentProcess.value) : '-',
+);
+const currentCategoryLabel = computed(() =>
+  currentProcess.value ? resolveCategory(currentProcess.value) : '-',
+);
 
 const tableConfig = computed(() =>
   defineTableColumns<WorkflowProcessModelInfo>(
@@ -81,31 +86,6 @@ const tableConfig = computed(() =>
             h(WorkflowStatusTag, { status: record.status }),
           selectOptions: processModelStatusOptions,
           width: 110,
-        },
-      },
-      {
-        dataIndex: 'designerType',
-        title: '设计器',
-        options: {
-          align: 'center',
-          columnType: 'select',
-          customRender: ({ record }) =>
-            h(Tag, {}, () => resolveDesignerType(record)),
-          selectOptions: designerTypeOptions,
-          width: 120,
-        },
-      },
-      {
-        dataIndex: 'categoryId',
-        title: '流程分类',
-        options: {
-          columnType: 'select',
-          customRender: ({ record }) => resolveCategory(record),
-          selectOptions: Object.entries(props.categoryMap).map(([value, label]) => ({
-            label,
-            value,
-          })),
-          width: 160,
         },
       },
       {
@@ -135,11 +115,12 @@ const tableConfig = computed(() =>
         dataIndex: 'historyAction',
         title: '操作',
         options: {
+          align: 'center',
           fixed: 'right',
           hasFilter: false,
-          width: 80,
+          width: 120,
           customRender: ({ record }) =>
-            h(Space, { size: 'middle' }, () => [
+            h(Space, { class: 'process-history__action', size: 'middle' }, () => [
               h('a', { onClick: () => emit('viewDesign', record) }, '查看设计'),
             ]),
         },
@@ -148,13 +129,10 @@ const tableConfig = computed(() =>
     activeFilters,
     handleColumnEmit,
     tablePagination,
-    { minTableWidth: 980 },
+    { minTableWidth: 760 },
   ),
 );
-const tableScroll = computed(() => ({
-  ...(tableConfig.value.scroll ?? { x: 980 }),
-  y: 'calc(100vh - 240px)',
-}));
+const tableScroll = computed(() => tableConfig.value.scroll ?? { x: 760 });
 const displayedRecords = computed(() => {
   const filtered = records.value.filter((record) => matchesFilters(record));
   const sorter = activeSorter.value;
@@ -299,6 +277,7 @@ const [Drawer, drawerApi] = useVbenDrawer({
   contentClass: 'px-5 py-4 sm:px-6',
   footer: false,
   title: drawerTitle.value,
+  zIndex: 1000,
 });
 
 async function open(record: WorkflowProcessModelInfo) {
@@ -325,11 +304,27 @@ defineExpose({
   <Drawer>
     <div class="process-history">
       <div class="process-history__summary">
-        <Space wrap>
+        <Space
+          class="process-history__summary-main"
+          wrap
+        >
           <Tag color="processing">
             {{ currentProcess?.processKey ?? '-' }}
           </Tag>
           <span>{{ currentProcess?.processName ?? '-' }}</span>
+        </Space>
+        <Space
+          class="process-history__summary-meta"
+          wrap
+        >
+          <span class="process-history__meta-item">
+            <span class="process-history__meta-label">设计器</span>
+            <Tag>{{ currentDesignerTypeLabel }}</Tag>
+          </span>
+          <span class="process-history__meta-item">
+            <span class="process-history__meta-label">流程分类</span>
+            <span>{{ currentCategoryLabel }}</span>
+          </span>
         </Space>
       </div>
 
@@ -361,6 +356,27 @@ defineExpose({
   color: #374151;
   display: flex;
   font-size: 14px;
+  gap: 12px 24px;
   justify-content: space-between;
+}
+
+.process-history__summary-main,
+.process-history__summary-meta {
+  min-width: 0;
+}
+
+.process-history__meta-item {
+  align-items: center;
+  display: inline-flex;
+  gap: 6px;
+}
+
+.process-history__meta-label {
+  color: #6b7280;
+}
+
+.process-history__action {
+  justify-content: center;
+  width: 100%;
 }
 </style>

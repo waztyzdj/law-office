@@ -256,22 +256,6 @@ public class RuntimeServiceImpl implements IRuntimeService {
     }
 
     @Override
-    public BaseResult<List<AssigneeSelectNodeVO>> previewStartAssignees(String processModelId, RequestContext context) {
-        try {
-            String tenantId = requireTenantId(context);
-            ProcessModel model = requirePublishedModel(processModelId, tenantId);
-            checkStartPermission(model, context);
-            ProcessInstance previewInstance = buildPreviewProcessInstance(model, context);
-            return BaseResult.success(buildRequiredAssigneeSelectNodes(model.getId(), previewInstance, tenantId, START_DRAFT_NODE_ID));
-        } catch (IllegalArgumentException e) {
-            return BaseResult.error(400, e.getMessage());
-        } catch (Exception e) {
-            log.error("发起申请审批人预解析失败", e);
-            return BaseResult.error("发起申请审批人预解析失败: " + e.getMessage());
-        }
-    }
-
-    @Override
     public BaseResult<StartProcessVO> start(StartProcessReq req, RequestContext context) {
         return executeInTransaction(() -> {
             validateStartReq(req);
@@ -2045,7 +2029,7 @@ public class RuntimeServiceImpl implements IRuntimeService {
         return nodeConfig;
     }
 
-    private ProcessInstance buildPreviewProcessInstance(ProcessModel model, RequestContext context) {
+    private ProcessInstance buildStarterContextProcessInstance(ProcessModel model, RequestContext context) {
         ProcessInstance processInstance = new ProcessInstance();
         processInstance.setTenantId(model.getTenantId());
         processInstance.setProcessModelId(model.getId());
@@ -2596,7 +2580,7 @@ public class RuntimeServiceImpl implements IRuntimeService {
                 .map(this::buildRuntimeFieldPermission)
                 .toList());
         vo.setAssigneeSelectNodes(buildRequiredAssigneeSelectNodes(
-                model.getId(), buildPreviewProcessInstance(model, context), model.getTenantId(), START_DRAFT_NODE_ID));
+                model.getId(), buildStarterContextProcessInstance(model, context), model.getTenantId(), START_DRAFT_NODE_ID));
         return vo;
     }
 
