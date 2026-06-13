@@ -14,6 +14,7 @@ import { Modal } from 'ant-design-vue';
 import UserPickerPanel from '#/components/user-picker/UserPickerPanel.vue';
 
 import AssigneeSelectPanel from './AssigneeSelectPanel.vue';
+import { workflowActionTitleMap } from './runtimeTypes';
 
 interface Props {
   actionOpen: boolean;
@@ -47,12 +48,9 @@ const emit = defineEmits<{
 }>();
 
 const actionModalTitle = computed(() => {
-  const titleMap: Record<WorkflowAction, string> = {
-    addSign: '加签',
-    return: '退回',
-    transfer: '转办',
-  };
-  return props.currentAction ? titleMap[props.currentAction] : '审批操作';
+  return props.currentAction
+    ? workflowActionTitleMap[props.currentAction]
+    : '审批操作';
 });
 
 const excludedActionUserIds = computed(() =>

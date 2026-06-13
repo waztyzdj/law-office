@@ -236,6 +236,11 @@ export function useRuntimeTaskActions(options: UseRuntimeTaskActionsOptions) {
     actionUserPickerOpen.value = true;
   }
 
+  function closeActionUserPicker() {
+    actionUserPickerOpen.value = false;
+    actionSelectedUsers.value = [];
+  }
+
   function handleRuntimeAction(action: WorkflowAction) {
     if (action === 'return') {
       openActionModal(action);
@@ -293,7 +298,7 @@ export function useRuntimeTaskActions(options: UseRuntimeTaskActionsOptions) {
       };
       const result = await submitTaskAction(currentAction.value, req);
       message.success(`${options.actionTitle.value}已提交`);
-      actionUserPickerOpen.value = false;
+      closeActionUserPicker();
       await refreshDetail(result);
       options.onSuccess();
       options.onClose();
@@ -362,6 +367,7 @@ export function useRuntimeTaskActions(options: UseRuntimeTaskActionsOptions) {
     handleSaveStartDraft,
     handleSaveStartDraftTask,
     handleStartSubmit,
+    closeActionUserPicker,
     resetRuntimeActions,
     saving,
     submitting,

@@ -118,10 +118,6 @@ export function useRuntimeAssigneeSelection(
     return collectSelectedAssignees();
   }
 
-  function clearPendingAssigneePayload() {
-    pendingSubmitPayload.value = undefined;
-  }
-
   function closeAssigneePicker() {
     assigneePickerOpen.value = false;
     pendingSubmitPayload.value = undefined;
@@ -139,7 +135,6 @@ export function useRuntimeAssigneeSelection(
     assigneeSelectModalOpen,
     buildFixedSelectedAssignees,
     buildFreeSelectedAssignees,
-    clearPendingAssigneePayload,
     closeAssigneePicker,
     closeAssigneeSelectModal,
     draftSelectedAssigneeUsers,

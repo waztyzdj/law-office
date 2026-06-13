@@ -2,16 +2,11 @@
 import type {
   AvailableProcessInfo,
   InstanceDetailInfo,
-  OperationRecordInfo,
   RuntimeTaskInfo,
   StartFormInfo,
   TaskFormInfo,
 } from '#/api/workflow';
-import type {
-  DrawerMode,
-  ProcessProgressNode,
-  WorkflowAction,
-} from './runtimeTypes';
+import type { DrawerMode } from './runtimeTypes';
 
 import { computed, ref } from 'vue';
 
@@ -24,15 +19,16 @@ import {
   getWorkflowInstanceDetail,
   getWorkflowTaskForm,
 } from '#/api/workflow';
-import { getStatusMeta } from '../../components/status';
 import { useRuntimeAssigneeSelection } from './hooks/useRuntimeAssigneeSelection';
 import { useRuntimeFormData } from './hooks/useRuntimeFormData';
+import { useRuntimeProgressNodes } from './hooks/useRuntimeProgressNodes';
 import { useRuntimeTaskActions } from './hooks/useRuntimeTaskActions';
 import RuntimeActionBar from './RuntimeActionBar.vue';
 import RuntimeApprovalComment from './RuntimeApprovalComment.vue';
 import RuntimeAssigneeModals from './RuntimeAssigneeModals.vue';
 import RuntimeFormRenderer from './RuntimeFormRenderer.vue';
 import RuntimeSideTabs from './RuntimeSideTabs.vue';
+import { workflowActionTitleMap } from './runtimeTypes';
 
 interface DrawerPayload {
   instanceId?: string;
@@ -56,49 +52,6 @@ const activeTab = ref('records');
 const loading = ref(false);
 const drawerOpened = ref(false);
 let runtimeRenderFrameId: number | undefined;
-const processInstance = computed(() => detail.value?.processInstance);
-const chronologicalRecords = computed(() =>
-  [...(detail.value?.records ?? [])].sort((a, b) =>
-    String(a.operateTime ?? '').localeCompare(String(b.operateTime ?? '')),
-  ),
-);
-const currentTasks = computed(() => detail.value?.currentTasks ?? []);
-const processProgressNodes = computed<ProcessProgressNode[]>(() => {
-  const nodes: ProcessProgressNode[] = chronologicalRecords.value.map((record, index) => ({
-    action: record.action,
-    actor: formatActor(record),
-    comment: formatRecordComment(record),
-    id: record.id ?? `record-${index}`,
-    name: formatRecordNode(record),
-    status: 'done',
-    time: record.operateTime,
-  }));
-
-  currentTasks.value.forEach((task, index) => {
-    nodes.push({
-      actor: formatTaskActor(task),
-      id: task.id ?? `current-${index}`,
-      name: task.taskName ?? task.nodeId ?? '当前任务',
-      status: 'current',
-      time: task.startTime,
-    });
-  });
-
-  if (isProcessFinished(processInstance.value?.status)) {
-    const lastRecord = chronologicalRecords.value.at(-1);
-    nodes.push({
-      actor: '系统',
-      comment: getProcessEndComment(processInstance.value?.status),
-      id: `${processInstance.value?.id ?? 'process'}-end`,
-      name: '流程结束',
-      resultStatus: processInstance.value?.status,
-      status: 'end',
-      time: processInstance.value?.endTime || lastRecord?.operateTime,
-    });
-  }
-
-  return nodes;
-});
 const actionPermissions = computed(() => taskForm.value?.actionPermissions);
 const returnNodeOptions = computed(() =>
   (taskForm.value?.returnNodes ?? []).map((item) => ({
@@ -107,12 +60,9 @@ const returnNodeOptions = computed(() =>
   })),
 );
 const actionModalTitle = computed(() => {
-  const titleMap: Record<WorkflowAction, string> = {
-    addSign: '加签',
-    return: '退回',
-    transfer: '转办',
-  };
-  return currentAction.value ? titleMap[currentAction.value] : '审批操作';
+  return currentAction.value
+    ? workflowActionTitleMap[currentAction.value]
+    : '审批操作';
 });
 const runtimeContentReady = computed(() => {
   if (!drawerOpened.value) {
@@ -184,12 +134,15 @@ const {
   taskAssigneeSelectNodes: computed(() => taskForm.value?.assigneeSelectNodes ?? []),
 });
 
+const { processProgressNodes } = useRuntimeProgressNodes(detail);
+
 const {
   actionForm,
   actionModalOpen,
   actionSelectedUsers,
   actionSubmitting,
   actionUserPickerOpen,
+  closeActionUserPicker,
   currentAction,
   handleActionConfirm,
   handleActionUserPickerConfirm,
@@ -326,36 +279,6 @@ async function handleAssigneeSelectConfirm() {
   );
 }
 
-function formatActor(record: OperationRecordInfo) {
-  return record.operatorRealname ?? record.operatorUsername ?? '-';
-}
-
-function formatTaskActor(task: RuntimeTaskInfo) {
-  return (
-    task.assigneeRealname ||
-    task.assigneeUsername ||
-    task.candidateAssigneeNames ||
-    '-'
-  );
-}
-
-function formatRecordNode(record: OperationRecordInfo) {
-  return record.nodeName ?? record.nodeId ?? '流程记录';
-}
-
-function formatRecordComment(record: OperationRecordInfo) {
-  return record.comment?.trim() || '无';
-}
-
-function isProcessFinished(status?: string) {
-  return ['approved', 'rejected', 'terminated'].includes(status || '');
-}
-
-function getProcessEndComment(status?: string) {
-  const statusLabel = getStatusMeta(status).label;
-  return statusLabel === '-' ? '流程已结束' : `流程${statusLabel}`;
-}
-
 defineExpose({
   open,
 });
@@ -449,11 +372,11 @@ defineExpose({
       :current-task="currentTask"
       :fixed-select-nodes="runtimeFixedSelectNodes"
       :submitting="submitting"
-      @action-cancel="actionSelectedUsers = []"
+      @action-cancel="closeActionUserPicker"
       @action-confirm="handleActionUserPickerConfirm"
-      @assignee-picker-cancel="pendingSubmitPayload = undefined"
+      @assignee-picker-cancel="closeAssigneePicker"
       @assignee-picker-confirm="handleAssigneePickerConfirm"
-      @assignee-select-cancel="pendingSubmitPayload = undefined"
+      @assignee-select-cancel="closeAssigneeSelectModal"
       @assignee-select-confirm="handleAssigneeSelectConfirm"
     />
   </Drawer>
