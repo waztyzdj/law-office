@@ -52,7 +52,10 @@ interface BpmnElement {
     name?: string;
   };
   id?: string;
+  parent?: BpmnElement;
+  outgoing?: BpmnElement[];
   type?: string;
+  width?: number;
   x?: number;
   y?: number;
 }
@@ -70,6 +73,57 @@ interface NodeConfigDraft {
   assigneeType: string;
   id?: string;
 }
+
+interface BpmnElementRegistry {
+  get: (id: string) => BpmnElement | undefined;
+  getAll: () => BpmnElement[];
+}
+
+interface BpmnElementFactory {
+  createShape: (attrs: Record<string, unknown>) => BpmnElement;
+}
+
+interface BpmnAutoPlace {
+  append: (source: BpmnElement, shape: BpmnElement) => BpmnElement;
+}
+
+interface BpmnCreate {
+  start: (
+    event: Event,
+    shape: BpmnElement,
+    context?: Record<string, unknown>,
+  ) => void;
+}
+
+interface BpmnPalette {
+  registerProvider: (
+    priority: number,
+    provider: { getPaletteEntries: () => BpmnToolEntries },
+  ) => void;
+}
+
+interface BpmnContextPad {
+  registerProvider: (
+    priority: number,
+    provider: { getContextPadEntries: (element: BpmnElement) => BpmnToolEntries },
+  ) => void;
+}
+
+type BpmnToolTarget = BpmnElement | BpmnElement[] | undefined;
+type BpmnToolAction = (
+  event: Event,
+  target?: BpmnToolTarget,
+  autoActivate?: boolean,
+) => void;
+
+interface BpmnToolEntry {
+  action: BpmnToolAction | Record<string, BpmnToolAction>;
+  className?: string;
+  group?: string;
+  title?: string;
+}
+
+type BpmnToolEntries = Record<string, BpmnToolEntry>;
 
 const bpmnTranslateMap: Record<string, string> = {
   'Activate the create/remove space tool': '启用创建/删除空间工具',
@@ -182,6 +236,77 @@ const bpmnTranslateModule = {
   ],
 };
 
+const bpmnApprovalNodeModule = {
+  __init__: ['approvalNodePaletteProvider', 'approvalNodeContextPadProvider'],
+  approvalNodeContextPadProvider: [
+    'type',
+    function ApprovalNodeContextPadProvider(
+      contextPad: BpmnContextPad,
+      elementFactory: BpmnElementFactory,
+      autoPlace: BpmnAutoPlace,
+      create: BpmnCreate,
+    ) {
+      contextPad.registerProvider(1200, {
+        getContextPadEntries(element: BpmnElement) {
+          if (!isBpmnUserTaskElement(element)) {
+            return {} as BpmnToolEntries;
+          }
+
+          function appendApprovalNode(event: Event) {
+            const shape = elementFactory.createShape({ type: 'bpmn:UserTask' });
+            if (autoPlace) {
+              autoPlace.append(element, shape);
+              return;
+            }
+            create.start(event, shape, { source: element });
+          }
+
+          return {
+            'append-approval-node': {
+              action: {
+                click: appendApprovalNode,
+                dragstart: appendApprovalNode,
+              },
+              className: 'bpmn-icon-user-task',
+              group: 'model',
+              title: '追加审批节点',
+            },
+          };
+        },
+      });
+    },
+  ],
+  approvalNodePaletteProvider: [
+    'type',
+    function ApprovalNodePaletteProvider(
+      palette: BpmnPalette,
+      elementFactory: BpmnElementFactory,
+      create: BpmnCreate,
+    ) {
+      palette.registerProvider(1200, {
+        getPaletteEntries() {
+          function createApprovalNode(event: Event) {
+            const shape = elementFactory.createShape({ type: 'bpmn:UserTask' });
+            create.start(event, shape);
+          }
+
+          return {
+            'create-approval-node': {
+              action: {
+                click: createApprovalNode,
+                dragstart: createApprovalNode,
+              },
+              className: 'bpmn-icon-user-task',
+              group: 'activity',
+              title: '创建审批节点',
+            },
+          };
+        },
+      });
+    },
+  ],
+};
+
 const emit = defineEmits<{
   success: [];
 }>();
@@ -289,6 +414,14 @@ function parseJsonValue<T>(json: string | undefined, fallback: T): T {
   }
 }
 
+function isBpmnUserTaskElement(element: BpmnElement | undefined) {
+  return (
+    !!element
+    && (element.type === 'bpmn:UserTask'
+      || element.businessObject?.$type === 'bpmn:UserTask')
+  );
+}
+
 function buildNodeConfigDraft(
   config?: WorkflowProcessNodeConfigInfo,
 ): NodeConfigDraft {
@@ -311,7 +444,7 @@ function createModeler() {
 
   modeler.value = markRaw(
     new BpmnModeler({
-      additionalModules: [bpmnTranslateModule],
+      additionalModules: [bpmnTranslateModule, bpmnApprovalNodeModule],
       container: canvasRef.value,
       keyboard: {
         bindTo: document,
@@ -351,12 +484,14 @@ function bindModelerEvents() {
     | {
         on: (
           eventName: string,
-          callback: (event: Record<string, any>) => void,
+          callback: (event: Record<string, unknown>) => void,
         ) => void;
       }
     | undefined;
   eventBus?.on('selection.changed', (event) => {
-    const selected = (event.newSelection || []) as BpmnElement[];
+    const selected = (
+      Array.isArray(event.newSelection) ? event.newSelection : []
+    ) as BpmnElement[];
     const userTask = selected.find(
       (item) => item.type === 'bpmn:UserTask'
         || item.businessObject?.$type === 'bpmn:UserTask',
@@ -372,7 +507,7 @@ function bindModelerEvents() {
 
 function extractBpmnUserTasks() {
   const elementRegistry = modeler.value?.get('elementRegistry') as
-    | { getAll: () => BpmnElement[] }
+    | BpmnElementRegistry
     | undefined;
   const elements = elementRegistry?.getAll() || [];
   const visited = new Set<string>();
@@ -461,7 +596,7 @@ function validateNodeConfigs() {
 }
 
 function needsAssigneeConfig(config: NodeConfigDraft) {
-  return config.assigneeType !== 'starter' && config.assigneeType !== 'depart_leader';
+  return !['starter', 'depart_leader', 'starter_select'].includes(config.assigneeType);
 }
 
 function hasAssigneeConfig(value: Record<string, unknown>) {
@@ -859,5 +994,14 @@ defineExpose({
 
 :deep(.djs-palette) {
   border-color: #d1d5db;
+}
+
+:deep(.djs-palette .entry[title='创建审批节点']) {
+  color: #1677ff;
+}
+
+:deep(.djs-context-pad),
+:deep(.djs-popup) {
+  z-index: 20;
 }
 </style>

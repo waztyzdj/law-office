@@ -19,6 +19,7 @@ interface Props {
   excludeUserIds?: string[];
   maxCount?: number;
   mode?: UserPickerMode;
+  orgOnly?: boolean;
   placeholder?: string;
   value?: UserPickerValue;
 }
@@ -28,6 +29,7 @@ const props = withDefaults(defineProps<Props>(), {
   excludeUserIds: () => [],
   maxCount: undefined,
   mode: 'single',
+  orgOnly: false,
   placeholder: '请选择人员',
   value: undefined,
 });
@@ -159,6 +161,7 @@ function emitChange(users: UserInfo[]) {
         :exclude-user-ids="excludeUserIds"
         :max-count="maxCount"
         :mode="mode"
+        :org-only="orgOnly"
       />
     </Modal>
   </div>

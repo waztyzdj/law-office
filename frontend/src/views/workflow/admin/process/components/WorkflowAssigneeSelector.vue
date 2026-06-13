@@ -53,6 +53,7 @@ const assigneeTypeOptions = [
   { label: '指定角色', value: 'role' },
   { label: '部门负责人', value: 'depart_leader' },
   { label: '部门岗位', value: 'depart_role' },
+  { label: '审批人自选', value: 'starter_select' },
 ];
 
 const users = ref<UserInfo[]>([]);
@@ -168,6 +169,10 @@ function emitAssigneeJson(type = props.type) {
     emit('update:modelValue', { userIds: selectedUserIds.value });
     return;
   }
+  if (type === 'starter_select') {
+    emit('update:modelValue', {});
+    return;
+  }
   if (type === 'role') {
     emit('update:modelValue', { roleIds: selectedRoleIds.value });
     return;
@@ -204,7 +209,7 @@ function handleTypeChange(value: unknown) {
 
 function handleUserChange(value: unknown) {
   selectedUserIds.value = normalizeSelectValues(value);
-  emitAssigneeJson('user');
+  emitAssigneeJson(props.type);
 }
 
 function handleRoleChange(value: unknown) {
@@ -247,6 +252,14 @@ function handleDepartRoleChange(value: unknown) {
         show-search
         @change="handleUserChange"
       />
+    </FormItem>
+
+    <FormItem
+      v-else-if="type === 'starter_select'"
+      label="选择方式"
+    >
+      <Tag color="blue">运行时选择</Tag>
+      <div class="assignee-tip">流程到达该节点前，由上一环节办理人从本单位人员中选择下一审批人。</div>
     </FormItem>
 
     <FormItem

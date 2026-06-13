@@ -2,6 +2,8 @@ package com.lawoffice.workflow.req;
 
 import lombok.Data;
 
+import java.util.List;
+
 @Data
 public class TaskActionReq {
 
@@ -14,4 +16,6 @@ public class TaskActionReq {
     private String comment;
 
     private String formDataJson;
+
+    private List<SelectedAssigneeReq> selectedAssignees;
 }

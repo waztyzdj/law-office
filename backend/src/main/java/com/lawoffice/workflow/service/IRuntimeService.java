@@ -9,6 +9,7 @@ import com.lawoffice.workflow.req.StartProcessReq;
 import com.lawoffice.workflow.req.TaskActionReq;
 import com.lawoffice.workflow.req.TaskPageReq;
 import com.lawoffice.workflow.vo.AvailableProcessVO;
+import com.lawoffice.workflow.vo.AssigneeSelectNodeVO;
 import com.lawoffice.workflow.vo.InstanceDetailVO;
 import com.lawoffice.workflow.vo.OperationRecordVO;
 import com.lawoffice.workflow.vo.RuntimeTaskVO;
@@ -42,6 +43,15 @@ public interface IRuntimeService {
      * @return 发起表单信息
      */
     BaseResult<StartFormVO> getStartForm(String processModelId, RequestContext context);
+
+    /**
+     * 发起申请前预解析需要发起人选择的审批节点。
+     *
+     * @param processModelId 流程模型ID
+     * @param context 当前请求上下文
+     * @return 需要选择审批人的节点和候选范围
+     */
+    BaseResult<List<AssigneeSelectNodeVO>> previewStartAssignees(String processModelId, RequestContext context);
 
     /**
      * 发起审批申请，写入业务实例并启动 Flowable 流程。

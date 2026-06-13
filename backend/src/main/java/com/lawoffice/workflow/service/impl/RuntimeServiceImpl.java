@@ -29,6 +29,7 @@ import com.lawoffice.workflow.entity.FormDefinition;
 import com.lawoffice.workflow.entity.FormInstance;
 import com.lawoffice.workflow.entity.OperationRecord;
 import com.lawoffice.workflow.entity.FieldPermission;
+import com.lawoffice.workflow.entity.ProcessInstanceAssignee;
 import com.lawoffice.workflow.entity.ProcessInstance;
 import com.lawoffice.workflow.entity.ProcessModel;
 import com.lawoffice.workflow.entity.ProcessNodeConfig;
@@ -39,6 +40,7 @@ import com.lawoffice.workflow.mapper.FieldPermissionMapper;
 import com.lawoffice.workflow.mapper.FormDefinitionMapper;
 import com.lawoffice.workflow.mapper.FormInstanceMapper;
 import com.lawoffice.workflow.mapper.OperationRecordMapper;
+import com.lawoffice.workflow.mapper.ProcessInstanceAssigneeMapper;
 import com.lawoffice.workflow.mapper.ProcessInstanceMapper;
 import com.lawoffice.workflow.mapper.ProcessModelMapper;
 import com.lawoffice.workflow.mapper.ProcessNodeConfigMapper;
@@ -46,6 +48,7 @@ import com.lawoffice.workflow.mapper.ProcessStartPermissionMapper;
 import com.lawoffice.workflow.mapper.TaskCandidateMapper;
 import com.lawoffice.workflow.mapper.TaskMapper;
 import com.lawoffice.workflow.req.AvailableProcessPageReq;
+import com.lawoffice.workflow.req.SelectedAssigneeReq;
 import com.lawoffice.workflow.req.StartProcessReq;
 import com.lawoffice.workflow.req.StartedInstancePageReq;
 import com.lawoffice.workflow.req.TaskActionReq;
@@ -53,6 +56,8 @@ import com.lawoffice.workflow.req.TaskPageReq;
 import com.lawoffice.workflow.service.IFlowableService;
 import com.lawoffice.workflow.service.IRuntimeService;
 import com.lawoffice.workflow.vo.AvailableProcessVO;
+import com.lawoffice.workflow.vo.AssigneeOptionVO;
+import com.lawoffice.workflow.vo.AssigneeSelectNodeVO;
 import com.lawoffice.workflow.vo.RuntimeFieldPermissionVO;
 import com.lawoffice.workflow.vo.RuntimeTaskVO;
 import com.lawoffice.workflow.vo.FormInstanceVO;
@@ -98,6 +103,8 @@ public class RuntimeServiceImpl implements IRuntimeService {
     private record ResolvedAssignee(String userId, String username, String realname, String sourceType, String sourceId) {
     }
 
+    private static final String SELECT_TYPE_SINGLE = "single";
+
     private final ProcessModelMapper processModelMapper;
     private final FormDefinitionMapper formDefinitionMapper;
     private final ProcessStartPermissionMapper processStartPermissionMapper;
@@ -106,6 +113,7 @@ public class RuntimeServiceImpl implements IRuntimeService {
     private final ProcessNodeConfigMapper processNodeConfigMapper;
     private final TaskMapper taskMapper;
     private final OperationRecordMapper operationRecordMapper;
+    private final ProcessInstanceAssigneeMapper processInstanceAssigneeMapper;
     private final FieldPermissionMapper fieldPermissionMapper;
     private final TaskCandidateMapper taskCandidateMapper;
     private final IFlowableService flowableService;
@@ -126,6 +134,7 @@ public class RuntimeServiceImpl implements IRuntimeService {
             ProcessNodeConfigMapper processNodeConfigMapper,
             TaskMapper taskMapper,
             OperationRecordMapper operationRecordMapper,
+            ProcessInstanceAssigneeMapper processInstanceAssigneeMapper,
             FieldPermissionMapper fieldPermissionMapper,
             TaskCandidateMapper taskCandidateMapper,
             IFlowableService flowableService,
@@ -144,6 +153,7 @@ public class RuntimeServiceImpl implements IRuntimeService {
         this.processNodeConfigMapper = processNodeConfigMapper;
         this.taskMapper = taskMapper;
         this.operationRecordMapper = operationRecordMapper;
+        this.processInstanceAssigneeMapper = processInstanceAssigneeMapper;
         this.fieldPermissionMapper = fieldPermissionMapper;
         this.taskCandidateMapper = taskCandidateMapper;
         this.flowableService = flowableService;
@@ -237,11 +247,27 @@ public class RuntimeServiceImpl implements IRuntimeService {
             ProcessModel model = requirePublishedModel(processModelId, tenantId);
             checkStartPermission(model, context);
             FormDefinition form = requirePublishedForm(model.getFormDefinitionId(), tenantId);
-            return BaseResult.success(buildStartForm(model, form));
+            return BaseResult.success(buildStartForm(model, form, context));
         } catch (IllegalArgumentException e) {
             return BaseResult.error(400, e.getMessage());
         } catch (Exception e) {
             return BaseResult.error("获取发起表单失败: " + e.getMessage());
+        }
+    }
+
+    @Override
+    public BaseResult<List<AssigneeSelectNodeVO>> previewStartAssignees(String processModelId, RequestContext context) {
+        try {
+            String tenantId = requireTenantId(context);
+            ProcessModel model = requirePublishedModel(processModelId, tenantId);
+            checkStartPermission(model, context);
+            ProcessInstance previewInstance = buildPreviewProcessInstance(model, context);
+            return BaseResult.success(buildRequiredAssigneeSelectNodes(model.getId(), previewInstance, tenantId, START_DRAFT_NODE_ID));
+        } catch (IllegalArgumentException e) {
+            return BaseResult.error(400, e.getMessage());
+        } catch (Exception e) {
+            log.error("发起申请审批人预解析失败", e);
+            return BaseResult.error("发起申请审批人预解析失败: " + e.getMessage());
         }
     }
 
@@ -258,11 +284,14 @@ public class RuntimeServiceImpl implements IRuntimeService {
             FormDefinition form = requirePublishedForm(model.getFormDefinitionId(), tenantId);
 
             FormInstance formInstance = createFormInstance(req, form, tenantId, context, WorkflowConstants.Status.ACTIVE);
+            saveStartFormData(req.getFormDataJson(), formInstance,
+                    listFieldPermissions(model.getId(), WorkflowConstants.VirtualNode.START, tenantId), context, true);
             ProcessInstance processInstance = createProcessInstance(req, model, form, formInstance, tenantId, context,
                     WorkflowConstants.Status.RUNNING);
             formInstance.setProcessInstanceId(processInstance.getId());
             EntityFillUtils.fillAuditFields(formInstance, context, false);
             formInstanceMapper.updateById(formInstance);
+            saveFirstAssigneeSnapshot(processInstance, req.getSelectedAssignees(), tenantId, context);
 
             FlowableStartResult flowableStartResult = flowableService.startProcessInstance(
                     model,
@@ -292,6 +321,8 @@ public class RuntimeServiceImpl implements IRuntimeService {
             FormDefinition form = requirePublishedForm(model.getFormDefinitionId(), tenantId);
 
             FormInstance formInstance = createFormInstance(req, form, tenantId, context, WorkflowConstants.Status.DRAFT);
+            saveStartFormData(req.getFormDataJson(), formInstance,
+                    listFieldPermissions(model.getId(), WorkflowConstants.VirtualNode.START, tenantId), context, false);
             ProcessInstance processInstance = createProcessInstance(req, model, form, formInstance, tenantId, context,
                     WorkflowConstants.Status.DRAFT);
             formInstance.setProcessInstanceId(processInstance.getId());
@@ -403,7 +434,7 @@ public class RuntimeServiceImpl implements IRuntimeService {
             FormInstance formInstance = requireFormInstance(processInstance.getFormInstanceId(), tenantId);
             boolean startDraftTask = WorkflowConstants.TaskType.START_DRAFT.equals(task.getTaskType());
             List<FieldPermission> permissions = startDraftTask
-                    ? List.of()
+                    ? listFieldPermissions(processInstance.getProcessModelId(), WorkflowConstants.VirtualNode.START, tenantId)
                     : listFieldPermissions(processInstance.getProcessModelId(), task.getNodeId(), tenantId);
             ProcessNodeConfig nodeConfig = startDraftTask
                     ? buildStartDraftNodeConfig()
@@ -1016,6 +1047,8 @@ public class RuntimeServiceImpl implements IRuntimeService {
                 completeAddSignTask(task, processInstance, formInstance, req, tenantId, context);
             } else {
                 ensureNoActiveAddSignChild(task);
+                saveNextAssigneeSnapshot(processInstance, task.getNodeId(),
+                        req == null ? null : req.getSelectedAssignees(), tenantId, context);
                 completeApprove(task, processInstance, formInstance, req, tenantId, context);
             }
         } else if (WorkflowConstants.Action.REJECT.equals(action)) {
@@ -1041,10 +1074,11 @@ public class RuntimeServiceImpl implements IRuntimeService {
             throw new IllegalArgumentException("申请草稿已提交或已处理");
         }
         FormInstance formInstance = requireFormInstance(processInstance.getFormInstanceId(), tenantId);
-        saveDraftFormData(req, formInstance, context);
+        saveStartDraftFormData(req, processInstance, formInstance, tenantId, context, true);
 
         ProcessModel model = requirePublishedModel(processInstance.getProcessModelId(), tenantId);
         checkStartPermission(model, context);
+        saveFirstAssigneeSnapshot(processInstance, req == null ? null : req.getSelectedAssignees(), tenantId, context);
         FlowableStartResult flowableStartResult = flowableService.startProcessInstance(
                 model,
                 processInstance.getId(),
@@ -1079,8 +1113,8 @@ public class RuntimeServiceImpl implements IRuntimeService {
             throw new IllegalArgumentException("申请草稿已提交或已处理");
         }
         FormInstance formInstance = requireFormInstance(processInstance.getFormInstanceId(), tenantId);
-        saveDraftFormData(req, formInstance, context);
-        createTaskRecord(task, processInstance, formInstance, req, WorkflowConstants.Action.SAVE_DRAFT, tenantId, context);
+        saveStartDraftFormData(req, processInstance, formInstance, tenantId, context, false);
+        // 已有草稿重复保存只更新表单数据，草稿创建记录在首次保存草稿时生成。
         return buildTaskActionResult(task, processInstance);
     }
 
@@ -1318,12 +1352,44 @@ public class RuntimeServiceImpl implements IRuntimeService {
         if (req == null || !StringUtils.hasText(req.getFormDataJson())) {
             return;
         }
+        saveRuntimeFormData(req.getFormDataJson(), formInstance, permissions, context, true);
+    }
+
+    private void saveStartDraftFormData(TaskActionReq req, ProcessInstance processInstance,
+            FormInstance formInstance, String tenantId, RequestContext context, boolean validateRequired) {
+        if (req == null || !StringUtils.hasText(req.getFormDataJson())) {
+            return;
+        }
+        saveStartFormData(req.getFormDataJson(), formInstance,
+                listFieldPermissions(processInstance.getProcessModelId(), WorkflowConstants.VirtualNode.START, tenantId),
+                context, validateRequired);
+    }
+
+    private void saveStartFormData(String formDataJson, FormInstance formInstance,
+            List<FieldPermission> permissions, RequestContext context, boolean validateRequired) {
+        if (!StringUtils.hasText(formDataJson)) {
+            return;
+        }
+        saveRuntimeFormData(formDataJson, formInstance, permissions, context, validateRequired);
+    }
+
+    private void saveRuntimeFormData(String formDataJson, FormInstance formInstance,
+            List<FieldPermission> permissions, RequestContext context, boolean validateRequired) {
         try {
-            JsonNode submitted = OBJECT_MAPPER.readTree(req.getFormDataJson());
+            JsonNode submitted = OBJECT_MAPPER.readTree(formDataJson);
             JsonNode current = StringUtils.hasText(formInstance.getFormDataJson())
                     ? OBJECT_MAPPER.readTree(formInstance.getFormDataJson()) : OBJECT_MAPPER.createObjectNode();
             if (!submitted.isObject() || !current.isObject()) {
                 throw new IllegalArgumentException("表单数据必须是JSON对象");
+            }
+            if (permissions == null || permissions.isEmpty()) {
+                if (validateRequired) {
+                    validateRequiredFields(List.of(), (ObjectNode) submitted);
+                }
+                formInstance.setFormDataJson(OBJECT_MAPPER.writeValueAsString(submitted));
+                EntityFillUtils.fillAuditFields(formInstance, context, false);
+                formInstanceMapper.updateById(formInstance);
+                return;
             }
             ObjectNode merged = ((ObjectNode) current).deepCopy();
             Set<String> editableFields = new HashSet<>();
@@ -1337,7 +1403,9 @@ public class RuntimeServiceImpl implements IRuntimeService {
                     merged.set(fieldKey, submitted.get(fieldKey));
                 }
             }
-            validateRequiredFields(permissions, merged);
+            if (validateRequired) {
+                validateRequiredFields(permissions, merged);
+            }
             formInstance.setFormDataJson(OBJECT_MAPPER.writeValueAsString(merged));
             EntityFillUtils.fillAuditFields(formInstance, context, false);
             formInstanceMapper.updateById(formInstance);
@@ -1572,16 +1640,6 @@ public class RuntimeServiceImpl implements IRuntimeService {
         formInstanceMapper.updateById(formInstance);
     }
 
-    private void saveDraftFormData(TaskActionReq req, FormInstance formInstance, RequestContext context) {
-        if (req == null || !StringUtils.hasText(req.getFormDataJson())) {
-            return;
-        }
-        validateJson(req.getFormDataJson(), "表单数据JSON");
-        formInstance.setFormDataJson(req.getFormDataJson());
-        EntityFillUtils.fillAuditFields(formInstance, context, false);
-        formInstanceMapper.updateById(formInstance);
-    }
-
     private void createTaskRecord(Task task, ProcessInstance processInstance, FormInstance formInstance,
             TaskActionReq req, String action, String tenantId, RequestContext context) {
         createTaskRecord(task, processInstance, formInstance, req, action, tenantId, context, null, null);
@@ -1669,6 +1727,8 @@ public class RuntimeServiceImpl implements IRuntimeService {
         returnNodes.addAll(returnableNodes.stream().map(this::buildTaskReturnNode).toList());
         vo.setReturnNodes(returnNodes);
         vo.setFieldPermissions(permissions.stream().map(this::buildRuntimeFieldPermission).toList());
+        vo.setAssigneeSelectNodes(buildRequiredAssigneeSelectNodes(
+                processInstance.getProcessModelId(), processInstance, task.getTenantId(), task.getNodeId()));
         return vo;
     }
 
@@ -1943,7 +2003,7 @@ public class RuntimeServiceImpl implements IRuntimeService {
                 continue;
             }
             ProcessNodeConfig nodeConfig = requireNodeConfig(processInstance.getProcessModelId(), flowableTask.getTaskDefinitionKey(), tenantId);
-            List<ResolvedAssignee> assignees = resolveTaskAssignees(nodeConfig, processInstance, tenantId);
+            List<ResolvedAssignee> assignees = resolveTaskAssigneesForInstance(nodeConfig, processInstance, tenantId);
             applyFlowableAssignees(flowableTask.getTaskId(), assignees);
 
             Task task = new Task();
@@ -1983,6 +2043,221 @@ public class RuntimeServiceImpl implements IRuntimeService {
             throw new IllegalArgumentException("流程节点审批人类型不能为空: " + nodeConfig.getNodeName());
         }
         return nodeConfig;
+    }
+
+    private ProcessInstance buildPreviewProcessInstance(ProcessModel model, RequestContext context) {
+        ProcessInstance processInstance = new ProcessInstance();
+        processInstance.setTenantId(model.getTenantId());
+        processInstance.setProcessModelId(model.getId());
+        processInstance.setStarterUserId(context.getUserId());
+        processInstance.setStarterUsername(context.getUsername());
+        processInstance.setStarterRealname(resolveCurrentUserRealname(context));
+        return processInstance;
+    }
+
+    /**
+     * 只要求当前办理人选择下一审批节点的多人角色/部门岗位，其它节点到对应环节再解析。
+     */
+    private List<AssigneeSelectNodeVO> buildRequiredAssigneeSelectNodes(String processModelId,
+            ProcessInstance processInstance, String tenantId, String currentNodeId) {
+        String targetNodeId = findNextApproverNodeConfig(processModelId, currentNodeId, tenantId)
+                .map(ProcessNodeConfig::getNodeId)
+                .orElse(null);
+        if (!StringUtils.hasText(targetNodeId)) {
+            return List.of();
+        }
+        return listApproverNodeConfigs(processModelId, tenantId).stream()
+                .filter(nodeConfig -> targetNodeId.equals(nodeConfig.getNodeId()))
+                .filter(this::requiresStarterSelection)
+                .map(nodeConfig -> buildAssigneeSelectNode(nodeConfig, processInstance, tenantId))
+                .filter(Objects::nonNull)
+                .toList();
+    }
+
+    private java.util.Optional<ProcessNodeConfig> findNextApproverNodeConfig(String processModelId, String currentNodeId, String tenantId) {
+        List<ProcessNodeConfig> nodes = listApproverNodeConfigs(processModelId, tenantId);
+        if (nodes.isEmpty()) {
+            return java.util.Optional.empty();
+        }
+        if (!StringUtils.hasText(currentNodeId) || START_DRAFT_NODE_ID.equals(currentNodeId)) {
+            return java.util.Optional.of(nodes.get(0));
+        }
+        for (int i = 0; i < nodes.size(); i++) {
+            if (currentNodeId.equals(nodes.get(i).getNodeId()) && i + 1 < nodes.size()) {
+                return java.util.Optional.of(nodes.get(i + 1));
+            }
+        }
+        return java.util.Optional.empty();
+    }
+
+    private List<ProcessNodeConfig> listApproverNodeConfigs(String processModelId, String tenantId) {
+        return processNodeConfigMapper.selectList(new QueryWrapper<ProcessNodeConfig>()
+                .eq("tenant_id", tenantId)
+                .eq("process_model_id", processModelId)
+                .isNotNull("assignee_type")
+                .ne("assignee_type", "")
+                .eq("delete_flag", 0)
+                .orderByAsc("sort_order")
+                .orderByAsc("create_time"));
+    }
+
+    private boolean requiresStarterSelection(ProcessNodeConfig nodeConfig) {
+        return WorkflowConstants.AssigneeType.ROLE.equals(nodeConfig.getAssigneeType())
+                || WorkflowConstants.AssigneeType.DEPART_ROLE.equals(nodeConfig.getAssigneeType())
+                || WorkflowConstants.AssigneeType.STARTER_SELECT.equals(nodeConfig.getAssigneeType());
+    }
+
+    private AssigneeSelectNodeVO buildAssigneeSelectNode(ProcessNodeConfig nodeConfig,
+            ProcessInstance processInstance, String tenantId) {
+        if (WorkflowConstants.AssigneeType.STARTER_SELECT.equals(nodeConfig.getAssigneeType())) {
+            AssigneeSelectNodeVO vo = new AssigneeSelectNodeVO();
+            vo.setNodeId(nodeConfig.getNodeId());
+            vo.setNodeName(nodeConfig.getNodeName());
+            vo.setAssigneeType(nodeConfig.getAssigneeType());
+            vo.setSelectType(SELECT_TYPE_SINGLE);
+            vo.setRequired(true);
+            vo.setOptions(List.of());
+            return vo;
+        }
+        List<ResolvedAssignee> assignees = resolveTaskAssignees(nodeConfig, processInstance, tenantId);
+        if (assignees.size() <= 1) {
+            return null;
+        }
+        AssigneeSelectNodeVO vo = new AssigneeSelectNodeVO();
+        vo.setNodeId(nodeConfig.getNodeId());
+        vo.setNodeName(nodeConfig.getNodeName());
+        vo.setAssigneeType(nodeConfig.getAssigneeType());
+        vo.setSelectType(SELECT_TYPE_SINGLE);
+        vo.setRequired(true);
+        vo.setOptions(assignees.stream().map(this::buildAssigneeOption).toList());
+        return vo;
+    }
+
+    private AssigneeOptionVO buildAssigneeOption(ResolvedAssignee assignee) {
+        AssigneeOptionVO vo = new AssigneeOptionVO();
+        vo.setUserId(assignee.userId());
+        vo.setUsername(assignee.username());
+        vo.setRealname(assignee.realname());
+        vo.setDisplayName(resolveDisplayName(assignee.realname(), assignee.username(), assignee.userId()));
+        vo.setSourceType(assignee.sourceType());
+        vo.setSourceId(assignee.sourceId());
+        return vo;
+    }
+
+    /**
+     * 保存发起时节点审批人选择快照。快照只用于当前流程实例，组织关系后续变化不影响已提交实例。
+     */
+    private void saveFirstAssigneeSnapshot(ProcessInstance processInstance, List<SelectedAssigneeReq> selectedAssignees,
+            String tenantId, RequestContext context) {
+        saveSelectedAssigneeSnapshots(processInstance, selectedAssignees, tenantId, context, START_DRAFT_NODE_ID);
+    }
+
+    private void saveNextAssigneeSnapshot(ProcessInstance processInstance, String currentNodeId,
+            List<SelectedAssigneeReq> selectedAssignees, String tenantId, RequestContext context) {
+        saveSelectedAssigneeSnapshots(processInstance, selectedAssignees, tenantId, context, currentNodeId);
+    }
+
+    private void saveSelectedAssigneeSnapshots(ProcessInstance processInstance, List<SelectedAssigneeReq> selectedAssignees,
+            String tenantId, RequestContext context, String currentNodeId) {
+        List<AssigneeSelectNodeVO> requiredNodes = buildRequiredAssigneeSelectNodes(
+                processInstance.getProcessModelId(), processInstance, tenantId, currentNodeId);
+        Set<String> requiredNodeIds = requiredNodes.stream()
+                .map(AssigneeSelectNodeVO::getNodeId)
+                .filter(StringUtils::hasText)
+                .collect(java.util.stream.Collectors.toSet());
+        if (requiredNodeIds.isEmpty()) {
+            return;
+        }
+        processInstanceAssigneeMapper.update(null, new UpdateWrapper<ProcessInstanceAssignee>()
+                .eq("tenant_id", tenantId)
+                .eq("process_instance_id", processInstance.getId())
+                .in("node_id", requiredNodeIds)
+                .eq("delete_flag", 0)
+                .set("delete_flag", 1)
+                .set("delete_by", context.getUsername())
+                .set("delete_time", LocalDateTime.now())
+                .set("update_by", context.getUsername())
+                .set("update_time", LocalDateTime.now()));
+        Map<String, SelectedAssigneeReq> selectedByNodeId = new HashMap<>();
+        if (selectedAssignees != null) {
+            for (SelectedAssigneeReq selected : selectedAssignees) {
+                if (selected != null && StringUtils.hasText(selected.getNodeId())) {
+                    selectedByNodeId.put(selected.getNodeId(), selected);
+                }
+            }
+        }
+        for (AssigneeSelectNodeVO node : requiredNodes) {
+            SelectedAssigneeReq selected = selectedByNodeId.get(node.getNodeId());
+            List<String> selectedUserIds = selected == null || selected.getUserIds() == null
+                    ? List.of()
+                    : selected.getUserIds().stream().filter(StringUtils::hasText).distinct().toList();
+            if (selectedUserIds.size() != 1) {
+                throw new IllegalArgumentException("请选择节点审批人: " + node.getNodeName());
+            }
+            ResolvedAssignee selectedAssignee = resolveSelectedAssignee(node, selectedUserIds.get(0), tenantId);
+            if (selectedAssignee == null) {
+                throw new IllegalArgumentException("节点审批人不在允许范围内: " + node.getNodeName());
+            }
+            ProcessInstanceAssignee snapshot = new ProcessInstanceAssignee();
+            snapshot.setTenantId(tenantId);
+            snapshot.setProcessInstanceId(processInstance.getId());
+            snapshot.setProcessModelId(processInstance.getProcessModelId());
+            snapshot.setNodeId(node.getNodeId());
+            snapshot.setNodeName(node.getNodeName());
+            snapshot.setAssigneeType(node.getAssigneeType());
+            snapshot.setAssigneeUserId(selectedAssignee.userId());
+            snapshot.setAssigneeUsername(selectedAssignee.username());
+            snapshot.setAssigneeRealname(selectedAssignee.realname());
+            snapshot.setSourceType(selectedAssignee.sourceType());
+            snapshot.setSourceId(selectedAssignee.sourceId());
+            snapshot.setSelectType(node.getSelectType());
+            snapshot.setStatus(WorkflowConstants.Status.ACTIVE);
+            EntityFillUtils.fillAuditFields(snapshot, context, true);
+            processInstanceAssigneeMapper.insert(snapshot);
+        }
+    }
+
+    private ResolvedAssignee resolveSelectedAssignee(AssigneeSelectNodeVO node, String selectedUserId, String tenantId) {
+        if (WorkflowConstants.AssigneeType.STARTER_SELECT.equals(node.getAssigneeType())) {
+            User user = loadTenantActiveUsers(List.of(selectedUserId), tenantId).get(selectedUserId);
+            return user == null ? null : new ResolvedAssignee(user.getId(), user.getUsername(), user.getRealname(),
+                    WorkflowConstants.AssigneeType.STARTER_SELECT, user.getId());
+        }
+        List<AssigneeOptionVO> options = node.getOptions() == null ? List.of() : node.getOptions();
+        Map<String, AssigneeOptionVO> optionByUserId = options.stream()
+                .collect(java.util.stream.Collectors.toMap(AssigneeOptionVO::getUserId, option -> option, (left, right) -> left));
+        AssigneeOptionVO option = optionByUserId.get(selectedUserId);
+        return option == null ? null : new ResolvedAssignee(option.getUserId(), option.getUsername(), option.getRealname(),
+                option.getSourceType(), option.getSourceId());
+    }
+
+    private List<ResolvedAssignee> resolveTaskAssigneesForInstance(ProcessNodeConfig nodeConfig,
+            ProcessInstance processInstance, String tenantId) {
+        List<ProcessInstanceAssignee> snapshots = processInstanceAssigneeMapper.selectList(new QueryWrapper<ProcessInstanceAssignee>()
+                .eq("tenant_id", tenantId)
+                .eq("process_instance_id", processInstance.getId())
+                .eq("node_id", nodeConfig.getNodeId())
+                .eq("status", WorkflowConstants.Status.ACTIVE)
+                .eq("delete_flag", 0)
+                .orderByAsc("create_time"));
+        if (!snapshots.isEmpty()) {
+            return snapshots.stream()
+                    .map(snapshot -> new ResolvedAssignee(
+                            snapshot.getAssigneeUserId(),
+                            snapshot.getAssigneeUsername(),
+                            snapshot.getAssigneeRealname(),
+                            snapshot.getSourceType(),
+                            snapshot.getSourceId()))
+                    .toList();
+        }
+        if (WorkflowConstants.AssigneeType.STARTER_SELECT.equals(nodeConfig.getAssigneeType())) {
+            throw new IllegalArgumentException("请选择下一审批人: " + nodeConfig.getNodeName());
+        }
+        List<ResolvedAssignee> assignees = resolveTaskAssignees(nodeConfig, processInstance, tenantId);
+        if (requiresStarterSelection(nodeConfig) && assignees.size() > 1) {
+            throw new IllegalArgumentException("节点存在多个可选审批人，请选择后再提交: " + nodeConfig.getNodeName());
+        }
+        return assignees;
     }
 
     /**
@@ -2293,7 +2568,7 @@ public class RuntimeServiceImpl implements IRuntimeService {
         operationRecordMapper.insert(record);
     }
 
-    private StartFormVO buildStartForm(ProcessModel model, FormDefinition form) {
+    private StartFormVO buildStartForm(ProcessModel model, FormDefinition form, RequestContext context) {
         StartFormVO vo = new StartFormVO();
         vo.setProcessModelId(model.getId());
         vo.setProcessName(model.getProcessName());
@@ -2303,6 +2578,12 @@ public class RuntimeServiceImpl implements IRuntimeService {
         vo.setFormVersion(form.getVersion());
         vo.setSchemaJson(form.getSchemaJson());
         vo.setOptionJson(form.getOptionJson());
+        vo.setFieldPermissions(listFieldPermissions(model.getId(), WorkflowConstants.VirtualNode.START, model.getTenantId())
+                .stream()
+                .map(this::buildRuntimeFieldPermission)
+                .toList());
+        vo.setAssigneeSelectNodes(buildRequiredAssigneeSelectNodes(
+                model.getId(), buildPreviewProcessInstance(model, context), model.getTenantId(), START_DRAFT_NODE_ID));
         return vo;
     }
 

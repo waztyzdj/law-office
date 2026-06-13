@@ -2,6 +2,8 @@ package com.lawoffice.workflow.req;
 
 import lombok.Data;
 
+import java.util.List;
+
 @Data
 public class StartProcessReq {
 
@@ -12,4 +14,6 @@ public class StartProcessReq {
     private String businessKey;
 
     private String formDataJson;
+
+    private List<SelectedAssigneeReq> selectedAssignees;
 }

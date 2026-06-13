@@ -48,7 +48,7 @@ public class FieldPermissionServiceImpl extends AbstractWorkflowConfigServiceImp
                 WorkflowConstants.FieldPermission.HIDDEN,
                 WorkflowConstants.FieldPermission.READONLY,
                 WorkflowConstants.FieldPermission.EDITABLE);
-        if (countActive(processNodeConfigMapper, permission.getTenantId(),
+        if (!WorkflowConstants.VirtualNode.START.equals(permission.getNodeId()) && countActive(processNodeConfigMapper, permission.getTenantId(),
                 "process_model_id", permission.getProcessModelId(),
                 "node_id", permission.getNodeId()) == 0) {
             throw new IllegalArgumentException("字段权限对应的节点配置不存在");

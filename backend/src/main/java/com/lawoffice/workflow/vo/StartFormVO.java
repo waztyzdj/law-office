@@ -2,6 +2,8 @@ package com.lawoffice.workflow.vo;
 
 import lombok.Data;
 
+import java.util.List;
+
 @Data
 public class StartFormVO {
 
@@ -20,4 +22,8 @@ public class StartFormVO {
     private String schemaJson;
 
     private String optionJson;
+
+    private List<RuntimeFieldPermissionVO> fieldPermissions;
+
+    private List<AssigneeSelectNodeVO> assigneeSelectNodes;
 }

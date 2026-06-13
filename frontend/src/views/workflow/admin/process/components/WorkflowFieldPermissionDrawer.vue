@@ -49,9 +49,8 @@ interface FieldPermissionRow extends FormFieldItem {
   requiredFlag: boolean;
 }
 
-const emit = defineEmits<{
-  success: [];
-}>();
+const START_NODE_ID = 'start';
+const START_NODE_NAME = '发起申请';
 
 const currentProcess = ref<WorkflowProcessModelInfo>();
 const currentForm = ref<WorkflowFormDefinitionInfo>();
@@ -61,6 +60,7 @@ const rows = ref<FieldPermissionRow[]>([]);
 const existingPermissions = ref<WorkflowFieldPermissionInfo[]>([]);
 const loading = ref(false);
 const parseError = ref('');
+const saving = ref(false);
 
 const drawerTitle = computed(() =>
   currentProcess.value?.processName
@@ -69,13 +69,23 @@ const drawerTitle = computed(() =>
 );
 const isPublished = computed(() => currentProcess.value?.status !== 'draft');
 const activeNode = computed(() =>
-  nodes.value.find((node) => node.nodeId === activeNodeId.value),
+  activeNodeId.value === START_NODE_ID
+    ? buildStartNode()
+    : nodes.value.find((node) => node.nodeId === activeNodeId.value),
 );
 const nodeOptions = computed(() =>
-  nodes.value.map((node) => ({
-    label: node.nodeName ?? node.nodeId ?? '',
-    value: node.nodeId ?? '',
-  })),
+  [
+    {
+      label: START_NODE_NAME,
+      value: START_NODE_ID,
+    },
+    ...nodes.value
+      .filter((node) => node.nodeId && node.nodeId !== START_NODE_ID)
+      .map((node) => ({
+        label: node.nodeName ?? node.nodeId ?? '',
+        value: node.nodeId ?? '',
+      })),
+  ],
 );
 
 const permissionOptions = [
@@ -100,6 +110,15 @@ const [Drawer, drawerApi] = useVbenDrawer({
   onOpened: syncMountedValues,
   title: drawerTitle.value,
 });
+
+function buildStartNode(): WorkflowProcessNodeConfigInfo {
+  return {
+    nodeId: START_NODE_ID,
+    nodeName: START_NODE_NAME,
+    nodeType: 'start',
+    sortOrder: 0,
+  };
+}
 
 function parseJson<T>(json: string | undefined, fallback: T): T {
   if (!json) {
@@ -142,20 +161,20 @@ function collectFields(rules: FormRule[], target: FormFieldItem[] = []) {
   return target;
 }
 
-function buildPermissionMap() {
+function buildPermissionMap(nodeId = activeNodeId.value) {
   const map = new Map<string, WorkflowFieldPermissionInfo>();
   for (const item of existingPermissions.value) {
-    if (item.nodeId === activeNodeId.value && item.fieldKey) {
+    if (item.nodeId === nodeId && item.fieldKey) {
       map.set(item.fieldKey, item);
     }
   }
   return map;
 }
 
-function buildRows() {
+function buildRows(nodeId = activeNodeId.value) {
   const rules = parseJson<FormRule[]>(currentForm.value?.schemaJson, []);
   const fields = collectFields(Array.isArray(rules) ? rules : []);
-  const permissionMap = buildPermissionMap();
+  const permissionMap = buildPermissionMap(nodeId);
   rows.value = fields.map((field) => {
     const current = permissionMap.get(field.fieldKey);
     return {
@@ -182,27 +201,34 @@ async function loadData(record: WorkflowProcessModelInfo) {
   currentForm.value = process.formDefinitionId
     ? await getWorkflowFormById(process.formDefinitionId)
     : undefined;
-  nodes.value = (
-    await listWorkflowProcessNodes({
+  const approverNodes = await listWorkflowProcessNodes({
       queryParams: {
         nodeType: 'approver',
         processModelId: process.id,
       },
       sortField: 'sortOrder',
       sortOrder: 'asc',
-    })
-  ).filter((node) => node.nodeId);
+  });
+  nodes.value = [buildStartNode(), ...approverNodes].filter((node) => node.nodeId);
   existingPermissions.value = await listWorkflowFieldPermissions({
     queryParams: { processModelId: process.id },
     sortField: 'fieldKey',
     sortOrder: 'asc',
   });
   activeNodeId.value = nodes.value[0]?.nodeId;
-  buildRows();
+  buildRows(activeNodeId.value);
 }
 
-function handleNodeChange() {
-  buildRows();
+async function handleNodeChange(nextNodeId: unknown) {
+  if (typeof nextNodeId !== 'string' || !nextNodeId) {
+    return;
+  }
+  const previousNodeId = activeNodeId.value;
+  if (previousNodeId && previousNodeId !== nextNodeId) {
+    await saveCurrentNodePermissions(previousNodeId);
+  }
+  activeNodeId.value = nextNodeId;
+  buildRows(nextNodeId);
 }
 
 function toPermissionRow(record: Record<string, any>): FieldPermissionRow {
@@ -215,12 +241,76 @@ function normalizeRequired(row: FieldPermissionRow) {
   }
 }
 
-async function deleteRemovedPermissions() {
+function upsertExistingPermission(permission: WorkflowFieldPermissionInfo) {
+  const index = existingPermissions.value.findIndex(
+    (item) =>
+      item.nodeId === permission.nodeId && item.fieldKey === permission.fieldKey,
+  );
+  if (index >= 0) {
+    existingPermissions.value.splice(index, 1, permission);
+    return;
+  }
+  existingPermissions.value.push(permission);
+}
+
+async function savePermissionRow(row: FieldPermissionRow, nodeId: string) {
+  if (isPublished.value) {
+    return;
+  }
+  if (!currentProcess.value?.id || !nodeId) {
+    message.warning('请先保存流程节点配置');
+    return;
+  }
+
+  saving.value = true;
+  try {
+    const saved = await saveWorkflowFieldPermission({
+      id: row.id,
+      fieldKey: row.fieldKey,
+      nodeId,
+      permission: row.permission,
+      processModelId: currentProcess.value.id,
+      requiredFlag: row.permission === 'editable' && row.requiredFlag ? 1 : 0,
+    });
+    row.id = saved?.id ?? row.id;
+    upsertExistingPermission({
+      ...saved,
+      fieldKey: row.fieldKey,
+      id: row.id,
+      nodeId,
+      permission: row.permission,
+      processModelId: currentProcess.value.id,
+      requiredFlag: row.permission === 'editable' && row.requiredFlag ? 1 : 0,
+    });
+  } finally {
+    saving.value = false;
+  }
+}
+
+function handlePermissionChange(row: FieldPermissionRow) {
+  normalizeRequired(row);
+}
+
+function handleRequiredChange(..._args: unknown[]) {
+  // 当前节点内只更新本地状态，切换节点或点击保存时再统一持久化。
+}
+
+async function saveCurrentNodePermissions(nodeId = activeNodeId.value) {
+  if (!nodeId) {
+    return;
+  }
+  await deleteRemovedPermissions(nodeId);
+  for (const row of rows.value) {
+    await savePermissionRow(row, nodeId);
+  }
+}
+
+async function deleteRemovedPermissions(nodeId = activeNodeId.value) {
   const activeFieldKeys = new Set(rows.value.map((row) => row.fieldKey));
   const removed = existingPermissions.value.filter(
     (item) =>
       item.id &&
-      item.nodeId === activeNodeId.value &&
+      item.nodeId === nodeId &&
       item.fieldKey &&
       !activeFieldKeys.has(item.fieldKey),
   );
@@ -245,20 +335,8 @@ async function handleSubmit() {
 
   try {
     drawerApi.lock();
-    await deleteRemovedPermissions();
-    for (const row of rows.value) {
-      await saveWorkflowFieldPermission({
-        id: row.id,
-        fieldKey: row.fieldKey,
-        nodeId: activeNodeId.value,
-        permission: row.permission,
-        processModelId: currentProcess.value.id,
-        requiredFlag: row.permission === 'editable' && row.requiredFlag ? 1 : 0,
-      });
-    }
+    await saveCurrentNodePermissions(activeNodeId.value);
     message.success('字段权限已保存');
-    emit('success');
-    drawerApi.close();
   } finally {
     drawerApi.unlock();
   }
@@ -268,7 +346,7 @@ async function syncMountedValues() {
   if (!currentProcess.value) {
     return;
   }
-  drawerApi.setState({ title: drawerTitle.value });
+  drawerApi.setState({ footer: !isPublished.value, title: drawerTitle.value });
 }
 
 async function open(payload: DrawerPayload) {
@@ -276,16 +354,25 @@ async function open(payload: DrawerPayload) {
   rows.value = [];
   nodes.value = [];
   existingPermissions.value = [];
+  saving.value = false;
   currentProcess.value = payload.record;
   currentForm.value = undefined;
-  drawerApi.setState({ loading: true, title: drawerTitle.value });
+  drawerApi.setState({
+    footer: payload.record.status === 'draft',
+    loading: true,
+    title: drawerTitle.value,
+  });
   drawerApi.setData(payload).open();
 
   try {
     await loadData(payload.record);
   } finally {
     loading.value = false;
-    drawerApi.setState({ loading: false, title: drawerTitle.value });
+    drawerApi.setState({
+      footer: !isPublished.value,
+      loading: false,
+      title: drawerTitle.value,
+    });
   }
 
   await nextTick();
@@ -323,8 +410,8 @@ defineExpose({
           </span>
         </Space>
         <Select
-          v-model:value="activeNodeId"
-          :disabled="isPublished || nodes.length === 0"
+          :value="activeNodeId"
+          :disabled="nodeOptions.length === 0"
           :options="nodeOptions"
           class="node-select"
           placeholder="请选择审批节点"
@@ -333,8 +420,8 @@ defineExpose({
       </div>
 
       <Empty
-        v-if="nodes.length === 0"
-        description="请先在简易节点设计器中保存审批节点"
+        v-if="nodeOptions.length === 0"
+        description="暂无可配置环节"
       />
       <Empty
         v-else-if="rows.length === 0 && !loading"
@@ -364,7 +451,7 @@ defineExpose({
             :options="permissionOptions"
             option-type="button"
             size="small"
-            @change="normalizeRequired(toPermissionRow(record))"
+            @change="handlePermissionChange(toPermissionRow(record))"
           />
           <Switch
             v-else-if="column.dataIndex === 'requiredFlag'"
@@ -372,6 +459,7 @@ defineExpose({
             :disabled="isPublished || record.permission !== 'editable'"
             checked-children="是"
             un-checked-children="否"
+            @change="handleRequiredChange(toPermissionRow(record))"
           />
         </template>
       </Table>

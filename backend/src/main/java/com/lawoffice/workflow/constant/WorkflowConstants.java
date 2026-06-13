@@ -65,6 +65,13 @@ public final class WorkflowConstants {
         }
     }
 
+    public static final class VirtualNode {
+        public static final String START = "start";
+
+        private VirtualNode() {
+        }
+    }
+
     public static final class TaskType {
         public static final String START_DRAFT = "start_draft";
         public static final String NORMAL = "normal";
@@ -80,6 +87,7 @@ public final class WorkflowConstants {
         public static final String ROLE = "role";
         public static final String DEPART_LEADER = "depart_leader";
         public static final String DEPART_ROLE = "depart_role";
+        public static final String STARTER_SELECT = "starter_select";
         public static final String STARTER = "starter";
 
         private AssigneeType() {

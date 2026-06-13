@@ -183,6 +183,8 @@ export interface StartedInstancePageReq extends BasePageReq {
 }
 
 export interface StartFormInfo {
+  assigneeSelectNodes?: AssigneeSelectNodeInfo[];
+  fieldPermissions?: RuntimeFieldPermissionInfo[];
   formDefinitionId?: string;
   formKey?: string;
   formName?: string;
@@ -194,6 +196,7 @@ export interface StartFormInfo {
 }
 
 export interface StartProcessReq {
+  selectedAssignees?: SelectedAssigneeReq[];
   businessKey?: string;
   formDataJson?: string;
   instanceTitle?: string;
@@ -210,9 +213,33 @@ export interface StartProcessResult {
 export interface TaskActionReq {
   comment?: string;
   formDataJson?: string;
+  selectedAssignees?: SelectedAssigneeReq[];
   targetNodeId?: string;
   targetUserId?: string;
   taskId?: string;
+}
+
+export interface SelectedAssigneeReq {
+  nodeId?: string;
+  userIds?: string[];
+}
+
+export interface AssigneeOptionInfo {
+  displayName?: string;
+  realname?: string;
+  sourceId?: string;
+  sourceType?: string;
+  userId?: string;
+  username?: string;
+}
+
+export interface AssigneeSelectNodeInfo {
+  assigneeType?: string;
+  nodeId?: string;
+  nodeName?: string;
+  options?: AssigneeOptionInfo[];
+  required?: boolean;
+  selectType?: string;
 }
 
 export interface TaskActionResult {
@@ -243,6 +270,7 @@ export interface RuntimeFieldPermissionInfo {
 
 export interface TaskFormInfo {
   actionPermissions?: TaskActionPermissionInfo;
+  assigneeSelectNodes?: AssigneeSelectNodeInfo[];
   fieldPermissions?: RuntimeFieldPermissionInfo[];
   formDataJson?: string;
   formDefinitionId?: string;
@@ -418,6 +446,11 @@ export const pageAvailableProcesses = (params: AvailableProcessPageReq) =>
   );
 export const getStartForm = (processModelId: string) =>
   requestClient.post<StartFormInfo>('/workflow/start/form', { processModelId });
+export const previewWorkflowStartAssignees = (processModelId: string) =>
+  requestClient.post<AssigneeSelectNodeInfo[]>(
+    '/workflow/start/assignee-preview',
+    { processModelId },
+  );
 export const startWorkflowProcess = (data: StartProcessReq) =>
   requestClient.post<StartProcessResult>('/workflow/start', data);
 export const saveWorkflowStartDraft = (data: StartProcessReq) =>

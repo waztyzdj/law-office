@@ -306,7 +306,7 @@ Flowable 负责：
 - `assignee_type=depart_leader` 时，基于 `sys_user_depart` 中的部门负责人字段解析；配置规则以 [审批中心组织关系增强设计](approval-center-org-relation-design.md) 为准。
 - `assignee_type=depart_role` 时，基于部门角色解析部门岗位人员；配置规则以 [审批中心组织关系增强设计](approval-center-org-relation-design.md) 为准。
 - `assignee_type=starter_supervisor` 时，基于 `sys_user_depart.supervisor_user_id` 解析发起人直属上级；配置规则以 [审批中心组织关系增强设计](approval-center-org-relation-design.md) 为准。
-- `assignee_type=starter_select` 时，发起人按管理员配置的范围自选审批人；配置规则以 [审批中心组织关系增强设计](approval-center-org-relation-design.md) 为准。
+- `assignee_type=starter_select` 时，流程设计阶段不配置可选范围；运行到上一环节办理人点击通过时，从本租户有效用户中选择该节点审批人，选择结果写入实例审批人快照。界面文案为“审批人自选”。
 - `assignee_type=starter` 时，`assignee_json` 可为空，运行时直接解析为发起人本人。
 
 ### `wf_field_permission`
@@ -391,7 +391,7 @@ Flowable 负责：
 
 ### `wf_task_candidate`
 
-任务候选人表。用于指定角色、部门负责人、部门岗位、发起人自选等解析出多人时，支撑“我的待办”列表和认领/处理权限判断。
+任务候选人表。用于指定角色、部门负责人、部门岗位等解析出多人且明确启用候选池策略时，支撑“我的待办”列表和认领/处理权限判断。
 
 | 字段 | 含义 |
 | --- | --- |
@@ -1013,7 +1013,7 @@ todo -> canceled
 - 部门负责人
 - 部门岗位
 - 发起人直属上级
-- 发起人自选
+- 审批人自选
 - 发起人本人
 
 解析规则：
@@ -1024,11 +1024,12 @@ todo -> canceled
 - 部门负责人不再通过 `sys_user.user_identity + depart_ids` 推断，必须通过 `sys_user_depart.depart_leader_flag` 解析；同一部门只允许一个负责人。
 - 部门岗位一期复用部门角色和部门角色人员关系解析，不依赖 `sys_user.post`。
 - 发起人直属上级必须通过 `sys_user_depart.supervisor_user_id` 解析，不能用部门负责人替代。
-- 发起人自选必须由流程设计阶段配置可选范围，发起页面只允许从范围内选择，后端提交时再次校验。
+- 审批人自选不在流程设计阶段配置可选范围；上一环节办理人点击通过时从本租户有效用户中选择下一节点审批人，后端提交时再次校验用户租户有效性。
 - 审批人组织关系、配置 JSON、空审批人策略和实现顺序以 [审批中心组织关系增强设计](approval-center-org-relation-design.md) 为准。
-- 角色、部门负责人、部门岗位等解析出多人时，一期采用候选待办策略：候选人都能在“我的待办”看到任务，首个提交审批的人成为当前处理人并自动认领任务，其它候选记录取消。
+- 指定角色、部门岗位解析出多人时，一期采用“当前环节选择下一审批人”策略：发起申请只选择第一个审批节点；普通审批人在点击通过时，如果下一审批节点解析出多人，则由当前审批人选择下一节点具体审批人。
+- 当前环节选定的下一节点审批人写入 `wf_process_instance_assignee` 作为实例快照；后续任务创建优先使用实例快照，组织关系变更不影响已流转到该节点的责任人。
 - 解析结果为单人时，写入 `wf_task.assignee_user_id`、`assignee_username`、`assignee_realname`，并同步 Flowable task assignee。
-- 解析结果为多人时，`wf_task.assignee_user_id` 为空，候选人写入 `wf_task_candidate(status=active)`，并同步 Flowable candidate user。
+- 只有明确配置为候选池/抢办策略的节点，才允许多人写入 `wf_task_candidate(status=active)` 并同步 Flowable candidate user；一期默认不开放该策略。
 - 找不到审批人时，发布流程或发起流程应失败，不允许生成悬空待办。
 
 ### 字段权限

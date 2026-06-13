@@ -240,7 +240,7 @@ function validateNodes() {
 }
 
 function needsAssigneeConfig(node: SimpleNode) {
-  return node.assigneeType !== 'starter' && node.assigneeType !== 'depart_leader';
+  return !['starter', 'depart_leader', 'starter_select'].includes(node.assigneeType);
 }
 
 function hasAssigneeConfig(value: Record<string, unknown>) {

@@ -5,6 +5,7 @@ import com.lawoffice.framework.result.BaseResult;
 import com.lawoffice.framework.util.RequestContextUtils;
 import com.lawoffice.framework.vo.PageVO;
 import com.lawoffice.workflow.req.AvailableProcessPageReq;
+import com.lawoffice.workflow.req.AssigneePreviewReq;
 import com.lawoffice.workflow.req.InstanceReq;
 import com.lawoffice.workflow.req.StartFormReq;
 import com.lawoffice.workflow.req.StartProcessReq;
@@ -14,6 +15,7 @@ import com.lawoffice.workflow.req.TaskFormReq;
 import com.lawoffice.workflow.req.TaskPageReq;
 import com.lawoffice.workflow.service.IRuntimeService;
 import com.lawoffice.workflow.vo.AvailableProcessVO;
+import com.lawoffice.workflow.vo.AssigneeSelectNodeVO;
 import com.lawoffice.workflow.vo.InstanceDetailVO;
 import com.lawoffice.workflow.vo.OperationRecordVO;
 import com.lawoffice.workflow.vo.RuntimeTaskVO;
@@ -59,6 +61,14 @@ public class RuntimeController {
             HttpServletRequest request) {
         RequestContext context = RequestContextUtils.buildContext(request);
         return runtimeService.getStartForm(req == null ? null : req.getProcessModelId(), context);
+    }
+
+    @PostMapping("/start/assignee-preview")
+    @Operation(summary = "发起申请审批人预解析")
+    public BaseResult<List<AssigneeSelectNodeVO>> previewStartAssignees(@RequestBody AssigneePreviewReq req,
+            HttpServletRequest request) {
+        RequestContext context = RequestContextUtils.buildContext(request);
+        return runtimeService.previewStartAssignees(req == null ? null : req.getProcessModelId(), context);
     }
 
     @PostMapping("/start")

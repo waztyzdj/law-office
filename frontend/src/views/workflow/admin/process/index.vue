@@ -119,7 +119,6 @@ onMounted(handleRefresh);
     />
     <WorkflowFieldPermissionDrawer
       ref="fieldPermissionDrawerRef"
-      @success="loadData"
     />
     <WorkflowProcessHistoryDrawer
       ref="historyDrawerRef"

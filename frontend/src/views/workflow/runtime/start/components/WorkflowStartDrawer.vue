@@ -2,6 +2,8 @@
 import type { ComponentPublicInstance } from 'vue';
 import type {
   AvailableProcessInfo,
+  AssigneeSelectNodeInfo,
+  SelectedAssigneeReq,
   StartFormInfo,
 } from '#/api/workflow';
 
@@ -20,6 +22,7 @@ import {
 } from '#/api/workflow';
 
 import RuntimeFormRenderer from '../../components/RuntimeFormRenderer.vue';
+import AssigneeSelectPanel from '../../components/AssigneeSelectPanel.vue';
 
 interface DrawerPayload {
   record: AvailableProcessInfo;
@@ -38,6 +41,7 @@ const runtimeFormRef = ref<InstanceType<typeof RuntimeFormRenderer>>();
 const instanceTitle = ref('');
 const businessKey = ref('');
 const formDataJson = ref('{}');
+const selectedAssignees = ref<SelectedAssigneeReq[]>([]);
 const loading = ref(false);
 const saving = ref(false);
 const submitting = ref(false);
@@ -56,6 +60,9 @@ const currentUserName = computed(
     userStore.userInfo?.realname ||
     userStore.userInfo?.username ||
     '',
+);
+const assigneeSelectNodes = computed<AssigneeSelectNodeInfo[]>(
+  () => startForm.value?.assigneeSelectNodes ?? [],
 );
 
 const draftKey = computed(() =>
@@ -88,6 +95,7 @@ function resetState(record: AvailableProcessInfo) {
   instanceTitle.value = buildDefaultInstanceTitle(record);
   businessKey.value = '';
   formDataJson.value = '{}';
+  selectedAssignees.value = [];
   loading.value = false;
   saving.value = false;
   submitting.value = false;
@@ -160,6 +168,32 @@ function validateTitle() {
   return true;
 }
 
+function validateSelectedAssignees() {
+  for (const node of assigneeSelectNodes.value) {
+    if (!node.nodeId) {
+      continue;
+    }
+    const selected = selectedAssignees.value.find((item) => item.nodeId === node.nodeId);
+    if (!selected?.userIds?.[0]) {
+      message.warning(`请选择${node.nodeName || node.nodeId}的审批人`);
+      return false;
+    }
+  }
+  return true;
+}
+
+function collectSelectedAssignees() {
+  const result: SelectedAssigneeReq[] = [];
+  for (const item of selectedAssignees.value) {
+    const nodeId = item.nodeId;
+    const userId = item.userIds?.[0];
+    if (nodeId && userId) {
+      result.push({ nodeId, userIds: [userId] });
+    }
+  }
+  return result;
+}
+
 async function handleSave() {
   if (!currentProcess.value?.id || !validateTitle()) {
     return;
@@ -189,6 +223,9 @@ async function handleSubmit() {
   if (!currentProcess.value?.id || !validateTitle()) {
     return;
   }
+  if (!validateSelectedAssignees()) {
+    return;
+  }
 
   submitting.value = true;
   try {
@@ -197,6 +234,7 @@ async function handleSubmit() {
       formDataJson: await collectFormDataJson(true),
       instanceTitle: instanceTitle.value.trim(),
       processModelId: currentProcess.value.id,
+      selectedAssignees: collectSelectedAssignees(),
     });
     if (draftKey.value) {
       localStorage.removeItem(draftKey.value);
@@ -234,11 +272,17 @@ defineExpose({
         </div>
         <RuntimeFormRenderer
           :ref="handleRuntimeFormRef"
-          :field-permissions="[]"
+          :field-permissions="startForm?.fieldPermissions ?? []"
           :form-data-json="formDataJson"
           :loading="loading"
           :option-json="startForm?.optionJson ?? '{}'"
           :schema-json="startForm?.schemaJson ?? '[]'"
+        />
+        <AssigneeSelectPanel
+          v-if="assigneeSelectNodes.length"
+          v-model:value="selectedAssignees"
+          :disabled="saving || submitting"
+          :nodes="assigneeSelectNodes"
         />
       </div>
 

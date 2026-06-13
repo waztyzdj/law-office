@@ -2,7 +2,7 @@
 
 ## 文档目的
 
-本文用于固定审批中心审批人解析所依赖的组织关系底座。审批中心一期要支持指定人员、指定角色、部门负责人、部门岗位、发起人直属上级、发起人自选等审批人配置方式，不能依赖模糊字段或前端输入 ID 硬配置。
+本文用于固定审批中心审批人解析所依赖的组织关系底座。审批中心一期要支持指定人员、指定角色、部门负责人、部门岗位、发起人直属上级、审批人自选等审批人配置方式，不能依赖模糊字段或前端输入 ID 硬配置。
 
 本次设计优先复用现有组织表，通过增强字段落地，不新增 `sys_depart_leader`、`sys_user_supervisor` 独立关系表。
 
@@ -23,7 +23,7 @@
 - 部门负责人复用 `sys_user_depart`，在用户-部门关系上标记唯一负责人。
 - 发起人直属上级复用 `sys_user_depart`，按用户所在部门维护直属上级。
 - 部门岗位复用 `sys_depart_role`、`sys_depart_role_user`，通过字段标记哪些部门角色可作为审批岗位。
-- 发起人自选必须配置可选范围，不能开放全公司随意选择。
+- 审批人自选不配置可选范围；运行时由上一环节办理人从本租户有效用户中选择下一节点审批人。
 
 ## 设计原则
 
@@ -97,7 +97,7 @@
 | `depart_leader` | 部门负责人 | 固定取发起人当前部门 | `sys_user_depart.depart_leader_flag` |
 | `depart_role` | 部门岗位 | 选择可用于审批的部门角色 | `sys_depart_role.workflow_enabled` + `sys_depart_role_user` |
 | `starter_supervisor` | 发起人直属上级 | 无需选择具体人 | `sys_user_depart.supervisor_user_id` |
-| `starter_select` | 发起人自选 | 配置可选范围 | 按配置范围解析候选用户后由发起人选择 |
+| `starter_select` | 审批人自选 | 无需配置范围 | 到达上一环节办理动作时，由当前办理人从本租户有效用户中选择 |
 
 说明：
 
@@ -151,31 +151,17 @@
 - `departSource=starter`：取发起人主部门或发起时选择的部门下的 `supervisor_user_id`。
 - `emptyStrategy=error`：找不到直属上级时阻断流程。
 
-### 发起人自选
+### 审批人自选
 
-```json
-{
-  "selectMode": "single",
-  "scopeRules": [
-    {
-      "type": "depart_leader",
-      "departSource": "starter"
-    },
-    {
-      "type": "role",
-      "roleIds": ["..."]
-    }
-  ]
-}
-```
+`starter_select` 的 `assignee_json` 为空，不在设计阶段保存选择范围。
 
 规则：
 
-- `selectMode=single`：发起人只能选择 1 个审批人。
-- `selectMode=multiple`：发起人可选择多个人；一期建议先限制为 `single`。
-- `scopeRules` 由管理员在流程设计阶段配置。
-- 发起申请页面只展示运行时解析出的可选人员，不允许手输用户 ID。
-- 发起人提交时，后端必须校验所选用户仍在可选范围内，不能信任前端。
+- `selectMode=single`：当前办理人只能选择 1 个审批人。
+- `selectMode=multiple`：当前办理人可选择多个人；一期建议先限制为 `single`。
+- `starter_select` 不配置 `scopeRules`，运行时复用公共人员选择器选择本租户有效用户。
+- 发起或审批提交页面只允许通过人员选择器选择用户，不允许手输用户 ID。
+- 提交时，后端必须校验所选用户仍为当前租户有效成员，不能信任前端。
 
 ## 审批人解析流程
 
@@ -185,8 +171,11 @@
   -> 解析组织关系和人员范围
   -> 过滤当前租户无效用户、冻结用户、已删除用户
   -> 去重并生成候选结果
-  -> 单人写入 wf_task.assignee_*
-  -> 多人写入 wf_task_candidate
+  -> 指定角色/部门岗位多人时由当前环节办理人选择下一审批人
+  -> 当前环节选择结果写入 wf_process_instance_assignee 快照
+  -> 任务创建时优先读取实例快照写入 wf_task.assignee_*
+  -> 未要求发起人选择且解析为单人时写入 wf_task.assignee_*
+  -> 仅候选池策略写入 wf_task_candidate
   -> 同步 Flowable assignee 或 candidate user
 ```
 
@@ -197,7 +186,7 @@
 - `DepartLeaderAssigneeResolver`：部门负责人。
 - `DepartRoleAssigneeResolver`：部门岗位。
 - `StarterSupervisorAssigneeResolver`：发起人直属上级。
-- `StarterSelectAssigneeResolver`：发起人自选。
+- `StarterSelectAssigneeResolver`：审批人自选。
 
 解析结果建议统一 DTO：
 
@@ -271,12 +260,12 @@
 | `POST` | `/user/supervisor/get` | 查询用户直属上级 |
 | `POST` | `/user/supervisor/save` | 保存用户直属上级 |
 | `POST` | `/workflow/assignee/preview` | 流程设计时预览节点审批人解析结果 |
-| `POST` | `/workflow/assignee/select-options` | 发起人自选时获取可选审批人 |
+| `POST` | `/system/picker/user/list` | 审批人自选时复用公共人员选择器查询本租户有效用户 |
 
 说明：
 
 - 组织关系维护接口归系统域。
-- 审批人预览和发起人自选接口归工作流域。
+- 审批人预览归工作流域，审批人自选复用系统域公共人员选择器。
 - 所有接口参数放 body。
 
 ## 前端审批人配置组件
@@ -290,7 +279,7 @@ AssigneeConfigPanel
   -> DepartPicker
   -> DepartRolePicker
   -> SupervisorRuleConfig
-  -> StarterSelectScopeConfig
+  -> StarterSelectRuntimeTip
 ```
 
 交互要求：
@@ -301,7 +290,7 @@ AssigneeConfigPanel
 - 部门负责人固定按发起人当前部门解析，不开放指定部门范围选择。
 - 部门岗位可选择“发起人所在部门 + 部门岗位”或“指定部门 + 部门岗位”。
 - 发起人直属上级无需选择具体人员，只显示规则说明。
-- 发起人自选必须配置选择范围，发起页面按范围展示候选用户。
+- 审批人自选不配置选择范围，只显示运行时选择说明；实际办理时复用公共人员选择器。
 
 ## 实施顺序
 
@@ -319,4 +308,4 @@ AssigneeConfigPanel
 
 - 部门负责人是否必须是本部门成员；当前设计天然要求负责人存在于 `sys_user_depart`，即属于该部门。
 - 直属上级是否必须属于同部门；本文建议同部门或上级部门。
-- 发起人自选一期是否只允许单选；本文建议一期先单选。
+- 审批人自选一期只允许单选，后续如需要会签再扩展多选。

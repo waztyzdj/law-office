@@ -39,6 +39,7 @@ interface Props {
   excludeUserIds?: string[];
   maxCount?: number;
   mode?: UserPickerMode;
+  orgOnly?: boolean;
   selectedUsers?: UserInfo[];
 }
 
@@ -46,6 +47,7 @@ const props = withDefaults(defineProps<Props>(), {
   excludeUserIds: () => [],
   maxCount: undefined,
   mode: 'single',
+  orgOnly: false,
   selectedUsers: () => [],
 });
 
@@ -93,7 +95,7 @@ const selectedDepartIds = computed(() => {
 });
 const roleOptions = computed(() => roles.value.filter((role) => role.id));
 const sourceUsers = computed(() => {
-  if (activeTab.value === 'role') {
+  if (!props.orgOnly && activeTab.value === 'role') {
     return selectedRoleId.value ? normalizeUsers(roleUsers.value) : [];
   }
   return normalizeUsers(selectedDepartId.value ? departUsers.value : users.value);
@@ -129,7 +131,7 @@ async function loadInitialData() {
     const [userList, departList, roleList] = await Promise.all([
       listPickerUsers(),
       listPickerDeparts(),
-      listPickerRoles(),
+      props.orgOnly ? Promise.resolve([]) : listPickerRoles(),
     ]);
     users.value = userList;
     departs.value = departList;
@@ -271,6 +273,7 @@ function handlePageChange(page: number, size: number) {
     </div>
       <section class="user-picker-left">
         <Tabs
+          v-if="!orgOnly"
           v-model:active-key="activeTab"
           size="small"
         >
@@ -310,6 +313,18 @@ function handlePageChange(page: number, size: number) {
             <Empty v-else description="暂无角色" />
           </Tabs.TabPane>
         </Tabs>
+        <template v-else>
+          <div class="user-picker-tree-title">组织架构</div>
+          <Tree
+            v-if="departTreeData.length > 0"
+            v-model:expanded-keys="expandedDepartKeys"
+            :selected-keys="selectedDepartId ? [selectedDepartId] : []"
+            :tree-data="departTreeData"
+            block-node
+            @select="handleDepartSelect"
+          />
+          <Empty v-else description="暂无部门" />
+        </template>
       </section>
 
       <section class="user-picker-middle">
@@ -415,6 +430,14 @@ function handlePageChange(page: number, size: number) {
   display: flex;
   flex-direction: column;
   overflow: auto;
+}
+
+.user-picker-tree-title {
+  color: #1f2937;
+  flex: 0 0 24px;
+  font-size: 14px;
+  font-weight: 600;
+  margin-bottom: 8px;
 }
 
 .user-picker-left :deep(.ant-tabs) {

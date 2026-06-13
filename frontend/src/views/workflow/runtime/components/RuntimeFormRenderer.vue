@@ -80,11 +80,37 @@ function normalizePermission(
   return 'editable';
 }
 
+function isEnabledFlag(value: unknown) {
+  return value === true || value === 1 || value === '1' || value === 'true';
+}
+
+function hasRequiredValidate(rule: FormRule) {
+  const currentValidate = Array.isArray(rule.validate) ? rule.validate : [];
+  return currentValidate.some((item: object) => {
+    const validateRule = item as Record<string, unknown>;
+    return validateRule.required === true;
+  });
+}
+
+function resolveDesignerRequired(rule: FormRule) {
+  const formRule = rule as FormRule & Record<string, unknown>;
+  const effect = (rule.effect ?? {}) as Record<string, unknown>;
+  const props = (rule.props ?? {}) as Record<string, unknown>;
+  return (
+    hasRequiredValidate(rule) ||
+    isEnabledFlag(formRule.$required) ||
+    isEnabledFlag(effect.required) ||
+    isEnabledFlag(props.required)
+  );
+}
+
 function ensureRequiredValidate(rule: FormRule, required: boolean) {
+  const formRule = rule as FormRule & Record<string, unknown>;
   const currentValidate = Array.isArray(rule.validate) ? rule.validate : [];
   const withoutRequired = currentValidate.filter(
     (item: object) => !('required' in item) || item.required !== true,
   );
+  formRule.$required = false;
 
   if (!required) {
     rule.validate = withoutRequired;
@@ -105,7 +131,7 @@ function ensureRequiredValidate(rule: FormRule, required: boolean) {
   ];
   rule.effect = {
     ...(rule.effect ?? {}),
-    required: true,
+    required: false,
   };
 }
 
@@ -117,19 +143,20 @@ function applyRulePermission(rule: FormRule) {
   if (rule.field) {
     const field = String(rule.field);
     const item = permissionMap.value.get(field);
-    const hasExplicitPermission = Boolean(item?.permission);
+    const hasExplicitPermission = Boolean(item);
     const permission = normalizePermission(item);
-    const required = Number(item?.requiredFlag ?? 0) === 1;
+    const required = hasExplicitPermission
+      ? Number(item?.requiredFlag ?? 0) === 1
+      : resolveDesignerRequired(rule);
 
     rule.hidden = permission === 'hidden';
     rule.display = permission !== 'hidden';
     rule.props = {
       ...(rule.props ?? {}),
       disabled: props.disabled || permission === 'readonly',
+      required: false,
     };
-    if (hasExplicitPermission) {
-      ensureRequiredValidate(rule, permission === 'editable' && required);
-    }
+    ensureRequiredValidate(rule, permission === 'editable' && required);
   }
 
   if (Array.isArray(rule.children)) {

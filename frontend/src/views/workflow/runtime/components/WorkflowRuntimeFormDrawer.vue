@@ -3,13 +3,16 @@ import type { ComponentPublicInstance } from 'vue';
 
 import type {
   AvailableProcessInfo,
+  AssigneeSelectNodeInfo,
   InstanceDetailInfo,
   OperationRecordInfo,
   RuntimeTaskInfo,
+  SelectedAssigneeReq,
   StartFormInfo,
   TaskActionReq,
   TaskFormInfo,
 } from '#/api/workflow';
+import type { UserInfo } from '#/api/system/user';
 
 import { computed, nextTick, ref } from 'vue';
 
@@ -45,8 +48,10 @@ import {
   transferWorkflowTask,
 } from '#/api/workflow';
 import { UserPicker } from '#/components/user-picker';
+import UserPickerPanel from '#/components/user-picker/UserPickerPanel.vue';
 
 import { getStatusMeta, getWorkflowActionMeta } from '../../components/status';
+import AssigneeSelectPanel from './AssigneeSelectPanel.vue';
 import RuntimeFormRenderer from './RuntimeFormRenderer.vue';
 
 type DrawerMode = 'detail' | 'done' | 'start' | 'started' | 'todo';
@@ -98,8 +103,13 @@ const saving = ref(false);
 const submitting = ref(false);
 const actionModalOpen = ref(false);
 const actionSubmitting = ref(false);
+const assigneePickerOpen = ref(false);
+const assigneeSelectModalOpen = ref(false);
+const pendingApprovePayload = ref<TaskActionReq>();
 const currentAction = ref<WorkflowAction>();
 const actionForm = ref<ActionForm>(getEmptyActionForm());
+const selectedAssignees = ref<SelectedAssigneeReq[]>([]);
+const draftSelectedAssigneeUsers = ref<UserInfo[]>([]);
 
 const currentUserName = computed(
   () =>
@@ -158,7 +168,27 @@ const formOptionJson = computed(
 const formDataJson = computed(
   () => taskForm.value?.formDataJson || detail.value?.formInstance?.formDataJson || '{}',
 );
-const fieldPermissions = computed(() => taskForm.value?.fieldPermissions ?? []);
+const fieldPermissions = computed(() => {
+  if (isStartMode.value) {
+    return startForm.value?.fieldPermissions ?? [];
+  }
+  return taskForm.value?.fieldPermissions ?? [];
+});
+const assigneeSelectNodes = computed<AssigneeSelectNodeInfo[]>(() => {
+  if (isStartMode.value) {
+    return startForm.value?.assigneeSelectNodes ?? [];
+  }
+  if (isTodoMode.value) {
+    return taskForm.value?.assigneeSelectNodes ?? [];
+  }
+  return [];
+});
+const runtimeFreeSelectNode = computed(() =>
+  assigneeSelectNodes.value.find((node) => node.assigneeType === 'starter_select'),
+);
+const runtimeFixedSelectNodes = computed(() =>
+  assigneeSelectNodes.value.filter((node) => node.assigneeType !== 'starter_select'),
+);
 const processInstance = computed(() => detail.value?.processInstance);
 const chronologicalRecords = computed(() =>
   [...(detail.value?.records ?? [])].sort((a, b) =>
@@ -246,8 +276,13 @@ function resetState(payload: DrawerPayload) {
     : '';
   businessKey.value = '';
   actionModalOpen.value = false;
+  assigneePickerOpen.value = false;
+  assigneeSelectModalOpen.value = false;
+  pendingApprovePayload.value = undefined;
   currentAction.value = undefined;
   actionForm.value = getEmptyActionForm();
+  selectedAssignees.value = [];
+  draftSelectedAssigneeUsers.value = [];
   drawerApi.setState({ title: drawerTitle.value });
 }
 
@@ -315,6 +350,32 @@ function validateTitle() {
   return true;
 }
 
+function validateSelectedAssignees() {
+  for (const node of assigneeSelectNodes.value) {
+    if (!node.nodeId) {
+      continue;
+    }
+    const selected = selectedAssignees.value.find((item) => item.nodeId === node.nodeId);
+    if (!selected?.userIds?.[0]) {
+      message.warning(`请选择${node.nodeName || node.nodeId}的审批人`);
+      return false;
+    }
+  }
+  return true;
+}
+
+function collectSelectedAssignees() {
+  const result: SelectedAssigneeReq[] = [];
+  for (const item of selectedAssignees.value) {
+    const nodeId = item.nodeId;
+    const userId = item.userIds?.[0];
+    if (nodeId && userId) {
+      result.push({ nodeId, userIds: [userId] });
+    }
+  }
+  return result;
+}
+
 async function handleSaveStartDraft() {
   if (!currentProcess.value?.id || !validateTitle()) {
     return;
@@ -339,6 +400,9 @@ async function handleStartSubmit() {
   if (!currentProcess.value?.id || !validateTitle()) {
     return;
   }
+  if (!validateSelectedAssignees()) {
+    return;
+  }
   submitting.value = true;
   try {
     await startWorkflowProcess({
@@ -346,6 +410,7 @@ async function handleStartSubmit() {
       formDataJson: await collectFormDataJson(true),
       instanceTitle: instanceTitle.value.trim(),
       processModelId: currentProcess.value.id,
+      selectedAssignees: collectSelectedAssignees(),
     });
     message.success('申请已提交');
     emit('success');
@@ -365,18 +430,78 @@ async function handleApprove() {
       formDataJson: await collectFormDataJson(true),
       taskId: taskForm.value.taskId,
     };
-    const result = isStartDraftTask.value
-      ? await submitWorkflowStartDraft(payload)
-      : await approveWorkflowTask(payload);
-    message.success(isStartDraftTask.value ? '申请已提交' : '审批已通过');
-    if (result.processInstanceId) {
-      detail.value = await getWorkflowInstanceDetail(result.processInstanceId);
+    if (assigneeSelectNodes.value.length) {
+      pendingApprovePayload.value = payload;
+      if (runtimeFreeSelectNode.value) {
+        draftSelectedAssigneeUsers.value = [];
+        assigneePickerOpen.value = true;
+      } else {
+        selectedAssignees.value = [];
+        assigneeSelectModalOpen.value = true;
+      }
+      return;
     }
-    emit('success');
-    drawerApi.close();
+    await submitApprovePayload(payload);
   } finally {
     submitting.value = false;
   }
+}
+
+async function handleAssigneePickerConfirm() {
+  if (!pendingApprovePayload.value) {
+    return;
+  }
+  const node = runtimeFreeSelectNode.value;
+  const user = draftSelectedAssigneeUsers.value[0];
+  if (!node?.nodeId || !user?.id) {
+    message.warning('请选择下一审批人');
+    return;
+  }
+  submitting.value = true;
+  try {
+    await submitApprovePayload({
+      ...pendingApprovePayload.value,
+      selectedAssignees: [{ nodeId: node.nodeId, userIds: [user.id] }],
+    });
+    assigneePickerOpen.value = false;
+    pendingApprovePayload.value = undefined;
+    draftSelectedAssigneeUsers.value = [];
+  } finally {
+    submitting.value = false;
+  }
+}
+
+async function handleAssigneeSelectConfirm() {
+  if (!pendingApprovePayload.value) {
+    return;
+  }
+  if (!validateSelectedAssignees()) {
+    return;
+  }
+  submitting.value = true;
+  try {
+    await submitApprovePayload({
+      ...pendingApprovePayload.value,
+      selectedAssignees: collectSelectedAssignees(),
+    });
+    assigneeSelectModalOpen.value = false;
+    pendingApprovePayload.value = undefined;
+    selectedAssignees.value = [];
+  } finally {
+    submitting.value = false;
+  }
+}
+
+async function submitApprovePayload(payload: TaskActionReq) {
+  const result = isStartDraftTask.value
+    ? await submitWorkflowStartDraft(payload)
+    : await approveWorkflowTask(payload);
+  message.success(isStartDraftTask.value ? '申请已提交' : '审批已通过');
+  if (result.processInstanceId) {
+    detail.value = await getWorkflowInstanceDetail(result.processInstanceId);
+  }
+  emit('success');
+  drawerApi.close();
 }
 
 async function handleSaveStartDraftTask() {
@@ -546,6 +671,12 @@ defineExpose({
             :option-json="formOptionJson"
             :readonly="readonly"
             :schema-json="formSchemaJson"
+          />
+          <AssigneeSelectPanel
+            v-if="isStartMode && assigneeSelectNodes.length"
+            v-model:value="selectedAssignees"
+            :disabled="saving || submitting"
+            :nodes="assigneeSelectNodes"
           />
         </section>
 
@@ -786,6 +917,45 @@ defineExpose({
         />
       </div>
     </Modal>
+
+    <Modal
+      v-model:open="assigneePickerOpen"
+      :confirm-loading="submitting"
+      :destroy-on-close="false"
+      :width="960"
+      cancel-text="取消"
+      ok-text="确定并发送"
+      title="选择下一审批人"
+      wrap-class-name="user-picker-modal-wrap"
+      @cancel="pendingApprovePayload = undefined"
+      @ok="handleAssigneePickerConfirm"
+    >
+      <UserPickerPanel
+        v-model:selected-users="draftSelectedAssigneeUsers"
+        mode="single"
+        org-only
+      />
+    </Modal>
+
+    <Modal
+      v-model:open="assigneeSelectModalOpen"
+      :confirm-loading="submitting"
+      :width="620"
+      cancel-text="取消"
+      ok-text="确定并发送"
+      title="选择下一审批人"
+      wrap-class-name="workflow-assignee-select-modal-wrap"
+      @cancel="pendingApprovePayload = undefined"
+      @ok="handleAssigneeSelectConfirm"
+    >
+      <AssigneeSelectPanel
+        v-model:value="selectedAssignees"
+        compact
+        :disabled="submitting"
+        :nodes="runtimeFixedSelectNodes"
+        :show-title="false"
+      />
+    </Modal>
   </Drawer>
 </template>
 
@@ -943,6 +1113,17 @@ defineExpose({
   display: flex;
   flex-direction: column;
   gap: 16px;
+}
+
+:global(.workflow-assignee-select-modal-wrap .ant-modal-content) {
+  display: flex;
+  flex-direction: column;
+  height: 320px;
+}
+
+:global(.workflow-assignee-select-modal-wrap .ant-modal-body) {
+  flex: 1;
+  min-height: 0;
 }
 
 @media (max-width: 768px) {

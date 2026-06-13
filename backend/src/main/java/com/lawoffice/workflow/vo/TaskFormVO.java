@@ -44,4 +44,6 @@ public class TaskFormVO {
     private List<TaskReturnNodeVO> returnNodes;
 
     private List<RuntimeFieldPermissionVO> fieldPermissions;
+
+    private List<AssigneeSelectNodeVO> assigneeSelectNodes;
 }

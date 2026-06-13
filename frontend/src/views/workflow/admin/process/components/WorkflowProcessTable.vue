@@ -64,7 +64,7 @@ const tableConfig = computed(() =>
           type="primary"
           @click="$emit('addSimple')"
         >
-          新建简易流程
+          新建流程
         </Button>
         <Button @click="$emit('importBpmn')">导入 BPMN</Button>
       </Space>
