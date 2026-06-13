@@ -17,5 +17,9 @@ public class AssigneeSelectNodeVO {
 
     private Boolean required;
 
+    private Boolean fallback;
+
+    private String warningMessage;
+
     private List<AssigneeOptionVO> options;
 }

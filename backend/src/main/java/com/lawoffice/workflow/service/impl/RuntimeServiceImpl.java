@@ -2110,16 +2110,14 @@ public class RuntimeServiceImpl implements IRuntimeService {
     private AssigneeSelectNodeVO buildAssigneeSelectNode(ProcessNodeConfig nodeConfig,
             ProcessInstance processInstance, String tenantId) {
         if (WorkflowConstants.AssigneeType.STARTER_SELECT.equals(nodeConfig.getAssigneeType())) {
-            AssigneeSelectNodeVO vo = new AssigneeSelectNodeVO();
-            vo.setNodeId(nodeConfig.getNodeId());
-            vo.setNodeName(nodeConfig.getNodeName());
-            vo.setAssigneeType(nodeConfig.getAssigneeType());
-            vo.setSelectType(SELECT_TYPE_SINGLE);
-            vo.setRequired(true);
-            vo.setOptions(List.of());
-            return vo;
+            return buildStarterSelectNode(nodeConfig, false);
         }
-        List<ResolvedAssignee> assignees = resolveTaskAssignees(nodeConfig, processInstance, tenantId);
+        List<ResolvedAssignee> assignees;
+        try {
+            assignees = resolveTaskAssignees(nodeConfig, processInstance, tenantId);
+        } catch (IllegalArgumentException e) {
+            return buildStarterSelectNode(nodeConfig, true);
+        }
         if (assignees.size() <= 1) {
             return null;
         }
@@ -2130,6 +2128,21 @@ public class RuntimeServiceImpl implements IRuntimeService {
         vo.setSelectType(SELECT_TYPE_SINGLE);
         vo.setRequired(true);
         vo.setOptions(assignees.stream().map(this::buildAssigneeOption).toList());
+        return vo;
+    }
+
+    private AssigneeSelectNodeVO buildStarterSelectNode(ProcessNodeConfig nodeConfig, boolean fallback) {
+        AssigneeSelectNodeVO vo = new AssigneeSelectNodeVO();
+        vo.setNodeId(nodeConfig.getNodeId());
+        vo.setNodeName(nodeConfig.getNodeName());
+        vo.setAssigneeType(WorkflowConstants.AssigneeType.STARTER_SELECT);
+        vo.setSelectType(SELECT_TYPE_SINGLE);
+        vo.setRequired(true);
+        vo.setFallback(fallback);
+        if (fallback) {
+            vo.setWarningMessage("下一节点未解析到审批人，请手动选择下一审批人");
+        }
+        vo.setOptions(List.of());
         return vo;
     }
 

@@ -1030,7 +1030,7 @@ todo -> canceled
 - 当前环节选定的下一节点审批人写入 `wf_process_instance_assignee` 作为实例快照；后续任务创建优先使用实例快照，组织关系变更不影响已流转到该节点的责任人。
 - 解析结果为单人时，写入 `wf_task.assignee_user_id`、`assignee_username`、`assignee_realname`，并同步 Flowable task assignee。
 - 只有明确配置为候选池/抢办策略的节点，才允许多人写入 `wf_task_candidate(status=active)` 并同步 Flowable candidate user；一期默认不开放该策略。
-- 找不到审批人时，发布流程或发起流程应失败，不允许生成悬空待办。
+- 流程运行中解析下一节点审批人为空时，不直接阻断流转；系统提示当前办理人，并以“审批人自选”兜底选择本租户有效用户，选择结果写入 `wf_process_instance_assignee` 后继续流转，避免生成悬空待办。
 
 ### 字段权限
 
