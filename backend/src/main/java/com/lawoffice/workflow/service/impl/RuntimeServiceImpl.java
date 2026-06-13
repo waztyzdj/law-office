@@ -77,7 +77,12 @@ import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.util.StringUtils;
+import org.w3c.dom.Document;
+import org.w3c.dom.Element;
+import org.w3c.dom.NodeList;
+import org.xml.sax.InputSource;
 
+import java.io.StringReader;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
@@ -87,9 +92,12 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.function.Supplier;
+import javax.xml.XMLConstants;
+import javax.xml.parsers.DocumentBuilderFactory;
 
 @Service
 @Slf4j
@@ -101,6 +109,9 @@ public class RuntimeServiceImpl implements IRuntimeService {
     private static final String START_DRAFT_TASK_NAME = "提交申请";
 
     private record ResolvedAssignee(String userId, String username, String realname, String sourceType, String sourceId) {
+    }
+
+    private record NextNodeLookupResult(boolean resolvedByBpmn, Optional<ProcessNodeConfig> nodeConfig) {
     }
 
     private static final String SELECT_TYPE_SINGLE = "single";
@@ -283,6 +294,7 @@ public class RuntimeServiceImpl implements IRuntimeService {
                     buildFlowableVariables(processInstance, formInstance, context));
             processInstance.setFlowableProcessInstanceId(flowableStartResult.getProcessInstanceId());
             processInstance.setFlowableProcessDefinitionId(flowableStartResult.getProcessDefinitionId());
+            createSubmittedStartTask(processInstance, tenantId, context);
             syncCurrentTasks(processInstance, tenantId, context);
             EntityFillUtils.fillAuditFields(processInstance, context, false);
             processInstanceMapper.updateById(processInstance);
@@ -1956,6 +1968,31 @@ public class RuntimeServiceImpl implements IRuntimeService {
         processInstanceMapper.updateById(processInstance);
     }
 
+    /**
+     * 直接发起没有本地草稿任务，也要补齐一条已办任务，保证“直接发起”和“草稿提交”的已办口径一致。
+     */
+    private void createSubmittedStartTask(ProcessInstance processInstance, String tenantId, RequestContext context) {
+        String starterDisplayName = resolveDisplayName(
+                processInstance.getStarterRealname(),
+                processInstance.getStarterUsername(),
+                processInstance.getStarterUserId());
+        Task task = new Task();
+        task.setId(newId());
+        task.setTenantId(tenantId);
+        task.setProcessInstanceId(processInstance.getId());
+        task.setFlowableTaskId("start:" + task.getId());
+        task.setNodeId(START_DRAFT_NODE_ID);
+        task.setTaskName(START_DRAFT_TASK_NAME);
+        task.setTaskType(WorkflowConstants.TaskType.START_DRAFT);
+        task.setAssigneeUserId(processInstance.getStarterUserId());
+        task.setAssigneeUsername(processInstance.getStarterUsername());
+        task.setAssigneeRealname(starterDisplayName);
+        task.setStatus(WorkflowConstants.Status.DONE);
+        task.setCompleteTime(LocalDateTime.now());
+        EntityFillUtils.fillAuditFields(task, context, true);
+        taskMapper.insert(task);
+    }
+
     private ProcessNodeConfig buildStartDraftNodeConfig() {
         ProcessNodeConfig nodeConfig = new ProcessNodeConfig();
         nodeConfig.setNodeId(START_DRAFT_NODE_ID);
@@ -2058,20 +2095,117 @@ public class RuntimeServiceImpl implements IRuntimeService {
                 .toList();
     }
 
-    private java.util.Optional<ProcessNodeConfig> findNextApproverNodeConfig(String processModelId, String currentNodeId, String tenantId) {
+    private Optional<ProcessNodeConfig> findNextApproverNodeConfig(String processModelId, String currentNodeId, String tenantId) {
         List<ProcessNodeConfig> nodes = listApproverNodeConfigs(processModelId, tenantId);
         if (nodes.isEmpty()) {
-            return java.util.Optional.empty();
+            return Optional.empty();
+        }
+        NextNodeLookupResult bpmnNext = findNextApproverNodeConfigByBpmn(processModelId, currentNodeId, tenantId, nodes);
+        if (bpmnNext.resolvedByBpmn()) {
+            return bpmnNext.nodeConfig();
         }
         if (!StringUtils.hasText(currentNodeId) || START_DRAFT_NODE_ID.equals(currentNodeId)) {
-            return java.util.Optional.of(nodes.get(0));
+            return Optional.of(nodes.get(0));
         }
         for (int i = 0; i < nodes.size(); i++) {
             if (currentNodeId.equals(nodes.get(i).getNodeId()) && i + 1 < nodes.size()) {
-                return java.util.Optional.of(nodes.get(i + 1));
+                return Optional.of(nodes.get(i + 1));
             }
         }
-        return java.util.Optional.empty();
+        return Optional.empty();
+    }
+
+    /**
+     * 流程流转以 Flowable 的 BPMN 连线为准；前端在提交前选择下一审批人时必须和真实下一节点一致。
+     */
+    private NextNodeLookupResult findNextApproverNodeConfigByBpmn(String processModelId, String currentNodeId,
+            String tenantId, List<ProcessNodeConfig> nodes) {
+        ProcessModel model = processModelMapper.selectOne(new QueryWrapper<ProcessModel>()
+                .select("id", "bpmn_xml")
+                .eq("id", processModelId)
+                .eq("tenant_id", tenantId)
+                .eq("delete_flag", 0));
+        if (model == null || !StringUtils.hasText(model.getBpmnXml())) {
+            return new NextNodeLookupResult(false, Optional.empty());
+        }
+        String sourceNodeId = START_DRAFT_NODE_ID.equals(currentNodeId) || !StringUtils.hasText(currentNodeId)
+                ? findBpmnStartEventId(model.getBpmnXml()).orElse(null)
+                : currentNodeId;
+        if (!StringUtils.hasText(sourceNodeId)) {
+            return new NextNodeLookupResult(false, Optional.empty());
+        }
+        Set<String> userTaskIds = nodes.stream()
+                .map(ProcessNodeConfig::getNodeId)
+                .filter(StringUtils::hasText)
+                .collect(java.util.stream.Collectors.toSet());
+        Optional<ProcessNodeConfig> nextNode = findNextBpmnUserTaskId(model.getBpmnXml(), sourceNodeId, userTaskIds)
+                .flatMap(nodeId -> nodes.stream()
+                        .filter(node -> nodeId.equals(node.getNodeId()))
+                        .findFirst());
+        return new NextNodeLookupResult(true, nextNode);
+    }
+
+    private Optional<String> findBpmnStartEventId(String bpmnXml) {
+        try {
+            Document document = parseBpmnDocument(bpmnXml);
+            NodeList startEvents = document.getElementsByTagNameNS("*", "startEvent");
+            if (startEvents.getLength() == 0) {
+                return Optional.empty();
+            }
+            String startEventId = ((Element) startEvents.item(0)).getAttribute("id");
+            return StringUtils.hasText(startEventId) ? Optional.of(startEventId) : Optional.empty();
+        } catch (Exception e) {
+            return Optional.empty();
+        }
+    }
+
+    private Optional<String> findNextBpmnUserTaskId(String bpmnXml, String sourceNodeId, Set<String> userTaskIds) {
+        try {
+            Document document = parseBpmnDocument(bpmnXml);
+            Map<String, List<String>> targetIdsBySourceId = new LinkedHashMap<>();
+            NodeList sequenceFlows = document.getElementsByTagNameNS("*", "sequenceFlow");
+            for (int i = 0; i < sequenceFlows.getLength(); i++) {
+                Element element = (Element) sequenceFlows.item(i);
+                String sourceRef = element.getAttribute("sourceRef");
+                String targetRef = element.getAttribute("targetRef");
+                if (StringUtils.hasText(sourceRef) && StringUtils.hasText(targetRef)) {
+                    targetIdsBySourceId.computeIfAbsent(sourceRef, key -> new ArrayList<>()).add(targetRef);
+                }
+            }
+            Set<String> visited = new HashSet<>();
+            return findReachableUserTaskId(sourceNodeId, targetIdsBySourceId, userTaskIds, visited);
+        } catch (Exception e) {
+            return Optional.empty();
+        }
+    }
+
+    private Optional<String> findReachableUserTaskId(String sourceNodeId, Map<String, List<String>> targetIdsBySourceId,
+            Set<String> userTaskIds, Set<String> visited) {
+        if (!visited.add(sourceNodeId)) {
+            return Optional.empty();
+        }
+        for (String targetId : targetIdsBySourceId.getOrDefault(sourceNodeId, List.of())) {
+            if (userTaskIds.contains(targetId)) {
+                return Optional.of(targetId);
+            }
+            Optional<String> nested = findReachableUserTaskId(targetId, targetIdsBySourceId, userTaskIds, visited);
+            if (nested.isPresent()) {
+                return nested;
+            }
+        }
+        return Optional.empty();
+    }
+
+    private Document parseBpmnDocument(String bpmnXml) throws Exception {
+        DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
+        factory.setNamespaceAware(true);
+        factory.setFeature(XMLConstants.FEATURE_SECURE_PROCESSING, true);
+        factory.setFeature("http://apache.org/xml/features/disallow-doctype-decl", true);
+        factory.setFeature("http://xml.org/sax/features/external-general-entities", false);
+        factory.setFeature("http://xml.org/sax/features/external-parameter-entities", false);
+        factory.setXIncludeAware(false);
+        factory.setExpandEntityReferences(false);
+        return factory.newDocumentBuilder().parse(new InputSource(new StringReader(bpmnXml)));
     }
 
     private List<ProcessNodeConfig> listApproverNodeConfigs(String processModelId, String tenantId) {

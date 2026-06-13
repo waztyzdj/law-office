@@ -341,8 +341,8 @@ function validateTitle() {
   return true;
 }
 
-function validateSelectedAssignees() {
-  for (const node of assigneeSelectNodes.value) {
+function validateSelectedAssignees(nodes: AssigneeSelectNodeInfo[]) {
+  for (const node of nodes) {
     if (!node.nodeId) {
       continue;
     }
@@ -365,6 +365,27 @@ function collectSelectedAssignees() {
     }
   }
   return result;
+}
+
+function openNextAssigneeSelect(payload: PendingSubmitPayload) {
+  if (!assigneeSelectNodes.value.length) {
+    return false;
+  }
+  pendingSubmitPayload.value = payload;
+  if (runtimeFixedSelectNodes.value.length) {
+    selectedAssignees.value = [];
+    assigneeSelectModalOpen.value = true;
+    return true;
+  }
+  if (runtimeFreeSelectNode.value) {
+    if (runtimeFreeSelectNode.value.warningMessage) {
+      message.warning(runtimeFreeSelectNode.value.warningMessage);
+    }
+    draftSelectedAssigneeUsers.value = [];
+    assigneePickerOpen.value = true;
+    return true;
+  }
+  return false;
 }
 
 async function handleSaveStartDraft() {
@@ -399,18 +420,7 @@ async function handleStartSubmit() {
       instanceTitle: instanceTitle.value.trim(),
       processModelId: currentProcess.value.id,
     };
-    if (assigneeSelectNodes.value.length) {
-      pendingSubmitPayload.value = payload;
-      if (runtimeFreeSelectNode.value) {
-        if (runtimeFreeSelectNode.value.warningMessage) {
-          message.warning(runtimeFreeSelectNode.value.warningMessage);
-        }
-        draftSelectedAssigneeUsers.value = [];
-        assigneePickerOpen.value = true;
-      } else {
-        selectedAssignees.value = [];
-        assigneeSelectModalOpen.value = true;
-      }
+    if (openNextAssigneeSelect(payload)) {
       return;
     }
     await submitStartPayload(payload);
@@ -445,18 +455,7 @@ async function handleApprove() {
       formDataJson: await collectFormDataJson(true),
       taskId: taskForm.value.taskId,
     };
-    if (assigneeSelectNodes.value.length) {
-      pendingSubmitPayload.value = payload;
-      if (runtimeFreeSelectNode.value) {
-        if (runtimeFreeSelectNode.value.warningMessage) {
-          message.warning(runtimeFreeSelectNode.value.warningMessage);
-        }
-        draftSelectedAssigneeUsers.value = [];
-        assigneePickerOpen.value = true;
-      } else {
-        selectedAssignees.value = [];
-        assigneeSelectModalOpen.value = true;
-      }
+    if (openNextAssigneeSelect(payload)) {
       return;
     }
     await submitApprovePayload(payload);
@@ -520,7 +519,7 @@ async function handleAssigneeSelectConfirm() {
   if (!pendingSubmitPayload.value) {
     return;
   }
-  if (!validateSelectedAssignees()) {
+  if (!validateSelectedAssignees(runtimeFixedSelectNodes.value)) {
     return;
   }
   submitting.value = true;

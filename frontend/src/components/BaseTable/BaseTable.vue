@@ -67,9 +67,12 @@ const tableProps = computed(() => {
     ...restProps
   } = props as Props & { class?: any; style?: any };
 
+  const pagination =
+    restProps.pagination ?? (tableAttrs.value.pagination as Props['pagination']);
+
   return {
     ...restProps,
-    pagination: normalizePagination(restProps.pagination),
+    pagination: normalizePagination(pagination),
   };
 });
 
