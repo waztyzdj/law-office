@@ -14,24 +14,18 @@ import type {
   TaskFormInfo,
 } from '#/api/workflow';
 import type { UserInfo } from '#/api/system/user';
+import type {
+  DrawerMode,
+  ProcessProgressNode,
+  WorkflowAction,
+} from './runtimeTypes';
 
 import { computed, nextTick, ref } from 'vue';
 
 import { useVbenDrawer } from '@vben/common-ui';
 import { useUserStore } from '@vben/stores';
 
-import {
-  Button,
-  Empty,
-  message,
-  Modal,
-  Select,
-  Spin,
-  Tabs,
-  Tag,
-  Textarea,
-  Timeline,
-} from 'ant-design-vue';
+import { message, Modal, Select, Spin } from 'ant-design-vue';
 
 import {
   addSignWorkflowTask,
@@ -47,26 +41,14 @@ import {
   submitWorkflowStartDraft,
   transferWorkflowTask,
 } from '#/api/workflow';
-import UserPickerPanel from '#/components/user-picker/UserPickerPanel.vue';
-
-import { getStatusMeta, getWorkflowActionMeta } from '../../components/status';
-import AssigneeSelectPanel from './AssigneeSelectPanel.vue';
+import { getStatusMeta } from '../../components/status';
+import RuntimeActionBar from './RuntimeActionBar.vue';
+import RuntimeApprovalComment from './RuntimeApprovalComment.vue';
+import RuntimeAssigneeModals from './RuntimeAssigneeModals.vue';
 import RuntimeFormRenderer from './RuntimeFormRenderer.vue';
+import RuntimeSideTabs from './RuntimeSideTabs.vue';
 
-type DrawerMode = 'detail' | 'done' | 'start' | 'started' | 'todo';
-type WorkflowAction = 'addSign' | 'return' | 'transfer';
 type PendingSubmitPayload = StartProcessReq | TaskActionReq;
-
-interface ProcessProgressNode {
-  action?: string;
-  actor?: string;
-  comment?: string;
-  id: string;
-  name: string;
-  resultStatus?: string;
-  status: 'current' | 'done' | 'end';
-  time?: string;
-}
 
 interface DrawerPayload {
   instanceId?: string;
@@ -588,6 +570,14 @@ function openActionUserPicker(action: Extract<WorkflowAction, 'addSign' | 'trans
   actionUserPickerOpen.value = true;
 }
 
+function handleRuntimeAction(action: WorkflowAction) {
+  if (action === 'return') {
+    openActionModal(action);
+    return;
+  }
+  openActionUserPicker(action);
+}
+
 async function handleActionConfirm() {
   if (!taskForm.value?.taskId || !currentAction.value) {
     return;
@@ -738,23 +728,6 @@ function getProcessEndComment(status?: string) {
   return statusLabel === '-' ? '流程已结束' : `流程${statusLabel}`;
 }
 
-function getTimelineColor(action?: string) {
-  if (action === 'reject' || action === 'return') {
-    return 'red';
-  }
-  return 'green';
-}
-
-function getProgressNodeColor(node: ProcessProgressNode) {
-  if (node.status === 'current') {
-    return 'blue';
-  }
-  if (node.status === 'end') {
-    return 'green';
-  }
-  return getTimelineColor(node.action);
-}
-
 defineExpose({
   open,
 });
@@ -778,177 +751,36 @@ defineExpose({
               />
             </div>
 
-            <div
+            <RuntimeApprovalComment
               v-if="showApprovalComment"
-              class="approval-comment-panel"
-            >
-              <label class="approval-comment-label">审批意见</label>
-              <div class="approval-comment-control">
-                <Textarea
-                  v-model:value="approvalComment"
-                  :maxlength="500"
-                  :rows="4"
-                  placeholder="请输入审批意见"
-                  show-count
-                />
-              </div>
-            </div>
+              v-model:value="approvalComment"
+            />
           </section>
 
           <aside class="runtime-side-section">
-            <Tabs
+            <RuntimeSideTabs
               v-model:active-key="activeTab"
-              class="runtime-side-tabs"
-            >
-              <Tabs.TabPane
-                key="records"
-                tab="审批意见"
-              >
-                <div
-                  v-if="processProgressNodes.length"
-                  class="process-progress-panel"
-                >
-                  <Timeline class="process-progress-timeline">
-                    <Timeline.Item
-                      v-for="node in processProgressNodes"
-                      :key="node.id"
-                      :color="getProgressNodeColor(node)"
-                    >
-                      <div class="progress-node">
-                        <div class="progress-node-head">
-                          <span class="progress-node-name">{{ node.name }}</span>
-                          <Tag
-                            v-if="node.status === 'current'"
-                            color="processing"
-                          >
-                            当前
-                          </Tag>
-                          <Tag
-                            v-else-if="node.action"
-                            :color="getWorkflowActionMeta(node.action).color"
-                          >
-                            {{ getWorkflowActionMeta(node.action).label }}
-                          </Tag>
-                        </div>
-                        <div
-                          v-if="node.status !== 'end'"
-                          class="progress-node-meta"
-                        >
-                          <span>处理人：{{ node.actor || '-' }}</span>
-                          <span>时间：{{ node.time || '-' }}</span>
-                        </div>
-                        <div
-                          v-if="node.comment && node.status !== 'end'"
-                          class="progress-node-comment"
-                        >
-                          {{ node.comment }}
-                        </div>
-                      </div>
-                    </Timeline.Item>
-                  </Timeline>
-                </div>
-                <div
-                  v-else
-                  class="runtime-empty-panel"
-                >
-                  <Empty description="暂无审批意见" />
-                </div>
-              </Tabs.TabPane>
-
-              <Tabs.TabPane
-                key="circulate"
-                tab="传阅"
-              >
-                <div class="runtime-empty-panel circulate-empty-panel">
-                  <Empty description="暂无传阅记录">
-                    <template #description>
-                      <div class="empty-description">
-                        <div>暂无传阅记录</div>
-                        <span>传阅/抄送属于二期能力，后续会在这里展示传阅人、传阅时间和阅读状态。</span>
-                      </div>
-                    </template>
-                  </Empty>
-                </div>
-              </Tabs.TabPane>
-            </Tabs>
+              :nodes="processProgressNodes"
+            />
           </aside>
         </div>
 
-        <div
+        <RuntimeActionBar
           v-if="showRuntimeActions"
-          class="runtime-actions"
-        >
-          <template v-if="isStartMode">
-            <Button
-              :disabled="submitting"
-              :loading="saving"
-              type="primary"
-              @click="handleSaveStartDraft"
-            >
-              保存
-            </Button>
-            <Button
-              :loading="submitting"
-              type="primary"
-              @click="handleStartSubmit"
-            >
-              提交
-            </Button>
-          </template>
-          <template v-else-if="isTodoMode">
-            <Button
-              v-if="isStartDraftTask"
-              :disabled="submitting"
-              :loading="saving"
-              type="primary"
-              @click="handleSaveStartDraftTask"
-            >
-              保存
-            </Button>
-            <Button
-              v-if="actionPermissions?.allowApprove"
-              :disabled="saving"
-              :loading="submitting"
-              type="primary"
-              @click="handleApprove"
-            >
-              {{ isStartDraftTask ? '提交' : '通过' }}
-            </Button>
-            <Button
-              v-if="!isStartDraftTask && actionPermissions?.allowReject"
-              :disabled="saving || submitting"
-              :loading="submitting"
-              danger
-              @click="handleReject"
-            >
-              不通过
-            </Button>
-            <Button
-              v-if="!isStartDraftTask && actionPermissions?.allowReturn"
-              @click="openActionModal('return')"
-            >
-              退回
-            </Button>
-            <Button
-              v-if="!isStartDraftTask && actionPermissions?.allowTransfer"
-              @click="openActionUserPicker('transfer')"
-            >
-              转办
-            </Button>
-            <Button
-              v-if="!isStartDraftTask && actionPermissions?.allowAddSign"
-              @click="openActionUserPicker('addSign')"
-            >
-              加签
-            </Button>
-          </template>
-          <Button
-            :disabled="saving || submitting"
-            @click="drawerApi.close()"
-          >
-            取消
-          </Button>
-        </div>
+          :action-permissions="actionPermissions"
+          :is-start-draft-task="isStartDraftTask"
+          :is-start-mode="isStartMode"
+          :is-todo-mode="isTodoMode"
+          :saving="saving"
+          :submitting="submitting"
+          @action="handleRuntimeAction"
+          @approve="handleApprove"
+          @cancel="drawerApi.close()"
+          @reject="handleReject"
+          @save-start-draft="handleSaveStartDraft"
+          @save-start-draft-task="handleSaveStartDraftTask"
+          @submit-start="handleStartSubmit"
+        />
       </div>
     </Spin>
 
@@ -969,63 +801,25 @@ defineExpose({
       </div>
     </Modal>
 
-    <Modal
-      v-model:open="actionUserPickerOpen"
-      :confirm-loading="actionSubmitting"
-      :destroy-on-close="false"
-      :width="960"
-      cancel-text="取消"
-      ok-text="确定并发送"
-      :title="actionModalTitle"
-      wrap-class-name="workflow-user-picker-modal-wrap"
-      @cancel="actionSelectedUsers = []"
-      @ok="handleActionUserPickerConfirm"
-    >
-      <UserPickerPanel
-        v-model:selected-users="actionSelectedUsers"
-        :exclude-user-ids="currentTask?.assigneeUserId ? [currentTask.assigneeUserId] : []"
-        mode="single"
-      />
-    </Modal>
-
-    <Modal
-      v-model:open="assigneePickerOpen"
-      :confirm-loading="submitting"
-      :destroy-on-close="false"
-      :width="960"
-      cancel-text="取消"
-      ok-text="确定并发送"
-      title="选择下一审批人"
-      wrap-class-name="workflow-user-picker-modal-wrap"
-      @cancel="pendingSubmitPayload = undefined"
-      @ok="handleAssigneePickerConfirm"
-    >
-      <UserPickerPanel
-        v-model:selected-users="draftSelectedAssigneeUsers"
-        mode="single"
-        org-only
-      />
-    </Modal>
-
-    <Modal
-      v-model:open="assigneeSelectModalOpen"
-      :confirm-loading="submitting"
-      :width="620"
-      cancel-text="取消"
-      ok-text="确定并发送"
-      title="选择下一审批人"
-      wrap-class-name="workflow-assignee-select-modal-wrap"
-      @cancel="pendingSubmitPayload = undefined"
-      @ok="handleAssigneeSelectConfirm"
-    >
-      <AssigneeSelectPanel
-        v-model:value="selectedAssignees"
-        compact
-        :disabled="submitting"
-        :nodes="runtimeFixedSelectNodes"
-        :show-title="false"
-      />
-    </Modal>
+    <RuntimeAssigneeModals
+      v-model:action-open="actionUserPickerOpen"
+      v-model:action-selected-users="actionSelectedUsers"
+      v-model:assignee-picker-open="assigneePickerOpen"
+      v-model:assignee-select-modal-open="assigneeSelectModalOpen"
+      v-model:draft-selected-assignee-users="draftSelectedAssigneeUsers"
+      v-model:selected-assignees="selectedAssignees"
+      :action-submitting="actionSubmitting"
+      :current-action="currentAction"
+      :current-task="currentTask"
+      :fixed-select-nodes="runtimeFixedSelectNodes"
+      :submitting="submitting"
+      @action-cancel="actionSelectedUsers = []"
+      @action-confirm="handleActionUserPickerConfirm"
+      @assignee-picker-cancel="pendingSubmitPayload = undefined"
+      @assignee-picker-confirm="handleAssigneePickerConfirm"
+      @assignee-select-cancel="pendingSubmitPayload = undefined"
+      @assignee-select-confirm="handleAssigneeSelectConfirm"
+    />
   </Drawer>
 </template>
 
@@ -1069,30 +863,6 @@ defineExpose({
   overflow: auto;
 }
 
-.approval-comment-panel {
-  align-items: flex-start;
-  border-top: 1px solid #f0f0f0;
-  display: flex;
-  flex: 0 0 auto;
-  gap: 12px;
-  margin-top: 16px;
-  padding-top: 14px;
-}
-
-.approval-comment-label {
-  color: #1f2937;
-  flex: 0 0 92px;
-  font-size: 14px;
-  font-weight: 500;
-  line-height: 32px;
-  text-align: right;
-}
-
-.approval-comment-control {
-  flex: 1;
-  min-width: 0;
-}
-
 .runtime-side-section {
   border-left: 1px solid #f0f0f0;
   display: flex;
@@ -1102,148 +872,10 @@ defineExpose({
   padding-left: 20px;
 }
 
-.runtime-side-tabs {
-  display: flex;
-  flex: 1;
-  flex-direction: column;
-  min-width: 0;
-  min-height: 0;
-}
-
-.runtime-side-tabs :deep(.ant-tabs-content-holder) {
-  flex: 1;
-  min-height: 0;
-  overflow: auto;
-}
-
-.runtime-side-tabs :deep(.ant-tabs-content),
-.runtime-side-tabs :deep(.ant-tabs-tabpane) {
-  min-height: 100%;
-}
-
-.progress-node-meta {
-  color: #6b7280;
-  font-size: 13px;
-}
-
-.runtime-empty-panel {
-  align-items: center;
-  background: #fafafa;
-  border: 1px dashed #d9d9d9;
-  border-radius: 6px;
-  display: flex;
-  justify-content: center;
-  min-height: 180px;
-}
-
-.empty-description {
-  color: #6b7280;
-  font-size: 13px;
-  line-height: 1.7;
-  text-align: center;
-}
-
-.empty-description > div {
-  color: #4b5563;
-  font-size: 14px;
-}
-
-.circulate-empty-panel {
-  min-height: 180px;
-}
-
-.process-progress-panel {
-  padding: 8px 4px 0;
-}
-
-.process-progress-timeline {
-  padding: 4px 4px 0;
-}
-
-.progress-node {
-  min-width: 0;
-}
-
-.progress-node-head {
-  align-items: center;
-  display: flex;
-  gap: 8px;
-  margin-bottom: 6px;
-}
-
-.progress-node-name {
-  color: #111827;
-  font-weight: 500;
-}
-
-.progress-node-meta {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px 16px;
-}
-
-.progress-node-comment {
-  background: #fafafa;
-  border-radius: 6px;
-  color: #4b5563;
-  font-size: 13px;
-  line-height: 1.6;
-  margin-top: 8px;
-  padding: 8px 10px;
-  white-space: pre-wrap;
-  word-break: break-word;
-}
-
-.runtime-actions {
-  border-top: 1px solid #f0f0f0;
-  display: flex;
-  flex: 0 0 auto;
-  flex-wrap: wrap;
-  gap: 12px;
-  justify-content: center;
-  margin-top: 16px;
-  padding-top: 14px;
-}
-
 .action-form {
   display: flex;
   flex-direction: column;
   gap: 16px;
-}
-
-:global(.workflow-user-picker-modal-wrap) {
-  align-items: center;
-  display: flex;
-  justify-content: center;
-}
-
-:global(.workflow-user-picker-modal-wrap .ant-modal) {
-  max-width: 960px;
-  top: 0;
-}
-
-:global(.workflow-user-picker-modal-wrap .ant-modal-content) {
-  display: flex;
-  flex-direction: column;
-  height: 640px;
-}
-
-:global(.workflow-user-picker-modal-wrap .ant-modal-body) {
-  display: flex;
-  flex: 1;
-  min-height: 0;
-  overflow: hidden;
-}
-
-:global(.workflow-assignee-select-modal-wrap .ant-modal-content) {
-  display: flex;
-  flex-direction: column;
-  height: 320px;
-}
-
-:global(.workflow-assignee-select-modal-wrap .ant-modal-body) {
-  flex: 1;
-  min-height: 0;
 }
 
 @media (max-width: 768px) {
