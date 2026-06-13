@@ -198,6 +198,7 @@ Flowable 负责：
 
 - 同一个 `form_key` 可以有多个版本。
 - 表单版本唯一键建议使用 `tenant_id + form_key + version + delete_flag`。
+- 同一个 `tenant_id + form_key` 同一时间只允许存在一个有效 `draft` 版本；已存在草稿时，不允许再次新建版本。
 - 只有 `published` 表单版本可以绑定到已发布流程。
 - 编辑已发布表单时，应复制新版本，不直接覆盖历史版本。
 
@@ -255,6 +256,7 @@ Flowable 负责：
 
 - 发布时生成 Flowable deployment。
 - 流程模型版本唯一键建议使用 `tenant_id + process_key + version + delete_flag`。
+- 同一个 `tenant_id + process_key` 同一时间只允许存在一个有效 `draft` 版本；已存在草稿时，不允许再次新建版本。
 - 发布后不直接修改当前版本，编辑时复制新版本。
 - 前端默认加载最新 `published` 版本发起申请。
 
@@ -768,6 +770,7 @@ published -> draft copy
 规则：
 
 - 已发布版本不直接编辑。
+- 同一流程编码已存在草稿版本时，不允许再次复制新版本草稿。
 - 禁用后不可发起新申请，不影响已发起实例继续流转。
 
 ### 表单定义状态
@@ -781,6 +784,7 @@ published -> draft copy
 规则：
 
 - 已发布表单版本不直接覆盖。
+- 同一表单编码已存在草稿版本时，不允许再次复制新版本草稿。
 - 流程实例使用发起时的表单快照。
 
 ### 流程实例状态
@@ -849,6 +853,7 @@ todo -> canceled
 - 流程分类、表单定义、流程模型、节点配置、字段权限和发起权限保存时必须校验租户、必填字段、枚举值和唯一键。
 - 表单定义发布后不可直接修改或删除；如需调整，复制为下一版本草稿。
 - 流程模型发布后不可直接修改或删除；节点配置和字段权限也随流程版本冻结。
+- 复制表单或流程为下一版本草稿前，必须校验同租户同编码不存在有效草稿；存在草稿时，前端不展示“新建版本”，后端 `copy-as-draft` 接口也必须拒绝。
 - 表单发布必须校验 FormCreate `schema_json` 合法；流程发布必须校验 BPMN XML、绑定已发布表单版本、至少一个审批节点。
 - `start_scope_type=specified` 的流程发布前必须配置发起权限。
 - 流程发布时通过 `IFlowableService` 部署 BPMN XML，并回写 `flowable_deployment_id`、`flowable_process_definition_id`。
