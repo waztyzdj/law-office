@@ -86,6 +86,6 @@ export function getWorkflowCategoryColumns(
     filterState,
     emit,
     pagination,
-    { minTableWidth: 1090 },
+    { minTableWidth: 1090, tableKey: 'workflow_category' },
   );
 }

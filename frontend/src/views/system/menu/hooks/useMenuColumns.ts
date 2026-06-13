@@ -97,6 +97,6 @@ export function getMenuColumns(
     filterState,
     emit,
     pagination,
-    { minTableWidth: 1180 },
+    { minTableWidth: 1180, tableKey: 'system_menu' },
   );
 }

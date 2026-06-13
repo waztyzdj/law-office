@@ -116,6 +116,7 @@ const emit = defineEmits<{
 - 优先使用 Vben 已有封装：`useVbenForm`、`useVbenDrawer`、访问控制指令、`@vben/common-ui` 等。
 - Ant Design Vue 组件从 `ant-design-vue` 按需导入；不要自行封装一套重复基础组件。
 - 表格优先使用 `src/composables/Table` 的 `useTable`、`defineTableColumns`、列筛选与列宽持久化能力。
+- 使用 `defineTableColumns` 时必须传入模块唯一的 `tableKey`，例如 `{ tableKey: 'system_user' }`。列宽持久化会按 `tableKey:dataIndex` 隔离，禁止多个列表共用默认列宽命名空间，避免 `action`、`status` 等同名列互相污染宽度。
 - Table 必须配置：`row-key`、`loading`、`pagination`、必要的 `scroll`，长列设置宽度并允许省略提示。
 - 系统表格表头统一居中；表体按字段语义对齐：普通文本左对齐、数值右对齐、状态/枚举/下拉选项/日期时间/操作列居中。通用 `defineTableColumns` 默认遵循该规则，手写 Ant Design Vue Table 必须显式配置列对齐和表头居中。
 - 操作列固定在右侧，关闭筛选：`fixed: 'right'`、`hasFilter: false`。
@@ -196,7 +197,7 @@ const emit = defineEmits<{
 - 列表页工具条默认只保留新增、筛选和必要的单条操作，不提供批量删除和刷新按钮；如确有需要，单独按需求设计，不与通用列表默认行为混用。
 - 用户管理抽屉可作为参考模板，但不建议把整套表单 schema 抽成强通用组件；优先复用 `useVbenDrawer + useVbenForm` 的打开、预填、同步、校验、锁定提交、关闭回填这条生命周期链。只有当多个业务抽屉在宽度、标题、动作区和提交流程都高度一致时，才抽共享壳子或 `useFormDrawer` 类组合式能力。
 - 树形列表、TreeSelect、授权树等通用树操作优先复用 `src/composables/Tree/useTree.ts`，包括树数据加载、选项转换、节点过滤、展开 key 和子孙 key 收集；构造树数据时叶子节点不要补空 `children`，否则树表会把它们当成可展开节点；业务接口、校验、提交和权限判断仍留在页面或业务组件中。
-- 表格筛选状态可持久化到 localStorage，但 key 必须模块唯一，且读取失败时安全返回空对象。
+- 表格筛选状态可持久化到 localStorage，但 key 必须模块唯一，且读取失败时安全返回空对象。表格列宽持久化必须通过 `defineTableColumns` 的 `tableKey` 隔离，同一业务列表的 `tableKey` 要稳定，不得随路由参数、分页或筛选条件变化。
 - `BaseApi` 实例方法如果依赖 `this`，传给组合函数时必须用箭头函数或导出的包装方法，避免上下文丢失。
 - 用户表单当前使用 `UserFormDrawer.vue` 模式：打开前准备 schema 和初始值，打开后同步表单，提交后清洗 payload 并刷新列表。
 - 涉及数据库字段枚举、状态码或字段含义时，必须先参考 `sql/建表脚本.sql` 对应字段注释；前端展示文案、表单选项、TS 类型和 API payload 不得自行定义与建表脚本不一致的含义。

@@ -129,6 +129,6 @@ export function getWorkflowFormColumns(
     filterState,
     emit,
     pagination,
-    { minTableWidth: 1580 },
+    { minTableWidth: 1580, tableKey: 'workflow_form' },
   );
 }

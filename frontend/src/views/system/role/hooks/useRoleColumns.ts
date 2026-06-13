@@ -66,5 +66,6 @@ export function getRoleColumns(
     filterState,
     emit,
     pagination,
+    { tableKey: 'system_role' },
   );
 }

@@ -65,7 +65,7 @@ export function getDictColumns(
     filterState,
     emit,
     pagination,
-    { minTableWidth: 1120 },
+    { minTableWidth: 1120, tableKey: 'system_dict' },
   );
 }
 
@@ -137,6 +137,6 @@ export function getDictItemColumns(
     filterState,
     emit,
     pagination,
-    { minTableWidth: 1120 },
+    { minTableWidth: 1120, tableKey: 'system_dict_item' },
   );
 }

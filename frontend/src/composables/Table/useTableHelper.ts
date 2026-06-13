@@ -13,14 +13,14 @@ import {
 
 // 存储各列的宽度（用于持久化）
 const columnWidths = ref<Record<string, number>>({});
+const columnWidthStorageKey = 'table_columnWidths_v2';
 
 /**
  * 从 localStorage 加载列宽
  */
 function loadColumnWidth(columnKey: string): number | null {
   try {
-    const storageKey = 'table_columnWidths';
-    const stored = localStorage.getItem(storageKey);
+    const stored = localStorage.getItem(columnWidthStorageKey);
     if (stored) {
       const allWidths = JSON.parse(stored);
       return allWidths[columnKey] || null;
@@ -36,11 +36,10 @@ function loadColumnWidth(columnKey: string): number | null {
  */
 function saveColumnWidth(columnKey: string, width: number) {
   try {
-    const storageKey = 'table_columnWidths';
-    const stored = localStorage.getItem(storageKey);
+    const stored = localStorage.getItem(columnWidthStorageKey);
     const allWidths = stored ? JSON.parse(stored) : {};
     allWidths[columnKey] = width;
-    localStorage.setItem(storageKey, JSON.stringify(allWidths));
+    localStorage.setItem(columnWidthStorageKey, JSON.stringify(allWidths));
   } catch (error) {
     console.error('保存列宽失败:', error);
   }
@@ -191,6 +190,14 @@ export interface TableColumnOptions<T = any> {
   [key: string]: any;
 }
 
+export interface TableConfigOptions {
+  actionColumnKey?: string;
+  autoFreezeActionColumn?: boolean;
+  enableScroll?: boolean;
+  minTableWidth?: number;
+  tableKey?: string;
+}
+
 /**
  * 创建带 Tooltip 的单元格内容
  * @param content 要显示的内容
@@ -270,7 +277,8 @@ export function defineTableColumn<T = any>(
   options: TableColumnOptions<T> = {},
   filterState?: any,
   emit?: any,
-  pagination?: TablePaginationConfig
+  pagination?: TablePaginationConfig,
+  tableKey?: string,
 ): any {
   const {
     width,
@@ -289,7 +297,7 @@ export function defineTableColumn<T = any>(
   const bodyAlign = align || getDefaultColumnAlign(dataIndex, columnType);
 
   // 初始化列宽（从 localStorage 恢复或使用默认值）
-  const columnKey = dataIndex;
+  const columnKey = tableKey ? `${tableKey}:${dataIndex}` : dataIndex;
   if (width && !columnWidths.value[columnKey]) {
     const savedWidth = loadColumnWidth(columnKey);
     columnWidths.value[columnKey] = savedWidth !== null ? savedWidth : width;
@@ -473,13 +481,14 @@ export function defineTableColumns<T = any>(
   filterState?: any,
   emit?: any,
   pagination?: TablePaginationConfig,
-  tableConfigOptions: any = {}
+  tableConfigOptions: TableConfigOptions = {},
 ): TableColumnsResult {
   const {
     enableScroll = true,
     autoFreezeActionColumn = true,
     actionColumnKey = 'action',
     minTableWidth = 800,
+    tableKey,
   } = tableConfigOptions;
 
   // 处理每一列的配置
@@ -490,7 +499,8 @@ export function defineTableColumns<T = any>(
       colConfig.options || {},
       filterState,
       emit,
-      pagination
+      pagination,
+      tableKey,
     );
   });
 

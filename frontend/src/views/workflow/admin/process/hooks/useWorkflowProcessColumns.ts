@@ -178,6 +178,6 @@ export function getWorkflowProcessColumns(
     filterState,
     emit,
     pagination,
-    { minTableWidth: 1850 },
+    { minTableWidth: 1850, tableKey: 'workflow_process' },
   );
 }

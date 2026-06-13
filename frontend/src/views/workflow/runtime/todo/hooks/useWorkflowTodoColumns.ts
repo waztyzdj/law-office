@@ -103,6 +103,6 @@ export function getWorkflowTodoColumns(
     filterState,
     emit,
     pagination,
-    { minTableWidth: 1200 },
+    { minTableWidth: 1200, tableKey: 'workflow_todo' },
   );
 }

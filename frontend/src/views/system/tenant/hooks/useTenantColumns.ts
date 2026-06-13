@@ -135,6 +135,6 @@ export function getTenantColumns(
     filterState,
     emit,
     pagination,
-    { minTableWidth: 1660 },
+    { minTableWidth: 1660, tableKey: 'system_tenant' },
   );
 }

@@ -97,5 +97,7 @@ export function getUserColumns(
   ];
 
   // 使用通用列定义函数处理（返回 { columns, scroll }）
-  return defineTableColumns(columns.filter(Boolean), filterState, emit, pagination);
+  return defineTableColumns(columns.filter(Boolean), filterState, emit, pagination, {
+    tableKey: 'system_user',
+  });
 }

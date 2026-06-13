@@ -133,6 +133,6 @@ export function getInboxColumns(
     filterState,
     emit,
     pagination,
-    { minTableWidth: 1200 },
+    { minTableWidth: 1200, tableKey: 'message_inbox' },
   );
 }

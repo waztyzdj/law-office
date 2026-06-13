@@ -91,6 +91,10 @@ export function getDepartRoleColumns(
     filterState,
     emit,
     pagination,
-    { actionColumnKey: 'departRoleAction', minTableWidth: 960 },
+    {
+      actionColumnKey: 'departRoleAction',
+      minTableWidth: 960,
+      tableKey: 'system_depart_role',
+    },
   );
 }

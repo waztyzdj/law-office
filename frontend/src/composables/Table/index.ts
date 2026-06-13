@@ -23,4 +23,8 @@ export type { FilterConditionOption, ColumnType, SelectOption } from './useTable
 
 // 表格列定义辅助函数
 export { defineTableColumn, defineTableColumns } from './useTableHelper';
-export type { TableColumnOptions, TableColumnsResult } from './useTableHelper';
+export type {
+  TableColumnOptions,
+  TableColumnsResult,
+  TableConfigOptions,
+} from './useTableHelper';

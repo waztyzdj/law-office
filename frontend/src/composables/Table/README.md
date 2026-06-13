@@ -289,7 +289,9 @@ export function getUserColumns(filterState, emit, pagination) {
     { dataIndex: 'phone', title: '电话', options: { width: 130 } },
   ];
   
-  return defineTableColumns(columns, filterState, emit, pagination);
+  return defineTableColumns(columns, filterState, emit, pagination, {
+    tableKey: 'system_user',
+  });
 }
 ```
 
@@ -493,9 +495,10 @@ interface SelectOption {
 ### 列宽持久化存储
 
 - **存储位置**: `localStorage`
-- **键名**: `table_columnWidths`
-- **格式**: `{ "username": 120, "email": 180, ... }`
-- **清除方法**: `localStorage.removeItem('table_columnWidths')`
+- **键名**: `table_columnWidths_v2`
+- **格式**: `{ "system_user:username": 120, "system_user:email": 180, ... }`
+- **隔离规则**: 使用 `defineTableColumns` 时必须传入稳定且模块唯一的 `tableKey`，列宽会按 `tableKey:dataIndex` 保存，避免不同列表的同名列互相污染。
+- **清除方法**: `localStorage.removeItem('table_columnWidths_v2')`
 
 ### 宽度限制
 

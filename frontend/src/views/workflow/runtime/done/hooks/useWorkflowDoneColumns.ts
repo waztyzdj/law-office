@@ -106,6 +106,6 @@ export function getWorkflowDoneColumns(
     filterState,
     emit,
     pagination,
-    { minTableWidth: 1200 },
+    { minTableWidth: 1200, tableKey: 'workflow_done' },
   );
 }

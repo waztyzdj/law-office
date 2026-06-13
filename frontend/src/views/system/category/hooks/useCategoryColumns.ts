@@ -60,6 +60,6 @@ export function getCategoryColumns(
     filterState,
     emit,
     pagination,
-    { minTableWidth: 860 },
+    { minTableWidth: 860, tableKey: 'system_category' },
   );
 }

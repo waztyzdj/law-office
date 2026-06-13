@@ -129,7 +129,7 @@ const tableConfig = computed(() =>
     activeFilters,
     handleColumnEmit,
     tablePagination,
-    { minTableWidth: 760 },
+    { minTableWidth: 760, tableKey: 'workflow_process_history' },
   ),
 );
 const tableScroll = computed(() => tableConfig.value.scroll ?? { x: 760 });

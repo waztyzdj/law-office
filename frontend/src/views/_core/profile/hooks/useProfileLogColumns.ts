@@ -85,6 +85,6 @@ export function getProfileLogColumns(
     filterState,
     emit,
     pagination,
-    { minTableWidth: 1160 },
+    { minTableWidth: 1160, tableKey: 'profile_log' },
   );
 }

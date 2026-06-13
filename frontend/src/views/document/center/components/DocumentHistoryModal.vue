@@ -144,7 +144,7 @@ const tableConfig = computed(() =>
     activeFilters,
     handleColumnEmit,
     tablePagination,
-    { minTableWidth: 860 },
+    { minTableWidth: 860, tableKey: 'document_history' },
   ),
 );
 

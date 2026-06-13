@@ -64,6 +64,7 @@ const selectedUserIds = ref<string[]>([]);
 const selectedRoleIds = ref<string[]>([]);
 const selectedDepartRoleIds = ref<string[]>([]);
 const syncing = ref(false);
+const selectDropdownStyle = { zIndex: 3101 };
 
 const userOptions = computed<SelectOption[]>(() =>
   users.value
@@ -231,8 +232,10 @@ function handleDepartRoleChange(value: unknown) {
     >
       <Select
         :disabled="disabled"
+        :dropdown-style="selectDropdownStyle"
         :options="assigneeTypeOptions"
         :value="type"
+        popup-class-name="workflow-assignee-select-popup"
         @change="handleTypeChange"
       />
     </FormItem>
@@ -244,6 +247,7 @@ function handleDepartRoleChange(value: unknown) {
     >
       <Select
         :disabled="disabled"
+        :dropdown-style="selectDropdownStyle"
         :options="userOptions"
         :value="selectedUserIds"
         mode="multiple"
@@ -269,6 +273,7 @@ function handleDepartRoleChange(value: unknown) {
     >
       <Select
         :disabled="disabled"
+        :dropdown-style="selectDropdownStyle"
         :options="roleOptions"
         :value="selectedRoleIds"
         mode="multiple"
@@ -294,6 +299,7 @@ function handleDepartRoleChange(value: unknown) {
     >
       <Select
         :disabled="disabled"
+        :dropdown-style="selectDropdownStyle"
         :options="departRoles"
         :value="selectedDepartRoleIds"
         mode="multiple"

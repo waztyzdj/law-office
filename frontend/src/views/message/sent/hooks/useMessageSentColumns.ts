@@ -117,6 +117,6 @@ export function getSentColumns(
     filterState,
     emit,
     pagination,
-    { minTableWidth: 1260 },
+    { minTableWidth: 1260, tableKey: 'message_sent' },
   );
 }

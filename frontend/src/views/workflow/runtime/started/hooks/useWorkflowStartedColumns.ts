@@ -99,6 +99,6 @@ export function getWorkflowStartedColumns(
     filterState,
     emit,
     pagination,
-    { minTableWidth: 1380 },
+    { minTableWidth: 1380, tableKey: 'workflow_started' },
   );
 }

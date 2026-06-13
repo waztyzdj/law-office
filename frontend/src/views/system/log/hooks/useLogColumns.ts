@@ -129,6 +129,6 @@ export function getLogColumns(
     filterState,
     emit,
     pagination,
-    { minTableWidth: 1680 },
+    { minTableWidth: 1680, tableKey: 'system_log' },
   );
 }

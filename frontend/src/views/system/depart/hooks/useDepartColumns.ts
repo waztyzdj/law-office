@@ -93,6 +93,10 @@ export function getDepartColumns(
     filterState,
     emit,
     pagination,
-    { actionColumnKey: 'departAction', minTableWidth: 1200 },
+    {
+      actionColumnKey: 'departAction',
+      minTableWidth: 1200,
+      tableKey: 'system_depart',
+    },
   );
 }
