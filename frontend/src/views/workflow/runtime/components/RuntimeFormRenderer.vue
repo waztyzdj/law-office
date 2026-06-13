@@ -3,7 +3,7 @@ import type { Api, FormRule, Options } from '@form-create/ant-design-vue';
 
 import type { RuntimeFieldPermissionInfo } from '#/api/workflow';
 
-import { computed, ref, watch } from 'vue';
+import { computed, ref, shallowRef, watch } from 'vue';
 
 import formCreate from '@form-create/ant-design-vue';
 
@@ -35,6 +35,8 @@ const props = withDefaults(
 const FormCreate = formCreate.$form();
 const formApi = ref<Api>();
 const formData = ref<Record<string, unknown>>({});
+const cachedRuleKey = ref('');
+const cachedRules = shallowRef<FormRule[]>([]);
 
 const parseError = ref('');
 
@@ -169,12 +171,24 @@ function applyRulePermission(rule: FormRule) {
 }
 
 const rules = computed<FormRule[]>(() => {
+  const permissionKey = JSON.stringify(props.fieldPermissions ?? []);
+  const cacheKey = [
+    props.schemaJson,
+    permissionKey,
+    props.readonly ? 'readonly' : 'editable',
+    props.disabled ? 'disabled' : 'enabled',
+  ].join('|');
+  if (cacheKey === cachedRuleKey.value) {
+    return cachedRules.value;
+  }
   parseError.value = '';
   const parsed = parseJson<FormRule[]>(props.schemaJson, []);
   const cloned = cloneRules(Array.isArray(parsed) ? parsed : []);
   for (const rule of cloned) {
     applyRulePermission(rule);
   }
+  cachedRuleKey.value = cacheKey;
+  cachedRules.value = cloned;
   return cloned;
 });
 
