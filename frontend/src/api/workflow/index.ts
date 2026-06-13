@@ -233,16 +233,16 @@ export interface AssigneeOptionInfo {
   username?: string;
 }
 
-  export interface AssigneeSelectNodeInfo {
-    assigneeType?: string;
-    fallback?: boolean;
-    nodeId?: string;
-    nodeName?: string;
-    options?: AssigneeOptionInfo[];
-    required?: boolean;
-    selectType?: string;
-    warningMessage?: string;
-  }
+export interface AssigneeSelectNodeInfo {
+  assigneeType?: string;
+  fallback?: boolean;
+  nodeId?: string;
+  nodeName?: string;
+  options?: AssigneeOptionInfo[];
+  required?: boolean;
+  selectType?: string;
+  warningMessage?: string;
+}
 
 export interface TaskActionResult {
   action?: string;
