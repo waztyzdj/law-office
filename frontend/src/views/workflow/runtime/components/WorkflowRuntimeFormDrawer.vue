@@ -22,7 +22,6 @@ import { useUserStore } from '@vben/stores';
 
 import {
   Button,
-  Descriptions,
   Empty,
   message,
   Modal,
@@ -48,7 +47,6 @@ import {
   submitWorkflowStartDraft,
   transferWorkflowTask,
 } from '#/api/workflow';
-import { UserPicker } from '#/components/user-picker';
 import UserPickerPanel from '#/components/user-picker/UserPickerPanel.vue';
 
 import { getStatusMeta, getWorkflowActionMeta } from '../../components/status';
@@ -56,7 +54,7 @@ import AssigneeSelectPanel from './AssigneeSelectPanel.vue';
 import RuntimeFormRenderer from './RuntimeFormRenderer.vue';
 
 type DrawerMode = 'detail' | 'done' | 'start' | 'started' | 'todo';
-type WorkflowAction = 'addSign' | 'reject' | 'return' | 'transfer';
+type WorkflowAction = 'addSign' | 'return' | 'transfer';
 type PendingSubmitPayload = StartProcessReq | TaskActionReq;
 
 interface ProcessProgressNode {
@@ -79,9 +77,7 @@ interface DrawerPayload {
 }
 
 interface ActionForm {
-  comment: string;
   targetNodeId: string;
-  targetUserId: string;
 }
 
 const emit = defineEmits<{
@@ -97,19 +93,22 @@ const startForm = ref<StartFormInfo>();
 const taskForm = ref<TaskFormInfo>();
 const detail = ref<InstanceDetailInfo>();
 const runtimeFormRef = ref<InstanceType<typeof RuntimeFormRenderer>>();
-const activeTab = ref('form');
+const activeTab = ref('records');
 const instanceTitle = ref('');
 const businessKey = ref('');
+const approvalComment = ref('');
 const loading = ref(false);
 const saving = ref(false);
 const submitting = ref(false);
 const actionModalOpen = ref(false);
 const actionSubmitting = ref(false);
+const actionUserPickerOpen = ref(false);
 const assigneePickerOpen = ref(false);
 const assigneeSelectModalOpen = ref(false);
 const pendingSubmitPayload = ref<PendingSubmitPayload>();
 const currentAction = ref<WorkflowAction>();
 const actionForm = ref<ActionForm>(getEmptyActionForm());
+const actionSelectedUsers = ref<UserInfo[]>([]);
 const selectedAssignees = ref<SelectedAssigneeReq[]>([]);
 const draftSelectedAssigneeUsers = ref<UserInfo[]>([]);
 
@@ -126,6 +125,10 @@ const isStartDraftTask = computed(
   () => taskForm.value?.taskType === 'start_draft',
 );
 const readonly = computed(() => !isStartMode.value && !isTodoMode.value);
+const showApprovalComment = computed(
+  () => isTodoMode.value && !isStartDraftTask.value,
+);
+const showRuntimeActions = computed(() => isStartMode.value || isTodoMode.value);
 const drawerTitle = computed(() => {
   if (isStartMode.value) {
     return currentProcess.value?.processName
@@ -137,22 +140,6 @@ const drawerTitle = computed(() => {
   }
   return '审批详情';
 });
-const summaryTitle = computed(
-  () =>
-    detail.value?.processInstance?.instanceTitle ||
-    taskForm.value?.instanceTitle ||
-    instanceTitle.value ||
-    currentProcess.value?.processName ||
-    '-',
-);
-const formTitle = computed(
-  () =>
-    startForm.value?.formName ||
-    taskForm.value?.formName ||
-    detail.value?.formInstance?.formName ||
-    currentProcess.value?.formName ||
-    '',
-);
 const formSchemaJson = computed(
   () =>
     startForm.value?.schemaJson ||
@@ -244,7 +231,6 @@ const returnNodeOptions = computed(() =>
 const actionModalTitle = computed(() => {
   const titleMap: Record<WorkflowAction, string> = {
     addSign: '加签',
-    reject: '不通过',
     return: '退回',
     transfer: '转办',
   };
@@ -252,7 +238,7 @@ const actionModalTitle = computed(() => {
 });
 
 const [Drawer, drawerApi] = useVbenDrawer({
-  class: 'w-full sm:w-[60vw]! sm:max-w-none!',
+  class: 'w-full sm:w-[90vw]! sm:max-w-none!',
   closeOnClickModal: true,
   contentClass: 'workflow-runtime-form-drawer',
   footer: false,
@@ -277,12 +263,15 @@ function resetState(payload: DrawerPayload) {
     ? buildDefaultInstanceTitle(payload.process)
     : '';
   businessKey.value = '';
+  approvalComment.value = '';
   actionModalOpen.value = false;
+  actionUserPickerOpen.value = false;
   assigneePickerOpen.value = false;
   assigneeSelectModalOpen.value = false;
   pendingSubmitPayload.value = undefined;
   currentAction.value = undefined;
   actionForm.value = getEmptyActionForm();
+  actionSelectedUsers.value = [];
   selectedAssignees.value = [];
   draftSelectedAssigneeUsers.value = [];
   drawerApi.setState({ title: drawerTitle.value });
@@ -450,6 +439,9 @@ async function handleApprove() {
   submitting.value = true;
   try {
     const payload = {
+      comment: showApprovalComment.value
+        ? resolveApprovalComment('同意')
+        : undefined,
       formDataJson: await collectFormDataJson(true),
       taskId: taskForm.value.taskId,
     };
@@ -468,6 +460,28 @@ async function handleApprove() {
       return;
     }
     await submitApprovePayload(payload);
+  } finally {
+    submitting.value = false;
+  }
+}
+
+async function handleReject() {
+  if (!taskForm.value?.taskId) {
+    return;
+  }
+  submitting.value = true;
+  try {
+    const result = await rejectWorkflowTask({
+      comment: resolveApprovalComment('不同意'),
+      formDataJson: await collectFormDataJson(true),
+      taskId: taskForm.value.taskId,
+    });
+    message.success('不通过已提交');
+    if (result.processInstanceId) {
+      detail.value = await getWorkflowInstanceDetail(result.processInstanceId);
+    }
+    emit('success');
+    drawerApi.close();
   } finally {
     submitting.value = false;
   }
@@ -566,6 +580,15 @@ function openActionModal(action: WorkflowAction) {
   actionModalOpen.value = true;
 }
 
+function openActionUserPicker(action: Extract<WorkflowAction, 'addSign' | 'transfer'>) {
+  if (!validateApprovalComment()) {
+    return;
+  }
+  currentAction.value = action;
+  actionSelectedUsers.value = [];
+  actionUserPickerOpen.value = true;
+}
+
 async function handleActionConfirm() {
   if (!taskForm.value?.taskId || !currentAction.value) {
     return;
@@ -576,10 +599,9 @@ async function handleActionConfirm() {
   actionSubmitting.value = true;
   try {
     const req: TaskActionReq = {
-      comment: actionForm.value.comment,
+      comment: resolveApprovalComment(),
       formDataJson: await collectFormDataJson(true),
       targetNodeId: actionForm.value.targetNodeId,
-      targetUserId: actionForm.value.targetUserId,
       taskId: taskForm.value.taskId,
     };
     const result = await submitTaskAction(currentAction.value, req);
@@ -595,16 +617,54 @@ async function handleActionConfirm() {
   }
 }
 
+async function handleActionUserPickerConfirm() {
+  if (!taskForm.value?.taskId || !currentAction.value) {
+    return;
+  }
+  if (!validateApprovalComment()) {
+    return;
+  }
+  const targetUser = actionSelectedUsers.value[0];
+  if (!targetUser?.id) {
+    message.warning('请选择目标人员');
+    return;
+  }
+
+  actionSubmitting.value = true;
+  try {
+    const req: TaskActionReq = {
+      comment: resolveApprovalComment(),
+      formDataJson: await collectFormDataJson(true),
+      targetUserId: targetUser.id,
+      taskId: taskForm.value.taskId,
+    };
+    const result = await submitTaskAction(currentAction.value, req);
+    message.success(`${actionModalTitle.value}已提交`);
+    actionUserPickerOpen.value = false;
+    if (result.processInstanceId) {
+      detail.value = await getWorkflowInstanceDetail(result.processInstanceId);
+    }
+    emit('success');
+    drawerApi.close();
+  } finally {
+    actionSubmitting.value = false;
+  }
+}
+
 function validateActionForm() {
+  if (!validateApprovalComment()) {
+    return false;
+  }
   if (currentAction.value === 'return' && !actionForm.value.targetNodeId) {
     message.warning('请选择退回节点');
     return false;
   }
-  if (
-    (currentAction.value === 'transfer' || currentAction.value === 'addSign') &&
-    !actionForm.value.targetUserId.trim()
-  ) {
-    message.warning('请选择目标人员');
+  return true;
+}
+
+function validateApprovalComment() {
+  if (!approvalComment.value.trim()) {
+    message.warning('请输入审批意见');
     return false;
   }
   return true;
@@ -614,9 +674,6 @@ function submitTaskAction(action: WorkflowAction, req: TaskActionReq) {
   switch (action) {
     case 'addSign': {
       return addSignWorkflowTask(req);
-    }
-    case 'reject': {
-      return rejectWorkflowTask(req);
     }
     case 'return': {
       return returnWorkflowTask(req);
@@ -629,10 +686,20 @@ function submitTaskAction(action: WorkflowAction, req: TaskActionReq) {
 
 function getEmptyActionForm(targetNodeId = ''): ActionForm {
   return {
-    comment: '',
     targetNodeId,
-    targetUserId: '',
   };
+}
+
+function resolveApprovalComment(defaultComment?: string) {
+  const comment = approvalComment.value.trim();
+  if (comment) {
+    return comment;
+  }
+  if (defaultComment) {
+    approvalComment.value = defaultComment;
+    return defaultComment;
+  }
+  return undefined;
 }
 
 function updateActionField(field: keyof ActionForm, value: string) {
@@ -698,153 +765,120 @@ defineExpose({
   <Drawer>
     <Spin :spinning="loading">
       <div class="runtime-drawer-body">
-        <section class="runtime-form-section">
-          <RuntimeFormRenderer
-            :ref="handleRuntimeFormRef"
-            :field-permissions="fieldPermissions"
-            :form-data-json="formDataJson"
-            :loading="loading"
-            :option-json="formOptionJson"
-            :readonly="readonly"
-            :schema-json="formSchemaJson"
-          />
-        </section>
+        <div class="runtime-drawer-main">
+          <section class="runtime-form-section">
+            <div class="runtime-form-content">
+              <RuntimeFormRenderer
+                :ref="handleRuntimeFormRef"
+                :field-permissions="fieldPermissions"
+                :form-data-json="formDataJson"
+                :loading="loading"
+                :option-json="formOptionJson"
+                :readonly="readonly"
+                :schema-json="formSchemaJson"
+              />
+            </div>
 
-        <Tabs v-model:active-key="activeTab">
-          <Tabs.TabPane
-            key="records"
-            tab="审批意见"
-          >
             <div
-              v-if="processProgressNodes.length"
-              class="process-progress-panel"
+              v-if="showApprovalComment"
+              class="approval-comment-panel"
             >
-              <div class="process-progress-head">
-                <div>
-                  <div class="process-progress-title">审批意见</div>
-                  <div class="process-progress-subtitle">
-                    按处理时间展示审批记录和当前待办
-                  </div>
-                </div>
+              <label class="approval-comment-label">审批意见</label>
+              <div class="approval-comment-control">
+                <Textarea
+                  v-model:value="approvalComment"
+                  :maxlength="500"
+                  :rows="4"
+                  placeholder="请输入审批意见"
+                  show-count
+                />
               </div>
-
-              <Timeline class="process-progress-timeline">
-                <Timeline.Item
-                  v-for="node in processProgressNodes"
-                  :key="node.id"
-                  :color="getProgressNodeColor(node)"
-                >
-                  <div class="progress-node">
-                    <div class="progress-node-head">
-                      <span class="progress-node-name">{{ node.name }}</span>
-                      <Tag
-                        v-if="node.status === 'current'"
-                        color="processing"
-                      >
-                        当前
-                      </Tag>
-                      <Tag
-                        v-else-if="node.action"
-                        :color="getWorkflowActionMeta(node.action).color"
-                      >
-                        {{ getWorkflowActionMeta(node.action).label }}
-                      </Tag>
-                    </div>
-                    <div
-                      v-if="node.status !== 'end'"
-                      class="progress-node-meta"
-                    >
-                      <span>处理人：{{ node.actor || '-' }}</span>
-                      <span>时间：{{ node.time || '-' }}</span>
-                    </div>
-                    <div
-                      v-if="node.comment && node.status !== 'end'"
-                      class="progress-node-comment"
-                    >
-                      {{ node.comment }}
-                    </div>
-                  </div>
-                </Timeline.Item>
-              </Timeline>
             </div>
-            <div
-              v-else
-              class="runtime-empty-panel"
+          </section>
+
+          <aside class="runtime-side-section">
+            <Tabs
+              v-model:active-key="activeTab"
+              class="runtime-side-tabs"
             >
-              <Empty description="暂无审批意见" />
-            </div>
-          </Tabs.TabPane>
-
-          <Tabs.TabPane
-            key="circulate"
-            tab="传阅"
-          >
-            <div class="runtime-empty-panel circulate-empty-panel">
-              <Empty description="暂无传阅记录">
-                <template #description>
-                  <div class="empty-description">
-                    <div>暂无传阅记录</div>
-                    <span>传阅/抄送属于二期能力，后续会在这里展示传阅人、传阅时间和阅读状态。</span>
-                  </div>
-                </template>
-              </Empty>
-            </div>
-          </Tabs.TabPane>
-
-          <Tabs.TabPane
-            key="diagram"
-            tab="流程图"
-          >
-            <div class="process-info-panel">
-              <div class="process-info-head">
-                <div>
-                  <div class="runtime-title">{{ summaryTitle }}</div>
-                  <div class="runtime-subtitle">
-                    {{ formTitle || '-' }}
-                    <span v-if="taskForm?.formVersion || startForm?.formVersion || detail?.formInstance?.formVersion">
-                      · v{{ taskForm?.formVersion ?? startForm?.formVersion ?? detail?.formInstance?.formVersion }}
-                    </span>
-                  </div>
-                </div>
-                <Tag :color="getStatusMeta(processInstance?.status || taskForm?.taskType).color">
-                  {{ getStatusMeta(processInstance?.status || taskForm?.taskType).label }}
-                </Tag>
-              </div>
-
-              <Descriptions
-                class="process-description"
-                :column="3"
-                bordered
-                size="small"
+              <Tabs.TabPane
+                key="records"
+                tab="审批意见"
               >
-                <Descriptions.Item label="审批编号">
-                  {{ processInstance?.instanceNo ?? taskForm?.instanceNo ?? '-' }}
-                </Descriptions.Item>
-                <Descriptions.Item label="发起人">
-                  {{ processInstance?.starterRealname ?? processInstance?.starterUsername ?? currentTask?.starterRealname ?? '-' }}
-                </Descriptions.Item>
-                <Descriptions.Item label="发起时间">
-                  {{ processInstance?.startTime ?? '-' }}
-                </Descriptions.Item>
-                <Descriptions.Item label="当前节点">
-                  {{ processInstance?.currentTaskNames ?? taskForm?.taskName ?? '-' }}
-                </Descriptions.Item>
-                <Descriptions.Item label="当前处理人">
-                  {{ processInstance?.currentAssigneeNames ?? currentTask?.assigneeRealname ?? '-' }}
-                </Descriptions.Item>
-                <Descriptions.Item label="状态">
-                  {{ getStatusMeta(processInstance?.status || taskForm?.taskType).label }}
-                </Descriptions.Item>
-              </Descriptions>
+                <div
+                  v-if="processProgressNodes.length"
+                  class="process-progress-panel"
+                >
+                  <Timeline class="process-progress-timeline">
+                    <Timeline.Item
+                      v-for="node in processProgressNodes"
+                      :key="node.id"
+                      :color="getProgressNodeColor(node)"
+                    >
+                      <div class="progress-node">
+                        <div class="progress-node-head">
+                          <span class="progress-node-name">{{ node.name }}</span>
+                          <Tag
+                            v-if="node.status === 'current'"
+                            color="processing"
+                          >
+                            当前
+                          </Tag>
+                          <Tag
+                            v-else-if="node.action"
+                            :color="getWorkflowActionMeta(node.action).color"
+                          >
+                            {{ getWorkflowActionMeta(node.action).label }}
+                          </Tag>
+                        </div>
+                        <div
+                          v-if="node.status !== 'end'"
+                          class="progress-node-meta"
+                        >
+                          <span>处理人：{{ node.actor || '-' }}</span>
+                          <span>时间：{{ node.time || '-' }}</span>
+                        </div>
+                        <div
+                          v-if="node.comment && node.status !== 'end'"
+                          class="progress-node-comment"
+                        >
+                          {{ node.comment }}
+                        </div>
+                      </div>
+                    </Timeline.Item>
+                  </Timeline>
+                </div>
+                <div
+                  v-else
+                  class="runtime-empty-panel"
+                >
+                  <Empty description="暂无审批意见" />
+                </div>
+              </Tabs.TabPane>
 
-              <div class="runtime-empty-panel diagram-empty-panel">
-                <Empty description="BPMN 流程图展示待接入" />
-              </div>
-            </div>
-          </Tabs.TabPane>
-        </Tabs>
+              <Tabs.TabPane
+                key="circulate"
+                tab="传阅"
+              >
+                <div class="runtime-empty-panel circulate-empty-panel">
+                  <Empty description="暂无传阅记录">
+                    <template #description>
+                      <div class="empty-description">
+                        <div>暂无传阅记录</div>
+                        <span>传阅/抄送属于二期能力，后续会在这里展示传阅人、传阅时间和阅读状态。</span>
+                      </div>
+                    </template>
+                  </Empty>
+                </div>
+              </Tabs.TabPane>
+            </Tabs>
+          </aside>
+        </div>
 
-        <div class="runtime-actions">
+        <div
+          v-if="showRuntimeActions"
+          class="runtime-actions"
+        >
           <template v-if="isStartMode">
             <Button
               :disabled="submitting"
@@ -883,8 +917,10 @@ defineExpose({
             </Button>
             <Button
               v-if="!isStartDraftTask && actionPermissions?.allowReject"
+              :disabled="saving || submitting"
+              :loading="submitting"
               danger
-              @click="openActionModal('reject')"
+              @click="handleReject"
             >
               不通过
             </Button>
@@ -896,13 +932,13 @@ defineExpose({
             </Button>
             <Button
               v-if="!isStartDraftTask && actionPermissions?.allowTransfer"
-              @click="openActionModal('transfer')"
+              @click="openActionUserPicker('transfer')"
             >
               转办
             </Button>
             <Button
               v-if="!isStartDraftTask && actionPermissions?.allowAddSign"
-              @click="openActionModal('addSign')"
+              @click="openActionUserPicker('addSign')"
             >
               加签
             </Button>
@@ -931,21 +967,26 @@ defineExpose({
           placeholder="请选择退回节点"
           @update:value="(value) => updateActionField('targetNodeId', String(value ?? ''))"
         />
-        <UserPicker
-          v-if="currentAction === 'transfer' || currentAction === 'addSign'"
-          :exclude-user-ids="currentTask?.assigneeUserId ? [currentTask.assigneeUserId] : []"
-          :value="actionForm.targetUserId"
-          placeholder="请选择目标人员"
-          @update:value="(value) => updateActionField('targetUserId', Array.isArray(value) ? (value[0] ?? '') : (value ?? ''))"
-        />
-        <Textarea
-          :maxlength="500"
-          :rows="4"
-          :value="actionForm.comment"
-          placeholder="请输入审批意见"
-          @update:value="(value) => updateActionField('comment', String(value ?? ''))"
-        />
       </div>
+    </Modal>
+
+    <Modal
+      v-model:open="actionUserPickerOpen"
+      :confirm-loading="actionSubmitting"
+      :destroy-on-close="false"
+      :width="960"
+      cancel-text="取消"
+      ok-text="确定并发送"
+      :title="actionModalTitle"
+      wrap-class-name="workflow-user-picker-modal-wrap"
+      @cancel="actionSelectedUsers = []"
+      @ok="handleActionUserPickerConfirm"
+    >
+      <UserPickerPanel
+        v-model:selected-users="actionSelectedUsers"
+        :exclude-user-ids="currentTask?.assigneeUserId ? [currentTask.assigneeUserId] : []"
+        mode="single"
+      />
     </Modal>
 
     <Modal
@@ -960,19 +1001,11 @@ defineExpose({
       @cancel="pendingSubmitPayload = undefined"
       @ok="handleAssigneePickerConfirm"
     >
-      <div class="assignee-picker-content">
-        <div
-          v-if="runtimeFreeSelectNode?.warningMessage"
-          class="assignee-warning"
-        >
-          {{ runtimeFreeSelectNode.warningMessage }}
-        </div>
-        <UserPickerPanel
-          v-model:selected-users="draftSelectedAssigneeUsers"
-          mode="single"
-          org-only
-        />
-      </div>
+      <UserPickerPanel
+        v-model:selected-users="draftSelectedAssigneeUsers"
+        mode="single"
+        org-only
+      />
     </Modal>
 
     <Modal
@@ -1000,50 +1033,95 @@ defineExpose({
 <style scoped>
 :global(.workflow-runtime-form-drawer) {
   height: calc(100vh - 110px);
-  overflow: auto;
-  padding: 24px 32px;
+  overflow: hidden;
+  padding: 20px 24px;
+}
+
+:global(.workflow-runtime-form-drawer .ant-spin-container),
+:global(.workflow-runtime-form-drawer .ant-spin-nested-loading) {
+  height: 100%;
 }
 
 .runtime-drawer-body {
-  margin: 0 auto;
-  max-width: 1080px;
-}
-
-.process-info-head {
-  align-items: flex-start;
   display: flex;
-  gap: 16px;
-  justify-content: space-between;
-  margin-bottom: 18px;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
 }
 
-.runtime-title {
-  color: #111827;
-  font-size: 20px;
-  font-weight: 600;
-}
-
-.runtime-subtitle {
-  color: #6b7280;
-  font-size: 13px;
-  margin-top: 4px;
-}
-
-.process-info-panel {
-  padding-top: 4px;
-}
-
-.process-description {
-  margin-bottom: 18px;
+.runtime-drawer-main {
+  display: grid;
+  flex: 1;
+  gap: 20px;
+  grid-template-columns: minmax(0, 3fr) minmax(360px, 2fr);
+  min-height: 0;
 }
 
 .runtime-form-section {
-  border-bottom: 1px solid #f0f0f0;
-  margin-bottom: 16px;
-  padding-bottom: 18px;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  padding-right: 16px;
 }
 
-.process-progress-subtitle,
+.runtime-form-content {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+}
+
+.approval-comment-panel {
+  align-items: flex-start;
+  border-top: 1px solid #f0f0f0;
+  display: flex;
+  flex: 0 0 auto;
+  gap: 12px;
+  margin-top: 16px;
+  padding-top: 14px;
+}
+
+.approval-comment-label {
+  color: #1f2937;
+  flex: 0 0 92px;
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 32px;
+  text-align: right;
+}
+
+.approval-comment-control {
+  flex: 1;
+  min-width: 0;
+}
+
+.runtime-side-section {
+  border-left: 1px solid #f0f0f0;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+  padding-left: 20px;
+}
+
+.runtime-side-tabs {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+
+.runtime-side-tabs :deep(.ant-tabs-content-holder) {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+}
+
+.runtime-side-tabs :deep(.ant-tabs-content),
+.runtime-side-tabs :deep(.ant-tabs-tabpane) {
+  min-height: 100%;
+}
+
 .progress-node-meta {
   color: #6b7280;
   font-size: 13px;
@@ -1075,28 +1153,8 @@ defineExpose({
   min-height: 180px;
 }
 
-.diagram-empty-panel {
-  min-height: 220px;
-}
-
 .process-progress-panel {
-  border: 1px solid #f0f0f0;
-  border-radius: 6px;
-  padding: 14px 16px 6px;
-}
-
-.process-progress-head {
-  align-items: flex-start;
-  display: flex;
-  gap: 12px;
-  justify-content: space-between;
-  margin-bottom: 16px;
-}
-
-.process-progress-title {
-  color: #1f2937;
-  font-size: 15px;
-  font-weight: 600;
+  padding: 8px 4px 0;
 }
 
 .process-progress-timeline {
@@ -1140,11 +1198,12 @@ defineExpose({
 .runtime-actions {
   border-top: 1px solid #f0f0f0;
   display: flex;
+  flex: 0 0 auto;
   flex-wrap: wrap;
   gap: 12px;
   justify-content: center;
-  margin-top: 24px;
-  padding-top: 16px;
+  margin-top: 16px;
+  padding-top: 14px;
 }
 
 .action-form {
@@ -1177,29 +1236,6 @@ defineExpose({
   overflow: hidden;
 }
 
-.assignee-picker-content {
-  display: flex;
-  flex: 1;
-  flex-direction: column;
-  min-height: 0;
-  width: 100%;
-}
-
-.assignee-picker-content :deep(.user-picker-panel) {
-  flex: 1;
-}
-
-.assignee-warning {
-  background: #fff7e6;
-  border: 1px solid #ffd591;
-  border-radius: 6px;
-  color: #ad6800;
-  font-size: 13px;
-  line-height: 20px;
-  margin-bottom: 12px;
-  padding: 8px 10px;
-}
-
 :global(.workflow-assignee-select-modal-wrap .ant-modal-content) {
   display: flex;
   flex-direction: column;
@@ -1216,12 +1252,20 @@ defineExpose({
     padding: 16px;
   }
 
-  .process-info-head {
-    flex-direction: column;
+  .runtime-drawer-main {
+    grid-template-columns: 1fr;
   }
 
-  .process-progress-head {
-    flex-direction: column;
+  .runtime-form-section {
+    padding-right: 0;
   }
+
+  .runtime-side-section {
+    border-left: 0;
+    border-top: 1px solid #f0f0f0;
+    padding-left: 0;
+    padding-top: 16px;
+  }
+
 }
 </style>
