@@ -54,6 +54,7 @@ import com.lawoffice.workflow.req.StartedInstancePageReq;
 import com.lawoffice.workflow.req.TaskActionReq;
 import com.lawoffice.workflow.req.TaskPageReq;
 import com.lawoffice.workflow.service.IFlowableService;
+import com.lawoffice.workflow.service.IInstanceStateService;
 import com.lawoffice.workflow.vo.AvailableProcessVO;
 import com.lawoffice.workflow.vo.AssigneeOptionVO;
 import com.lawoffice.workflow.vo.AssigneeSelectNodeVO;
@@ -127,6 +128,7 @@ public class WorkflowRuntimeSupport {
     private final FieldPermissionMapper fieldPermissionMapper;
     private final TaskCandidateMapper taskCandidateMapper;
     private final IFlowableService flowableService;
+    private final IInstanceStateService instanceStateService;
     private final IUserService userService;
     private final UserMapper userMapper;
     private final UserRoleMapper userRoleMapper;
@@ -148,6 +150,7 @@ public class WorkflowRuntimeSupport {
             FieldPermissionMapper fieldPermissionMapper,
             TaskCandidateMapper taskCandidateMapper,
             IFlowableService flowableService,
+            IInstanceStateService instanceStateService,
             IUserService userService,
             UserMapper userMapper,
             UserRoleMapper userRoleMapper,
@@ -167,6 +170,7 @@ public class WorkflowRuntimeSupport {
         this.fieldPermissionMapper = fieldPermissionMapper;
         this.taskCandidateMapper = taskCandidateMapper;
         this.flowableService = flowableService;
+        this.instanceStateService = instanceStateService;
         this.userService = userService;
         this.userMapper = userMapper;
         this.userRoleMapper = userRoleMapper;
@@ -294,7 +298,7 @@ public class WorkflowRuntimeSupport {
             syncCurrentTasks(processInstance, tenantId, context);
             EntityFillUtils.fillAuditFields(processInstance, context, false);
             processInstanceMapper.updateById(processInstance);
-            createStartRecord(processInstance, formInstance, tenantId, context);
+            instanceStateService.createStartRecord(processInstance, formInstance, tenantId, context);
 
             return BaseResult.success(buildStartResult(processInstance, formInstance));
         }, "发起申请失败");
@@ -320,7 +324,7 @@ public class WorkflowRuntimeSupport {
             EntityFillUtils.fillAuditFields(formInstance, context, false);
             formInstanceMapper.updateById(formInstance);
             createStartDraftTask(processInstance, tenantId, context);
-            createDraftRecord(processInstance, formInstance, tenantId, context);
+            instanceStateService.createDraftRecord(processInstance, formInstance, tenantId, context);
 
             return BaseResult.success(buildStartResult(processInstance, formInstance));
         }, "保存申请草稿失败");
@@ -1036,7 +1040,7 @@ public class WorkflowRuntimeSupport {
         } else {
             throw new IllegalArgumentException("不支持的审批动作");
         }
-        createTaskRecord(task, processInstance, formInstance, req, action, tenantId, context);
+        instanceStateService.createTaskRecord(task, processInstance, formInstance, req, action, tenantId, context);
         return buildTaskActionResult(task, processInstance);
     }
 
@@ -1065,7 +1069,7 @@ public class WorkflowRuntimeSupport {
         processInstance.setFlowableProcessDefinitionId(flowableStartResult.getProcessDefinitionId());
         processInstance.setStatus(WorkflowConstants.Status.RUNNING);
         processInstance.setStartTime(LocalDateTime.now());
-        markTaskDone(task, context);
+        instanceStateService.markTaskDone(task, context);
         syncCurrentTasks(processInstance, tenantId, context);
         EntityFillUtils.fillAuditFields(processInstance, context, false);
         processInstanceMapper.updateById(processInstance);
@@ -1075,7 +1079,7 @@ public class WorkflowRuntimeSupport {
         EntityFillUtils.fillAuditFields(formInstance, context, false);
         formInstanceMapper.updateById(formInstance);
 
-        createStartRecord(processInstance, formInstance, tenantId, context);
+        instanceStateService.createStartRecord(processInstance, formInstance, tenantId, context);
         return buildTaskActionResult(task, processInstance);
     }
 
@@ -1117,12 +1121,12 @@ public class WorkflowRuntimeSupport {
         task.setClaimTime(LocalDateTime.now());
         EntityFillUtils.fillAuditFields(task, context, false);
         taskMapper.updateById(task);
-        cancelActiveCandidates(task, context);
+        instanceStateService.cancelActiveCandidates(task, context);
         flowableService.setTaskAssignee(task.getFlowableTaskId(), targetUser.getId());
-        refreshCurrentTaskSummary(processInstance, tenantId);
+        instanceStateService.refreshCurrentTaskSummary(processInstance, tenantId);
         EntityFillUtils.fillAuditFields(processInstance, context, false);
         processInstanceMapper.updateById(processInstance);
-        createTaskRecord(task, processInstance, requireFormInstance(processInstance.getFormInstanceId(), tenantId),
+        instanceStateService.createTaskRecord(task, processInstance, requireFormInstance(processInstance.getFormInstanceId(), tenantId),
                 req, WorkflowConstants.Action.TRANSFER, tenantId, context, null, targetUser);
         return buildTaskActionResult(task, processInstance);
     }
@@ -1152,7 +1156,7 @@ public class WorkflowRuntimeSupport {
         task.setCompleteTime(LocalDateTime.now());
         EntityFillUtils.fillAuditFields(task, context, false);
         taskMapper.updateById(task);
-        cancelActiveCandidates(task, context);
+            instanceStateService.cancelActiveCandidates(task, context);
         if (START_DRAFT_NODE_ID.equals(targetNodeConfig.getNodeId())) {
             returnToStartDraft(processInstance, formInstance, tenantId, context);
         } else {
@@ -1161,7 +1165,7 @@ public class WorkflowRuntimeSupport {
             EntityFillUtils.fillAuditFields(processInstance, context, false);
             processInstanceMapper.updateById(processInstance);
         }
-        createTaskRecord(task, processInstance, formInstance, req, WorkflowConstants.Action.RETURN, tenantId, context, targetNodeConfig, null);
+        instanceStateService.createTaskRecord(task, processInstance, formInstance, req, WorkflowConstants.Action.RETURN, tenantId, context, targetNodeConfig, null);
         return buildTaskActionResult(task, processInstance);
     }
 
@@ -1181,13 +1185,13 @@ public class WorkflowRuntimeSupport {
         task.setStatus(WorkflowConstants.Status.TRANSFERRED);
         EntityFillUtils.fillAuditFields(task, context, false);
         taskMapper.updateById(task);
-        cancelActiveCandidates(task, context);
+        instanceStateService.cancelActiveCandidates(task, context);
 
         Task addSignTask = createAddSignTask(task, targetUser, context);
-        refreshCurrentTaskSummary(processInstance, tenantId);
+        instanceStateService.refreshCurrentTaskSummary(processInstance, tenantId);
         EntityFillUtils.fillAuditFields(processInstance, context, false);
         processInstanceMapper.updateById(processInstance);
-        createTaskRecord(task, processInstance, requireFormInstance(processInstance.getFormInstanceId(), tenantId),
+        instanceStateService.createTaskRecord(task, processInstance, requireFormInstance(processInstance.getFormInstanceId(), tenantId),
                 req, WorkflowConstants.Action.ADD_SIGN, tenantId, context, null, targetUser);
         return buildTaskActionResult(addSignTask, processInstance);
     }
@@ -1195,14 +1199,14 @@ public class WorkflowRuntimeSupport {
     private void completeApprove(Task task, ProcessInstance processInstance, FormInstance formInstance,
             TaskActionReq req, String tenantId, RequestContext context) {
         flowableService.completeTask(task.getFlowableTaskId(), buildTaskVariables(task, req, context, WorkflowConstants.Action.APPROVE));
-        markTaskDone(task, context);
+        instanceStateService.markTaskDone(task, context);
         syncCurrentTasks(processInstance, tenantId, context);
         if (!flowableService.isProcessInstanceActive(processInstance.getFlowableProcessInstanceId())) {
             processInstance.setStatus(WorkflowConstants.Status.APPROVED);
             processInstance.setEndTime(LocalDateTime.now());
             processInstance.setCurrentTaskNames(null);
             processInstance.setCurrentAssigneeNames(null);
-            archiveFormInstance(formInstance, context);
+            instanceStateService.archiveFormInstance(formInstance, context);
         }
         EntityFillUtils.fillAuditFields(processInstance, context, false);
         processInstanceMapper.updateById(processInstance);
@@ -1211,20 +1215,20 @@ public class WorkflowRuntimeSupport {
     private void completeReject(Task task, ProcessInstance processInstance, FormInstance formInstance,
             TaskActionReq req, String tenantId, RequestContext context) {
         flowableService.terminateProcessInstance(processInstance.getFlowableProcessInstanceId(), resolveActionComment(req, "审批不通过"));
-        markTaskDone(task, context);
-        cancelTodoTasks(processInstance.getId(), task.getId(), tenantId, context);
+        instanceStateService.markTaskDone(task, context);
+        instanceStateService.cancelTodoTasks(processInstance.getId(), task.getId(), tenantId, context);
         processInstance.setStatus(WorkflowConstants.Status.REJECTED);
         processInstance.setEndTime(LocalDateTime.now());
         processInstance.setCurrentTaskNames(null);
         processInstance.setCurrentAssigneeNames(null);
         EntityFillUtils.fillAuditFields(processInstance, context, false);
         processInstanceMapper.updateById(processInstance);
-        archiveFormInstance(formInstance, context);
+        instanceStateService.archiveFormInstance(formInstance, context);
     }
 
     private void completeAddSignTask(Task task, ProcessInstance processInstance, FormInstance formInstance,
             TaskActionReq req, String tenantId, RequestContext context) {
-        markTaskDone(task, context);
+        instanceStateService.markTaskDone(task, context);
         Task parentTask = taskMapper.selectOne(new QueryWrapper<Task>()
                 .eq("id", task.getParentTaskId())
                 .eq("tenant_id", tenantId)
@@ -1235,7 +1239,7 @@ public class WorkflowRuntimeSupport {
         parentTask.setStatus(WorkflowConstants.Status.TODO);
         EntityFillUtils.fillAuditFields(parentTask, context, false);
         taskMapper.updateById(parentTask);
-        refreshCurrentTaskSummary(processInstance, tenantId);
+        instanceStateService.refreshCurrentTaskSummary(processInstance, tenantId);
         EntityFillUtils.fillAuditFields(processInstance, context, false);
         processInstanceMapper.updateById(processInstance);
     }
@@ -1280,17 +1284,6 @@ public class WorkflowRuntimeSupport {
         task.setOwnerUserId(task.getAssigneeUserId());
         task.setOwnerUsername(task.getAssigneeUsername());
         task.setOwnerRealname(task.getAssigneeRealname());
-    }
-
-    private void cancelActiveCandidates(Task task, RequestContext context) {
-        taskCandidateMapper.update(null, new UpdateWrapper<TaskCandidate>()
-                .eq("tenant_id", task.getTenantId())
-                .eq("task_id", task.getId())
-                .eq("status", WorkflowConstants.Status.ACTIVE)
-                .eq("delete_flag", 0)
-                .set("status", WorkflowConstants.Status.CANCELED)
-                .set("update_by", context.getUsername())
-                .set("update_time", LocalDateTime.now()));
     }
 
     private void ensureNoActiveAddSignChild(Task task) {
@@ -1512,61 +1505,12 @@ public class WorkflowRuntimeSupport {
                 .set("update_time", now));
     }
 
-    private void markTaskDone(Task task, RequestContext context) {
-        task.setStatus(WorkflowConstants.Status.DONE);
-        task.setCompleteTime(LocalDateTime.now());
-        EntityFillUtils.fillAuditFields(task, context, false);
-        taskMapper.updateById(task);
-        taskCandidateMapper.update(null, new UpdateWrapper<TaskCandidate>()
-                .eq("tenant_id", task.getTenantId())
-                .eq("task_id", task.getId())
-                .eq("status", WorkflowConstants.Status.ACTIVE)
-                .eq("delete_flag", 0)
-                .set("status", WorkflowConstants.Status.CANCELED)
-                .set("update_by", context.getUsername())
-                .set("update_time", LocalDateTime.now()));
-    }
-
-    private void cancelTodoTasks(String processInstanceId, String completedTaskId, String tenantId, RequestContext context) {
-        QueryWrapper<Task> wrapper = new QueryWrapper<Task>()
-                .select("id")
-                .eq("tenant_id", tenantId)
-                .eq("process_instance_id", processInstanceId)
-                .eq("status", WorkflowConstants.Status.TODO)
-                .eq("delete_flag", 0);
-        if (StringUtils.hasText(completedTaskId)) {
-            wrapper.ne("id", completedTaskId);
-        }
-        List<String> canceledTaskIds = taskMapper.selectList(wrapper)
-                .stream()
-                .map(Task::getId)
-                .toList();
-        if (canceledTaskIds.isEmpty()) {
-            return;
-        }
-        taskMapper.update(null, new UpdateWrapper<Task>()
-                .eq("tenant_id", tenantId)
-                .in("id", canceledTaskIds)
-                .eq("delete_flag", 0)
-                .set("status", WorkflowConstants.Status.CANCELED)
-                .set("update_by", context.getUsername())
-                .set("update_time", LocalDateTime.now()));
-        taskCandidateMapper.update(null, new UpdateWrapper<TaskCandidate>()
-                .eq("tenant_id", tenantId)
-                .in("task_id", canceledTaskIds)
-                .eq("status", WorkflowConstants.Status.ACTIVE)
-                .eq("delete_flag", 0)
-                .set("status", WorkflowConstants.Status.CANCELED)
-                .set("update_by", context.getUsername())
-                .set("update_time", LocalDateTime.now()));
-    }
-
     /**
      * 退回到发起人时回到本地草稿任务，重新提交时再启动新的 Flowable 实例。
      */
     private void returnToStartDraft(ProcessInstance processInstance, FormInstance formInstance, String tenantId, RequestContext context) {
         flowableService.terminateProcessInstance(processInstance.getFlowableProcessInstanceId(), "退回发起人重新提交");
-        cancelTodoTasks(processInstance.getId(), null, tenantId, context);
+        instanceStateService.cancelTodoTasks(processInstance.getId(), null, tenantId, context);
         formInstance.setStatus(WorkflowConstants.Status.DRAFT);
         formInstance.setSubmittedTime(null);
         EntityFillUtils.fillAuditFields(formInstance, context, false);
@@ -1610,59 +1554,6 @@ public class WorkflowRuntimeSupport {
             return req.getComment();
         }
         return defaultComment;
-    }
-
-    private void archiveFormInstance(FormInstance formInstance, RequestContext context) {
-        formInstance.setStatus(WorkflowConstants.Status.ARCHIVED);
-        EntityFillUtils.fillAuditFields(formInstance, context, false);
-        formInstanceMapper.updateById(formInstance);
-    }
-
-    private void createTaskRecord(Task task, ProcessInstance processInstance, FormInstance formInstance,
-            TaskActionReq req, String action, String tenantId, RequestContext context) {
-        createTaskRecord(task, processInstance, formInstance, req, action, tenantId, context, null, null);
-    }
-
-    private void createTaskRecord(Task task, ProcessInstance processInstance, FormInstance formInstance,
-            TaskActionReq req, String action, String tenantId, RequestContext context,
-            ProcessNodeConfig targetNodeConfig, User targetUser) {
-        OperationRecord record = new OperationRecord();
-        record.setTenantId(tenantId);
-        record.setProcessInstanceId(processInstance.getId());
-        record.setTaskId(task.getId());
-        record.setFlowableTaskId(task.getFlowableTaskId());
-        record.setNodeId(task.getNodeId());
-        record.setNodeName(task.getTaskName());
-        record.setAction(action);
-        record.setOperatorUserId(context.getUserId());
-        record.setOperatorUsername(context.getUsername());
-        record.setOperatorRealname(resolveCurrentUserRealname(context));
-        if (targetUser != null) {
-            record.setTargetUserId(targetUser.getId());
-            record.setTargetUsername(targetUser.getUsername());
-            record.setTargetRealname(targetUser.getRealname());
-        }
-        if (targetNodeConfig != null) {
-            record.setTargetNodeId(targetNodeConfig.getNodeId());
-            record.setTargetNodeName(targetNodeConfig.getNodeName());
-        }
-        record.setComment(resolveActionComment(req, resolveDefaultActionComment(action)));
-        record.setFormDataSnapshotJson(formInstance.getFormDataJson());
-        record.setOperateTime(LocalDateTime.now());
-        EntityFillUtils.fillAuditFields(record, context, true);
-        operationRecordMapper.insert(record);
-    }
-
-    private String resolveDefaultActionComment(String action) {
-        return switch (action) {
-            case WorkflowConstants.Action.SAVE_DRAFT -> "保存草稿";
-            case WorkflowConstants.Action.APPROVE -> "审批通过";
-            case WorkflowConstants.Action.REJECT -> "审批不通过";
-            case WorkflowConstants.Action.TRANSFER -> "转办";
-            case WorkflowConstants.Action.RETURN -> "退回";
-            case WorkflowConstants.Action.ADD_SIGN -> "加签";
-            default -> action;
-        };
     }
 
     private TaskActionVO buildTaskActionResult(Task task, ProcessInstance processInstance) {
@@ -2030,7 +1921,7 @@ public class WorkflowRuntimeSupport {
                 createTaskCandidates(task, assignees, context);
             }
         }
-        refreshCurrentTaskSummary(processInstance, tenantId);
+        instanceStateService.refreshCurrentTaskSummary(processInstance, tenantId);
     }
 
     private ProcessNodeConfig requireNodeConfig(String processModelId, String nodeId, String tenantId) {
@@ -2583,47 +2474,6 @@ public class WorkflowRuntimeSupport {
         }
     }
 
-    private void refreshCurrentTaskSummary(ProcessInstance processInstance, String tenantId) {
-        List<Task> todoTasks = taskMapper.selectList(new QueryWrapper<Task>()
-                .eq("tenant_id", tenantId)
-                .eq("process_instance_id", processInstance.getId())
-                .eq("status", WorkflowConstants.Status.TODO)
-                .eq("delete_flag", 0)
-                .orderByAsc("create_time"));
-        if (todoTasks.isEmpty()) {
-            processInstance.setCurrentTaskNames(null);
-            processInstance.setCurrentAssigneeNames(null);
-            return;
-        }
-        processInstance.setCurrentTaskNames(String.join(",", todoTasks.stream()
-                .map(Task::getTaskName)
-                .filter(StringUtils::hasText)
-                .distinct()
-                .toList()));
-        Set<String> taskIds = todoTasks.stream().map(Task::getId).collect(java.util.stream.Collectors.toSet());
-        Map<String, List<String>> candidateNamesByTaskId = new HashMap<>();
-        taskCandidateMapper.selectList(new QueryWrapper<TaskCandidate>()
-                        .in("task_id", taskIds)
-                        .eq("tenant_id", tenantId)
-                        .eq("status", WorkflowConstants.Status.ACTIVE)
-                        .eq("delete_flag", 0))
-                .forEach(candidate -> candidateNamesByTaskId
-                        .computeIfAbsent(candidate.getTaskId(), key -> new ArrayList<>())
-                        .add(resolveDisplayName(candidate.getCandidateRealname(), candidate.getCandidateUsername(), candidate.getCandidateUserId())));
-        List<String> assigneeNames = new ArrayList<>();
-        for (Task task : todoTasks) {
-            if (StringUtils.hasText(task.getAssigneeUserId())) {
-                assigneeNames.add(resolveDisplayName(task.getAssigneeRealname(), task.getAssigneeUsername(), task.getAssigneeUserId()));
-            } else {
-                assigneeNames.addAll(candidateNamesByTaskId.getOrDefault(task.getId(), List.of()));
-            }
-        }
-        processInstance.setCurrentAssigneeNames(String.join(",", assigneeNames.stream()
-                .filter(StringUtils::hasText)
-                .distinct()
-                .toList()));
-    }
-
     private String resolveDisplayName(String realname, String username, String userId) {
         if (StringUtils.hasText(realname)) {
             return realname;
@@ -2649,36 +2499,6 @@ public class WorkflowRuntimeSupport {
             return resolveDisplayName(user.getRealname(), user.getUsername(), user.getId());
         }
         return resolveDisplayName(null, username, userId);
-    }
-
-    private void createStartRecord(ProcessInstance processInstance, FormInstance formInstance, String tenantId, RequestContext context) {
-        OperationRecord record = new OperationRecord();
-        record.setTenantId(tenantId);
-        record.setProcessInstanceId(processInstance.getId());
-        record.setAction(WorkflowConstants.Action.START);
-        record.setOperatorUserId(context.getUserId());
-        record.setOperatorUsername(context.getUsername());
-        record.setOperatorRealname(resolveCurrentUserRealname(context));
-        record.setComment("发起申请");
-        record.setFormDataSnapshotJson(formInstance.getFormDataJson());
-        record.setOperateTime(LocalDateTime.now());
-        EntityFillUtils.fillAuditFields(record, context, true);
-        operationRecordMapper.insert(record);
-    }
-
-    private void createDraftRecord(ProcessInstance processInstance, FormInstance formInstance, String tenantId, RequestContext context) {
-        OperationRecord record = new OperationRecord();
-        record.setTenantId(tenantId);
-        record.setProcessInstanceId(processInstance.getId());
-        record.setAction(WorkflowConstants.Action.SAVE_DRAFT);
-        record.setOperatorUserId(context.getUserId());
-        record.setOperatorUsername(context.getUsername());
-        record.setOperatorRealname(resolveCurrentUserRealname(context));
-        record.setComment("保存申请草稿");
-        record.setFormDataSnapshotJson(formInstance.getFormDataJson());
-        record.setOperateTime(LocalDateTime.now());
-        EntityFillUtils.fillAuditFields(record, context, true);
-        operationRecordMapper.insert(record);
     }
 
     private StartFormVO buildStartForm(ProcessModel model, FormDefinition form, RequestContext context) {
