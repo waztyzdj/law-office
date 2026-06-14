@@ -18,7 +18,6 @@ import com.lawoffice.workflow.entity.ProcessNodeConfig;
 import com.lawoffice.workflow.entity.ProcessStartPermission;
 import com.lawoffice.workflow.entity.Task;
 import com.lawoffice.workflow.entity.TaskCandidate;
-import com.lawoffice.workflow.mapper.FieldPermissionMapper;
 import com.lawoffice.workflow.mapper.FormDefinitionMapper;
 import com.lawoffice.workflow.mapper.FormInstanceMapper;
 import com.lawoffice.workflow.mapper.OperationRecordMapper;
@@ -33,6 +32,7 @@ import com.lawoffice.workflow.req.StartedInstancePageReq;
 import com.lawoffice.workflow.req.TaskPageReq;
 import com.lawoffice.workflow.service.IAssigneeResolveService;
 import com.lawoffice.workflow.service.IRuntimeQueryService;
+import com.lawoffice.workflow.service.IWorkflowRuntimeLookupService;
 import com.lawoffice.workflow.vo.AvailableProcessVO;
 import com.lawoffice.workflow.vo.FormInstanceVO;
 import com.lawoffice.workflow.vo.InstanceDetailVO;
@@ -70,10 +70,10 @@ public class RuntimeQueryServiceImpl implements IRuntimeQueryService {
     private final ProcessInstanceMapper processInstanceMapper;
     private final ProcessNodeConfigMapper processNodeConfigMapper;
     private final OperationRecordMapper operationRecordMapper;
-    private final FieldPermissionMapper fieldPermissionMapper;
     private final TaskCandidateMapper taskCandidateMapper;
     private final TaskMapper taskMapper;
     private final IAssigneeResolveService assigneeResolveService;
+    private final IWorkflowRuntimeLookupService workflowRuntimeLookupService;
     private final IUserService userService;
 
     public RuntimeQueryServiceImpl(ProcessModelMapper processModelMapper,
@@ -83,10 +83,10 @@ public class RuntimeQueryServiceImpl implements IRuntimeQueryService {
             ProcessInstanceMapper processInstanceMapper,
             ProcessNodeConfigMapper processNodeConfigMapper,
             OperationRecordMapper operationRecordMapper,
-            FieldPermissionMapper fieldPermissionMapper,
             TaskCandidateMapper taskCandidateMapper,
             TaskMapper taskMapper,
             IAssigneeResolveService assigneeResolveService,
+            IWorkflowRuntimeLookupService workflowRuntimeLookupService,
             IUserService userService) {
         this.processModelMapper = processModelMapper;
         this.formDefinitionMapper = formDefinitionMapper;
@@ -95,10 +95,10 @@ public class RuntimeQueryServiceImpl implements IRuntimeQueryService {
         this.processInstanceMapper = processInstanceMapper;
         this.processNodeConfigMapper = processNodeConfigMapper;
         this.operationRecordMapper = operationRecordMapper;
-        this.fieldPermissionMapper = fieldPermissionMapper;
         this.taskCandidateMapper = taskCandidateMapper;
         this.taskMapper = taskMapper;
         this.assigneeResolveService = assigneeResolveService;
+        this.workflowRuntimeLookupService = workflowRuntimeLookupService;
         this.userService = userService;
     }
 
@@ -843,48 +843,19 @@ public class RuntimeQueryServiceImpl implements IRuntimeQueryService {
     }
 
     private Task requireTodoTask(String taskId, String tenantId) {
-        if (!StringUtils.hasText(taskId)) {
-            throw new IllegalArgumentException("任务ID不能为空");
-        }
-        Task task = taskMapper.selectOne(new QueryWrapper<Task>()
-                .eq("id", taskId)
-                .eq("tenant_id", tenantId)
-                .eq("status", WorkflowConstants.Status.TODO)
-                .eq("delete_flag", 0));
-        if (task == null) {
-            throw new IllegalArgumentException("任务不存在或已处理");
-        }
-        return task;
+        return workflowRuntimeLookupService.requireTodoTask(taskId, tenantId);
     }
 
     private ProcessInstance requireProcessInstance(String processInstanceId, String tenantId) {
-        ProcessInstance processInstance = processInstanceMapper.selectOne(new QueryWrapper<ProcessInstance>()
-                .eq("id", processInstanceId)
-                .eq("tenant_id", tenantId)
-                .eq("delete_flag", 0));
-        if (processInstance == null) {
-            throw new IllegalArgumentException("审批实例不存在");
-        }
-        return processInstance;
+        return workflowRuntimeLookupService.requireProcessInstance(processInstanceId, tenantId);
     }
 
     private FormInstance requireFormInstance(String formInstanceId, String tenantId) {
-        FormInstance formInstance = formInstanceMapper.selectOne(new QueryWrapper<FormInstance>()
-                .eq("id", formInstanceId)
-                .eq("tenant_id", tenantId)
-                .eq("delete_flag", 0));
-        if (formInstance == null) {
-            throw new IllegalArgumentException("表单实例不存在");
-        }
-        return formInstance;
+        return workflowRuntimeLookupService.requireFormInstance(formInstanceId, tenantId);
     }
 
     private List<FieldPermission> listFieldPermissions(String processModelId, String nodeId, String tenantId) {
-        return fieldPermissionMapper.selectList(new QueryWrapper<FieldPermission>()
-                .eq("tenant_id", tenantId)
-                .eq("process_model_id", processModelId)
-                .eq("node_id", nodeId)
-                .eq("delete_flag", 0));
+        return workflowRuntimeLookupService.listFieldPermissions(processModelId, nodeId, tenantId);
     }
 
     private TaskCandidate findActiveCandidate(Task task, RequestContext context) {
@@ -1021,72 +992,15 @@ public class RuntimeQueryServiceImpl implements IRuntimeQueryService {
     }
 
     private ProcessModel requirePublishedModel(String processModelId, String tenantId) {
-        QueryWrapper<ProcessModel> wrapper = new QueryWrapper<>();
-        wrapper.eq("id", processModelId)
-                .eq("tenant_id", tenantId)
-                .eq("status", WorkflowConstants.Status.PUBLISHED)
-                .eq("delete_flag", 0);
-        ProcessModel model = processModelMapper.selectOne(wrapper);
-        if (model == null) {
-            throw new IllegalArgumentException("流程不存在或未发布");
-        }
-        if (!StringUtils.hasText(model.getFlowableProcessDefinitionId())) {
-            throw new IllegalArgumentException("流程未部署到Flowable，不能发起");
-        }
-        long newerPublishedCount = processModelMapper.selectCount(new QueryWrapper<ProcessModel>()
-                .eq("tenant_id", tenantId)
-                .eq("process_key", model.getProcessKey())
-                .eq("status", WorkflowConstants.Status.PUBLISHED)
-                .eq("delete_flag", 0)
-                .gt("version", model.getVersion()));
-        if (newerPublishedCount > 0) {
-            throw new IllegalArgumentException("流程已有新发布版本，请使用最新版本发起");
-        }
-        return model;
+        return workflowRuntimeLookupService.requirePublishedModel(processModelId, tenantId);
     }
 
     private FormDefinition requirePublishedForm(String formDefinitionId, String tenantId) {
-        QueryWrapper<FormDefinition> wrapper = new QueryWrapper<>();
-        wrapper.eq("id", formDefinitionId)
-                .eq("tenant_id", tenantId)
-                .eq("status", WorkflowConstants.Status.PUBLISHED)
-                .eq("delete_flag", 0);
-        FormDefinition form = formDefinitionMapper.selectOne(wrapper);
-        if (form == null) {
-            throw new IllegalArgumentException("流程绑定的表单不存在或未发布");
-        }
-        return form;
+        return workflowRuntimeLookupService.requirePublishedForm(formDefinitionId, tenantId);
     }
 
     private void checkStartPermission(ProcessModel model, RequestContext context) {
-        if (WorkflowConstants.StartScopeType.ALL.equals(model.getStartScopeType())) {
-            return;
-        }
-        String tenantId = requireTenantId(context);
-        List<ProcessStartPermission> permissions = processStartPermissionMapper.selectList(new QueryWrapper<ProcessStartPermission>()
-                .eq("tenant_id", tenantId)
-                .eq("process_model_id", model.getId())
-                .eq("status", WorkflowConstants.Status.ENABLED)
-                .eq("delete_flag", 0));
-        if (permissions.stream().noneMatch(permission -> matchesStartPermission(permission, context))) {
-            throw new IllegalArgumentException("当前用户无权发起该流程");
-        }
-    }
-
-    private boolean matchesStartPermission(ProcessStartPermission permission, RequestContext context) {
-        String userId = context.getUserId();
-        String tenantId = context.getTenantId();
-        return switch (permission.getTargetType()) {
-            case WorkflowConstants.TargetType.USER -> StringUtils.hasText(userId) && permission.getTargetId().equals(userId);
-            case WorkflowConstants.TargetType.TENANT -> permission.getTargetId().equals(tenantId);
-            case WorkflowConstants.TargetType.ROLE -> StringUtils.hasText(userId)
-                    && userService.getUserRoleIds(userId).contains(permission.getTargetId());
-            case WorkflowConstants.TargetType.DEPART -> StringUtils.hasText(userId)
-                    && userService.getUserDeparts(userId).stream()
-                    .map(SysDepart::getId)
-                    .anyMatch(permission.getTargetId()::equals);
-            default -> false;
-        };
+        workflowRuntimeLookupService.checkStartPermission(model, context);
     }
 
     private ProcessNodeConfig buildStartDraftNodeConfig() {
@@ -1145,16 +1059,10 @@ public class RuntimeQueryServiceImpl implements IRuntimeQueryService {
     }
 
     private String requireTenantId(RequestContext context) {
-        if (context == null || !StringUtils.hasText(context.getTenantId())) {
-            throw new IllegalArgumentException("租户ID不能为空");
-        }
-        return context.getTenantId();
+        return workflowRuntimeLookupService.requireTenantId(context);
     }
 
     private String requireUserId(RequestContext context) {
-        if (context == null || !StringUtils.hasText(context.getUserId())) {
-            throw new IllegalArgumentException("当前用户ID不能为空");
-        }
-        return context.getUserId();
+        return workflowRuntimeLookupService.requireUserId(context);
     }
 }
