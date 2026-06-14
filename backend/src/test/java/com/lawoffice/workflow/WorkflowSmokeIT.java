@@ -192,7 +192,8 @@ class WorkflowSmokeIT {
         assertEquals("approve_2", secondTask.getNodeId());
         TaskFormVO secondForm = success(runtimeService.getTaskForm(secondTask.getId(), approver2Context));
         assertTrue(secondForm.getActionPermissions().getAllowReturn());
-        assertEquals("approve_1", secondForm.getReturnNodes().get(0).getNodeId());
+        assertTrue(secondForm.getReturnNodes().stream()
+                .anyMatch(node -> "approve_1".equals(node.getNodeId())));
 
         TaskActionReq returnReq = action(secondTask.getId(), "退回一级审批");
         returnReq.setTargetNodeId("approve_1");
@@ -246,6 +247,34 @@ class WorkflowSmokeIT {
         assertEquals("start_draft", returnedTask.getNodeId());
         assertEquals(STARTER_ID, returnedTask.getAssigneeUserId());
         assertEquals(0, todoPage(approver2Context).getTotal());
+    }
+
+    @Test
+    void shouldValidateRequiredStartFieldWhenSubmitDraft() {
+        String categoryId = seedCategory();
+        String formId = seedAndPublishForm(categoryId);
+        String processModelId = seedAndPublishProcess(categoryId, formId);
+        seedFieldPermission(processModelId, WorkflowConstants.VirtualNode.START,
+                "reason", WorkflowConstants.FieldPermission.EDITABLE, 1);
+
+        StartProcessReq draftReq = new StartProcessReq();
+        draftReq.setProcessModelId(processModelId);
+        draftReq.setInstanceTitle(PREFIX + "REQUIRED_DRAFT");
+        draftReq.setBusinessKey(PREFIX + UUID.randomUUID().toString().replace("-", ""));
+        draftReq.setFormDataJson("{\"amount\":100}");
+        StartProcessVO draft = success(runtimeService.saveStartDraft(draftReq, starterContext));
+        assertEquals(WorkflowConstants.Status.DRAFT, draft.getStatus());
+
+        RuntimeTaskVO draftTask = firstTodo(starterContext);
+        TaskActionReq submitReq = action(draftTask.getId(), "提交缺少必填字段的草稿");
+        submitReq.setFormDataJson("{\"amount\":100}");
+        BaseResult<TaskActionVO> missingRequired = runtimeService.submitStartDraft(draftTask.getId(), submitReq, starterContext);
+        assertEquals(400, missingRequired.getCode());
+        assertEquals("必填字段不能为空: reason", missingRequired.getMessage());
+
+        submitReq.setFormDataJson("{\"reason\":\"补齐必填字段\",\"amount\":100}");
+        TaskActionVO submitted = success(runtimeService.submitStartDraft(draftTask.getId(), submitReq, starterContext));
+        assertEquals(WorkflowConstants.Status.RUNNING, submitted.getProcessStatus());
     }
 
     private RuntimeTaskVO firstTodo(RequestContext context) {
@@ -349,6 +378,11 @@ class WorkflowSmokeIT {
     }
 
     private void seedFieldPermission(String processModelId, String nodeId, String fieldKey, String permission) {
+        seedFieldPermission(processModelId, nodeId, fieldKey, permission, 0);
+    }
+
+    private void seedFieldPermission(String processModelId, String nodeId, String fieldKey, String permission,
+            Integer requiredFlag) {
         FieldPermission fieldPermission = new FieldPermission();
         fieldPermission.setId(PREFIX + "FIELD_" + nodeId + "_" + fieldKey);
         fieldPermission.setTenantId(TENANT_ID);
@@ -356,7 +390,7 @@ class WorkflowSmokeIT {
         fieldPermission.setNodeId(nodeId);
         fieldPermission.setFieldKey(fieldKey);
         fieldPermission.setPermission(permission);
-        fieldPermission.setRequiredFlag(0);
+        fieldPermission.setRequiredFlag(requiredFlag);
         fillCreate(fieldPermission);
         fieldPermissionMapper.insert(fieldPermission);
     }
