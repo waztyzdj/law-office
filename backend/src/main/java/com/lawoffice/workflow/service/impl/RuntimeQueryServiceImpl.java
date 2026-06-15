@@ -29,32 +29,24 @@ import com.lawoffice.workflow.mapper.TaskMapper;
 import com.lawoffice.workflow.req.AvailableProcessPageReq;
 import com.lawoffice.workflow.req.StartedInstancePageReq;
 import com.lawoffice.workflow.req.TaskPageReq;
-import com.lawoffice.workflow.service.IAssigneeResolveService;
 import com.lawoffice.workflow.service.IProcessNodeConfigService;
 import com.lawoffice.workflow.service.IRuntimeQueryService;
+import com.lawoffice.workflow.service.IRuntimeViewAssemblerService;
 import com.lawoffice.workflow.service.IWorkflowRuntimeLookupService;
 import com.lawoffice.workflow.vo.AvailableProcessVO;
-import com.lawoffice.workflow.vo.FormInstanceVO;
 import com.lawoffice.workflow.vo.InstanceDetailVO;
 import com.lawoffice.workflow.vo.OperationRecordVO;
-import com.lawoffice.workflow.vo.ProcessInstanceVO;
-import com.lawoffice.workflow.vo.RuntimeFieldPermissionVO;
 import com.lawoffice.workflow.vo.RuntimeTaskVO;
 import com.lawoffice.workflow.vo.StartFormVO;
 import com.lawoffice.workflow.vo.StartedInstanceVO;
-import com.lawoffice.workflow.vo.TaskActionPermissionVO;
 import com.lawoffice.workflow.vo.TaskFormVO;
-import com.lawoffice.workflow.vo.TaskReturnNodeVO;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
-import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
-import java.util.Map;
 import java.util.Set;
 
 @Service
@@ -68,8 +60,8 @@ public class RuntimeQueryServiceImpl implements IRuntimeQueryService {
     private final OperationRecordMapper operationRecordMapper;
     private final TaskCandidateMapper taskCandidateMapper;
     private final TaskMapper taskMapper;
-    private final IAssigneeResolveService assigneeResolveService;
     private final IProcessNodeConfigService processNodeConfigService;
+    private final IRuntimeViewAssemblerService runtimeViewAssemblerService;
     private final IWorkflowRuntimeLookupService workflowRuntimeLookupService;
     private final IUserService userService;
 
@@ -81,8 +73,8 @@ public class RuntimeQueryServiceImpl implements IRuntimeQueryService {
             OperationRecordMapper operationRecordMapper,
             TaskCandidateMapper taskCandidateMapper,
             TaskMapper taskMapper,
-            IAssigneeResolveService assigneeResolveService,
             IProcessNodeConfigService processNodeConfigService,
+            IRuntimeViewAssemblerService runtimeViewAssemblerService,
             IWorkflowRuntimeLookupService workflowRuntimeLookupService,
             IUserService userService) {
         this.processModelMapper = processModelMapper;
@@ -93,8 +85,8 @@ public class RuntimeQueryServiceImpl implements IRuntimeQueryService {
         this.operationRecordMapper = operationRecordMapper;
         this.taskCandidateMapper = taskCandidateMapper;
         this.taskMapper = taskMapper;
-        this.assigneeResolveService = assigneeResolveService;
         this.processNodeConfigService = processNodeConfigService;
+        this.runtimeViewAssemblerService = runtimeViewAssemblerService;
         this.workflowRuntimeLookupService = workflowRuntimeLookupService;
         this.userService = userService;
     }
@@ -160,7 +152,7 @@ public class RuntimeQueryServiceImpl implements IRuntimeQueryService {
             wrapper.orderByDesc("published_time").orderByDesc("create_time");
 
             Page<ProcessModel> page = processModelMapper.selectPage(new Page<>(pageNum, pageSize), wrapper);
-            List<AvailableProcessVO> records = buildAvailableProcessRecords(page.getRecords(), tenantId);
+            List<AvailableProcessVO> records = runtimeViewAssemblerService.buildAvailableProcessRecords(page.getRecords(), tenantId);
             return BaseResult.success(new PageVO<>(
                     records,
                     page.getTotal(),
@@ -180,7 +172,8 @@ public class RuntimeQueryServiceImpl implements IRuntimeQueryService {
             ProcessModel model = requirePublishedModel(processModelId, tenantId);
             checkStartPermission(model, context);
             FormDefinition form = requirePublishedForm(model.getFormDefinitionId(), tenantId);
-            return BaseResult.success(buildStartForm(model, form, context));
+            return BaseResult.success(runtimeViewAssemblerService.buildStartForm(model, form,
+                    listFieldPermissions(model.getId(), WorkflowConstants.VirtualNode.START, model.getTenantId()), context));
         } catch (IllegalArgumentException e) {
             return BaseResult.error(400, e.getMessage());
         } catch (Exception e) {
@@ -234,7 +227,7 @@ public class RuntimeQueryServiceImpl implements IRuntimeQueryService {
 
             Page<ProcessInstance> page = processInstanceMapper.selectPage(new Page<>(pageNum, pageSize), wrapper);
             return BaseResult.success(new PageVO<>(
-                    buildStartedInstanceRecords(page.getRecords(), tenantId),
+                    runtimeViewAssemblerService.buildStartedInstanceRecords(page.getRecords(), tenantId),
                     page.getTotal(),
                     page.getCurrent(),
                     page.getSize()));
@@ -282,7 +275,8 @@ public class RuntimeQueryServiceImpl implements IRuntimeQueryService {
             ProcessNodeConfig nodeConfig = startDraftTask
                     ? processNodeConfigService.buildStartDraftNodeConfig()
                     : processNodeConfigService.requireRuntimeNodeConfig(processInstance.getProcessModelId(), task.getNodeId(), tenantId);
-            return BaseResult.success(buildTaskForm(task, processInstance, formInstance, permissions, nodeConfig));
+            return BaseResult.success(runtimeViewAssemblerService.buildTaskForm(
+                    task, processInstance, formInstance, permissions, nodeConfig));
         } catch (IllegalArgumentException e) {
             return BaseResult.error(400, e.getMessage());
         } catch (Exception e) {
@@ -299,7 +293,8 @@ public class RuntimeQueryServiceImpl implements IRuntimeQueryService {
             FormInstance formInstance = requireFormInstance(processInstance.getFormInstanceId(), tenantId);
             List<Task> currentTasks = listCurrentTasks(processInstance.getId(), tenantId);
             List<OperationRecord> records = listOperationRecords(processInstance.getId(), tenantId);
-            return BaseResult.success(buildInstanceDetail(processInstance, formInstance, currentTasks, records));
+            return BaseResult.success(runtimeViewAssemblerService.buildInstanceDetail(
+                    processInstance, formInstance, currentTasks, records));
         } catch (IllegalArgumentException e) {
             return BaseResult.error(400, e.getMessage());
         } catch (Exception e) {
@@ -314,7 +309,7 @@ public class RuntimeQueryServiceImpl implements IRuntimeQueryService {
             ProcessInstance processInstance = requireProcessInstance(id, tenantId);
             ensureInstanceAccess(processInstance, context);
             return BaseResult.success(listOperationRecords(processInstance.getId(), tenantId).stream()
-                    .map(this::buildOperationRecordVO)
+                    .map(runtimeViewAssemblerService::buildOperationRecordVO)
                     .toList());
         } catch (IllegalArgumentException e) {
             return BaseResult.error(400, e.getMessage());
@@ -350,132 +345,6 @@ public class RuntimeQueryServiceImpl implements IRuntimeQueryService {
             case WorkflowConstants.TargetType.DEPART -> departIds.contains(permission.getTargetId());
             default -> false;
         };
-    }
-
-    private List<AvailableProcessVO> buildAvailableProcessRecords(List<ProcessModel> processModels, String tenantId) {
-        if (processModels == null || processModels.isEmpty()) {
-            return List.of();
-        }
-        Set<String> formIds = new HashSet<>();
-        processModels.stream()
-                .map(ProcessModel::getFormDefinitionId)
-                .filter(StringUtils::hasText)
-                .forEach(formIds::add);
-        Map<String, FormDefinition> formMap = new HashMap<>();
-        if (!formIds.isEmpty()) {
-            formDefinitionMapper.selectList(new QueryWrapper<FormDefinition>()
-                            .in("id", formIds)
-                            .eq("tenant_id", tenantId)
-                            .eq("delete_flag", 0))
-                    .forEach(form -> formMap.put(form.getId(), form));
-        }
-        return processModels.stream()
-                .map(model -> buildAvailableProcessVO(model, formMap.get(model.getFormDefinitionId())))
-                .toList();
-    }
-
-    private AvailableProcessVO buildAvailableProcessVO(ProcessModel model, FormDefinition form) {
-        AvailableProcessVO vo = new AvailableProcessVO();
-        vo.setId(model.getId());
-        vo.setCreateTime(model.getCreateTime());
-        vo.setCreateBy(model.getCreateBy());
-        vo.setUpdateTime(model.getUpdateTime());
-        vo.setUpdateBy(model.getUpdateBy());
-        vo.setCategoryId(model.getCategoryId());
-        vo.setProcessKey(model.getProcessKey());
-        vo.setProcessName(model.getProcessName());
-        vo.setProcessVersion(model.getVersion());
-        vo.setDesignerType(model.getDesignerType());
-        vo.setFormDefinitionId(model.getFormDefinitionId());
-        vo.setStartScopeType(model.getStartScopeType());
-        vo.setRemark(model.getRemark());
-        vo.setPublishedTime(model.getPublishedTime());
-        if (form != null) {
-            vo.setFormKey(form.getFormKey());
-            vo.setFormName(form.getFormName());
-            vo.setFormVersion(form.getVersion());
-        }
-        return vo;
-    }
-
-    private List<StartedInstanceVO> buildStartedInstanceRecords(List<ProcessInstance> instances, String tenantId) {
-        if (instances == null || instances.isEmpty()) {
-            return List.of();
-        }
-        Set<String> processModelIds = new HashSet<>();
-        Set<String> formInstanceIds = new HashSet<>();
-        instances.stream()
-                .map(ProcessInstance::getProcessModelId)
-                .filter(StringUtils::hasText)
-                .forEach(processModelIds::add);
-        instances.stream()
-                .map(ProcessInstance::getFormInstanceId)
-                .filter(StringUtils::hasText)
-                .forEach(formInstanceIds::add);
-        Map<String, ProcessModel> processModelMap = new HashMap<>();
-        if (!processModelIds.isEmpty()) {
-            processModelMapper.selectList(new QueryWrapper<ProcessModel>()
-                            .in("id", processModelIds)
-                            .eq("tenant_id", tenantId)
-                            .eq("delete_flag", 0))
-                    .forEach(model -> processModelMap.put(model.getId(), model));
-        }
-        Map<String, FormInstance> formInstanceMap = new HashMap<>();
-        if (!formInstanceIds.isEmpty()) {
-            formInstanceMapper.selectList(new QueryWrapper<FormInstance>()
-                            .in("id", formInstanceIds)
-                            .eq("tenant_id", tenantId)
-                            .eq("delete_flag", 0))
-                    .forEach(formInstance -> formInstanceMap.put(formInstance.getId(), formInstance));
-        }
-        return instances.stream()
-                .map(instance -> buildStartedInstanceVO(
-                        instance,
-                        processModelMap.get(instance.getProcessModelId()),
-                        formInstanceMap.get(instance.getFormInstanceId())))
-                .toList();
-    }
-
-    private StartedInstanceVO buildStartedInstanceVO(ProcessInstance instance, ProcessModel processModel, FormInstance formInstance) {
-        StartedInstanceVO vo = new StartedInstanceVO();
-        vo.setId(instance.getId());
-        vo.setCreateTime(instance.getCreateTime());
-        vo.setCreateBy(instance.getCreateBy());
-        vo.setUpdateTime(instance.getUpdateTime());
-        vo.setUpdateBy(instance.getUpdateBy());
-        vo.setProcessModelId(instance.getProcessModelId());
-        vo.setFormInstanceId(instance.getFormInstanceId());
-        vo.setFormDefinitionId(instance.getFormDefinitionId());
-        vo.setInstanceNo(instance.getInstanceNo());
-        vo.setInstanceTitle(instance.getInstanceTitle());
-        vo.setBusinessKey(instance.getBusinessKey());
-        vo.setStatus(instance.getStatus());
-        vo.setStartTime(instance.getStartTime());
-        vo.setEndTime(instance.getEndTime());
-        vo.setCurrentTaskNames(instance.getCurrentTaskNames());
-        vo.setCurrentAssigneeNames(instance.getCurrentAssigneeNames());
-        if (processModel != null) {
-            vo.setProcessName(processModel.getProcessName());
-        }
-        if (formInstance != null) {
-            vo.setFormName(formInstance.getFormName());
-        }
-        return vo;
-    }
-
-    private InstanceDetailVO buildInstanceDetail(ProcessInstance processInstance, FormInstance formInstance,
-            List<Task> currentTasks, List<OperationRecord> records) {
-        InstanceDetailVO vo = new InstanceDetailVO();
-        vo.setProcessInstance(buildProcessInstanceVO(processInstance));
-        vo.setFormInstance(buildFormInstanceVO(formInstance));
-        Map<String, String> candidateNamesByTaskId = buildCandidateNamesByTaskId(currentTasks, processInstance.getTenantId());
-        vo.setCurrentTasks(currentTasks.stream()
-                .map(task -> buildRuntimeTaskVO(task, processInstance, candidateNamesByTaskId.get(task.getId())))
-                .toList());
-        vo.setRecords(records.stream()
-                .map(this::buildOperationRecordVO)
-                .toList());
-        return vo;
     }
 
     private List<Task> listCurrentTasks(String processInstanceId, String tenantId) {
@@ -546,82 +415,6 @@ public class RuntimeQueryServiceImpl implements IRuntimeQueryService {
                 .eq("process_instance_id", processInstanceId)
                 .eq("operator_user_id", userId)
                 .eq("delete_flag", 0)) > 0;
-    }
-
-    private ProcessInstanceVO buildProcessInstanceVO(ProcessInstance processInstance) {
-        ProcessInstanceVO vo = new ProcessInstanceVO();
-        vo.setId(processInstance.getId());
-        vo.setCreateTime(processInstance.getCreateTime());
-        vo.setCreateBy(processInstance.getCreateBy());
-        vo.setUpdateTime(processInstance.getUpdateTime());
-        vo.setUpdateBy(processInstance.getUpdateBy());
-        vo.setTenantId(processInstance.getTenantId());
-        vo.setProcessModelId(processInstance.getProcessModelId());
-        vo.setFormInstanceId(processInstance.getFormInstanceId());
-        vo.setFlowableProcessInstanceId(processInstance.getFlowableProcessInstanceId());
-        vo.setFlowableProcessDefinitionId(processInstance.getFlowableProcessDefinitionId());
-        vo.setFormDefinitionId(processInstance.getFormDefinitionId());
-        vo.setInstanceNo(processInstance.getInstanceNo());
-        vo.setInstanceTitle(processInstance.getInstanceTitle());
-        vo.setBusinessKey(processInstance.getBusinessKey());
-        vo.setStarterUserId(processInstance.getStarterUserId());
-        vo.setStarterUsername(processInstance.getStarterUsername());
-        vo.setStarterRealname(processInstance.getStarterRealname());
-        vo.setStatus(processInstance.getStatus());
-        vo.setStartTime(processInstance.getStartTime());
-        vo.setEndTime(processInstance.getEndTime());
-        vo.setCurrentTaskNames(processInstance.getCurrentTaskNames());
-        vo.setCurrentAssigneeNames(processInstance.getCurrentAssigneeNames());
-        return vo;
-    }
-
-    private FormInstanceVO buildFormInstanceVO(FormInstance formInstance) {
-        FormInstanceVO vo = new FormInstanceVO();
-        vo.setId(formInstance.getId());
-        vo.setCreateTime(formInstance.getCreateTime());
-        vo.setCreateBy(formInstance.getCreateBy());
-        vo.setUpdateTime(formInstance.getUpdateTime());
-        vo.setUpdateBy(formInstance.getUpdateBy());
-        vo.setTenantId(formInstance.getTenantId());
-        vo.setProcessInstanceId(formInstance.getProcessInstanceId());
-        vo.setFormDefinitionId(formInstance.getFormDefinitionId());
-        vo.setFormKey(formInstance.getFormKey());
-        vo.setFormName(formInstance.getFormName());
-        vo.setFormVersion(formInstance.getFormVersion());
-        vo.setFormDataJson(formInstance.getFormDataJson());
-        vo.setFormSchemaSnapshotJson(formInstance.getFormSchemaSnapshotJson());
-        vo.setFormOptionSnapshotJson(formInstance.getFormOptionSnapshotJson());
-        vo.setStatus(formInstance.getStatus());
-        vo.setSubmittedTime(formInstance.getSubmittedTime());
-        return vo;
-    }
-
-    private OperationRecordVO buildOperationRecordVO(OperationRecord record) {
-        OperationRecordVO vo = new OperationRecordVO();
-        vo.setId(record.getId());
-        vo.setCreateTime(record.getCreateTime());
-        vo.setCreateBy(record.getCreateBy());
-        vo.setUpdateTime(record.getUpdateTime());
-        vo.setUpdateBy(record.getUpdateBy());
-        vo.setTenantId(record.getTenantId());
-        vo.setProcessInstanceId(record.getProcessInstanceId());
-        vo.setTaskId(record.getTaskId());
-        vo.setFlowableTaskId(record.getFlowableTaskId());
-        vo.setNodeId(record.getNodeId());
-        vo.setNodeName(record.getNodeName());
-        vo.setAction(record.getAction());
-        vo.setOperatorUserId(record.getOperatorUserId());
-        vo.setOperatorUsername(record.getOperatorUsername());
-        vo.setOperatorRealname(record.getOperatorRealname());
-        vo.setTargetUserId(record.getTargetUserId());
-        vo.setTargetUsername(record.getTargetUsername());
-        vo.setTargetRealname(record.getTargetRealname());
-        vo.setTargetNodeId(record.getTargetNodeId());
-        vo.setTargetNodeName(record.getTargetNodeName());
-        vo.setComment(record.getComment());
-        vo.setFormDataSnapshotJson(record.getFormDataSnapshotJson());
-        vo.setOperateTime(record.getOperateTime());
-        return vo;
     }
 
     private PageVO<RuntimeTaskVO> pageTasks(TaskPageReq req, RequestContext context, String status) {
@@ -701,7 +494,7 @@ public class RuntimeQueryServiceImpl implements IRuntimeQueryService {
         wrapper.orderByDesc("create_time");
 
         Page<Task> page = taskMapper.selectPage(new Page<>(pageNum, pageSize), wrapper);
-        List<RuntimeTaskVO> records = buildRuntimeTaskRecords(page.getRecords(), tenantId);
+        List<RuntimeTaskVO> records = runtimeViewAssemblerService.buildRuntimeTaskRecords(page.getRecords(), tenantId);
         return new PageVO<>(records, page.getTotal(), page.getCurrent(), page.getSize());
     }
 
@@ -751,96 +544,20 @@ public class RuntimeQueryServiceImpl implements IRuntimeQueryService {
         }
     }
 
-    private List<RuntimeTaskVO> buildRuntimeTaskRecords(List<Task> tasks, String tenantId) {
-        if (tasks == null || tasks.isEmpty()) {
-            return List.of();
-        }
-        Set<String> processInstanceIds = new HashSet<>();
-        tasks.stream()
-                .map(Task::getProcessInstanceId)
-                .filter(StringUtils::hasText)
-                .forEach(processInstanceIds::add);
-        Map<String, ProcessInstance> instanceMap = new HashMap<>();
-        if (!processInstanceIds.isEmpty()) {
-            processInstanceMapper.selectList(new QueryWrapper<ProcessInstance>()
-                            .in("id", processInstanceIds)
-                            .eq("tenant_id", tenantId)
-                            .eq("delete_flag", 0))
-                    .forEach(instance -> instanceMap.put(instance.getId(), instance));
-        }
-        return tasks.stream()
-                .map(task -> buildRuntimeTaskVO(task, instanceMap.get(task.getProcessInstanceId())))
-                .toList();
-    }
-
-    private RuntimeTaskVO buildRuntimeTaskVO(Task task, ProcessInstance processInstance) {
-        return buildRuntimeTaskVO(task, processInstance, null);
-    }
-
-    private RuntimeTaskVO buildRuntimeTaskVO(Task task, ProcessInstance processInstance, String candidateAssigneeNames) {
-        RuntimeTaskVO vo = new RuntimeTaskVO();
-        vo.setId(task.getId());
-        vo.setCreateTime(task.getCreateTime());
-        vo.setCreateBy(task.getCreateBy());
-        vo.setUpdateTime(task.getUpdateTime());
-        vo.setUpdateBy(task.getUpdateBy());
-        vo.setProcessInstanceId(task.getProcessInstanceId());
-        vo.setFlowableTaskId(task.getFlowableTaskId());
-        vo.setNodeId(task.getNodeId());
-        vo.setTaskName(task.getTaskName());
-        vo.setTaskType(task.getTaskType());
-        vo.setAssigneeUserId(task.getAssigneeUserId());
-        vo.setAssigneeUsername(task.getAssigneeUsername());
-        vo.setAssigneeRealname(task.getAssigneeRealname());
-        vo.setCandidateAssigneeNames(candidateAssigneeNames);
-        vo.setStatus(task.getStatus());
-        vo.setClaimTime(task.getClaimTime());
-        vo.setCompleteTime(task.getCompleteTime());
-        if (processInstance != null) {
-            vo.setInstanceNo(processInstance.getInstanceNo());
-            vo.setInstanceTitle(processInstance.getInstanceTitle());
-            vo.setStarterUserId(processInstance.getStarterUserId());
-            vo.setStarterUsername(processInstance.getStarterUsername());
-            vo.setStarterRealname(processInstance.getStarterRealname());
-            vo.setStartTime(processInstance.getStartTime());
-        }
-        return vo;
-    }
-
-    private Map<String, String> buildCandidateNamesByTaskId(List<Task> tasks, String tenantId) {
-        if (tasks == null || tasks.isEmpty()) {
-            return Map.of();
-        }
-        Set<String> taskIds = tasks.stream()
-                .map(Task::getId)
-                .filter(StringUtils::hasText)
-                .collect(java.util.stream.Collectors.toSet());
-        if (taskIds.isEmpty()) {
-            return Map.of();
-        }
-        Map<String, List<String>> candidateNames = new HashMap<>();
-        taskCandidateMapper.selectList(new QueryWrapper<TaskCandidate>()
-                        .in("task_id", taskIds)
-                        .eq("tenant_id", tenantId)
-                        .eq("status", WorkflowConstants.Status.ACTIVE)
-                        .eq("delete_flag", 0))
-                .forEach(candidate -> candidateNames
-                        .computeIfAbsent(candidate.getTaskId(), key -> new ArrayList<>())
-                        .add(assigneeResolveService.resolveDisplayName(
-                                candidate.getCandidateRealname(),
-                                candidate.getCandidateUsername(),
-                                candidate.getCandidateUserId())));
-        return candidateNames.entrySet().stream()
-                .collect(java.util.stream.Collectors.toMap(
-                        Map.Entry::getKey,
-                        entry -> String.join(",", entry.getValue().stream()
-                                .filter(StringUtils::hasText)
-                                .distinct()
-                                .toList())));
-    }
-
     private Task requireTodoTask(String taskId, String tenantId) {
         return workflowRuntimeLookupService.requireTodoTask(taskId, tenantId);
+    }
+
+    private ProcessModel requirePublishedModel(String processModelId, String tenantId) {
+        return workflowRuntimeLookupService.requirePublishedModel(processModelId, tenantId);
+    }
+
+    private FormDefinition requirePublishedForm(String formDefinitionId, String tenantId) {
+        return workflowRuntimeLookupService.requirePublishedForm(formDefinitionId, tenantId);
+    }
+
+    private void checkStartPermission(ProcessModel model, RequestContext context) {
+        workflowRuntimeLookupService.checkStartPermission(model, context);
     }
 
     private ProcessInstance requireProcessInstance(String processInstanceId, String tenantId) {
@@ -877,133 +594,6 @@ public class RuntimeQueryServiceImpl implements IRuntimeQueryService {
 
     private boolean isDirectAssignee(Task task, RequestContext context) {
         return StringUtils.hasText(context.getUserId()) && context.getUserId().equals(task.getAssigneeUserId());
-    }
-
-    private TaskFormVO buildTaskForm(Task task, ProcessInstance processInstance, FormInstance formInstance,
-            List<FieldPermission> permissions, ProcessNodeConfig nodeConfig) {
-        boolean startDraftTask = WorkflowConstants.TaskType.START_DRAFT.equals(task.getTaskType());
-        List<ProcessNodeConfig> returnableNodes = startDraftTask
-                ? List.of()
-                : processNodeConfigService.listReturnableNodeConfigs(processInstance, nodeConfig, task.getTenantId());
-        TaskFormVO vo = new TaskFormVO();
-        vo.setTaskId(task.getId());
-        vo.setProcessInstanceId(processInstance.getId());
-        vo.setInstanceNo(processInstance.getInstanceNo());
-        vo.setInstanceTitle(processInstance.getInstanceTitle());
-        vo.setNodeId(task.getNodeId());
-        vo.setTaskName(task.getTaskName());
-        vo.setTaskType(task.getTaskType());
-        vo.setParentTaskId(task.getParentTaskId());
-        vo.setFormInstanceId(formInstance.getId());
-        vo.setFormDefinitionId(formInstance.getFormDefinitionId());
-        vo.setFormKey(formInstance.getFormKey());
-        vo.setFormName(formInstance.getFormName());
-        vo.setFormVersion(formInstance.getFormVersion());
-        vo.setSchemaJson(formInstance.getFormSchemaSnapshotJson());
-        vo.setOptionJson(formInstance.getFormOptionSnapshotJson());
-        vo.setFormDataJson(formInstance.getFormDataJson());
-        vo.setActionPermissions(buildTaskActionPermissions(task, nodeConfig, returnableNodes));
-        List<TaskReturnNodeVO> returnNodes = new ArrayList<>();
-        if (!startDraftTask && isEnabled(nodeConfig.getAllowReturn())) {
-            returnNodes.add(buildStartDraftReturnNode());
-        }
-        returnNodes.addAll(returnableNodes.stream().map(this::buildTaskReturnNode).toList());
-        vo.setReturnNodes(returnNodes);
-        vo.setFieldPermissions(permissions.stream().map(this::buildRuntimeFieldPermission).toList());
-        vo.setAssigneeSelectNodes(assigneeResolveService.buildRequiredAssigneeSelectNodes(
-                processInstance.getProcessModelId(), processInstance, task.getTenantId(), task.getNodeId()));
-        return vo;
-    }
-
-    private TaskActionPermissionVO buildTaskActionPermissions(Task task, ProcessNodeConfig nodeConfig,
-            List<ProcessNodeConfig> returnableNodes) {
-        TaskActionPermissionVO vo = new TaskActionPermissionVO();
-        if (WorkflowConstants.TaskType.START_DRAFT.equals(task.getTaskType())) {
-            vo.setAllowApprove(true);
-            vo.setAllowReject(false);
-            vo.setAllowTransfer(false);
-            vo.setAllowAddSign(false);
-            vo.setAllowReturn(false);
-            return vo;
-        }
-        boolean addSignTask = WorkflowConstants.TaskType.ADD_SIGN.equals(task.getTaskType());
-        vo.setAllowApprove(true);
-        vo.setAllowReject(!addSignTask);
-        vo.setAllowTransfer(!addSignTask && isEnabled(nodeConfig.getAllowTransfer()));
-        vo.setAllowAddSign(!addSignTask && isEnabled(nodeConfig.getAllowAddSign()));
-        vo.setAllowReturn(!addSignTask && isEnabled(nodeConfig.getAllowReturn()));
-        return vo;
-    }
-
-    private TaskReturnNodeVO buildTaskReturnNode(ProcessNodeConfig nodeConfig) {
-        TaskReturnNodeVO vo = new TaskReturnNodeVO();
-        vo.setNodeId(nodeConfig.getNodeId());
-        vo.setNodeName(nodeConfig.getNodeName());
-        vo.setNodeType(nodeConfig.getNodeType());
-        vo.setSortOrder(nodeConfig.getSortOrder());
-        return vo;
-    }
-
-    private TaskReturnNodeVO buildStartDraftReturnNode() {
-        TaskReturnNodeVO vo = new TaskReturnNodeVO();
-        vo.setNodeId(WorkflowConstants.VirtualNode.START_DRAFT);
-        vo.setNodeName(WorkflowConstants.VirtualNodeName.START_DRAFT);
-        vo.setNodeType(WorkflowConstants.NodeType.START);
-        vo.setSortOrder(0);
-        return vo;
-    }
-
-    private boolean isEnabled(Integer flag) {
-        return Integer.valueOf(1).equals(flag);
-    }
-
-    private RuntimeFieldPermissionVO buildRuntimeFieldPermission(FieldPermission permission) {
-        RuntimeFieldPermissionVO vo = new RuntimeFieldPermissionVO();
-        vo.setFieldKey(permission.getFieldKey());
-        vo.setPermission(permission.getPermission());
-        vo.setRequiredFlag(permission.getRequiredFlag());
-        return vo;
-    }
-
-    private ProcessModel requirePublishedModel(String processModelId, String tenantId) {
-        return workflowRuntimeLookupService.requirePublishedModel(processModelId, tenantId);
-    }
-
-    private FormDefinition requirePublishedForm(String formDefinitionId, String tenantId) {
-        return workflowRuntimeLookupService.requirePublishedForm(formDefinitionId, tenantId);
-    }
-
-    private void checkStartPermission(ProcessModel model, RequestContext context) {
-        workflowRuntimeLookupService.checkStartPermission(model, context);
-    }
-
-    private ProcessInstance buildStarterContextProcessInstance(ProcessModel model, RequestContext context) {
-        ProcessInstance processInstance = new ProcessInstance();
-        processInstance.setTenantId(model.getTenantId());
-        processInstance.setProcessModelId(model.getId());
-        processInstance.setStarterUserId(context.getUserId());
-        processInstance.setStarterUsername(context.getUsername());
-        processInstance.setStarterRealname(assigneeResolveService.resolveCurrentUserRealname(context));
-        return processInstance;
-    }
-
-    private StartFormVO buildStartForm(ProcessModel model, FormDefinition form, RequestContext context) {
-        StartFormVO vo = new StartFormVO();
-        vo.setProcessModelId(model.getId());
-        vo.setProcessName(model.getProcessName());
-        vo.setFormDefinitionId(form.getId());
-        vo.setFormKey(form.getFormKey());
-        vo.setFormName(form.getFormName());
-        vo.setFormVersion(form.getVersion());
-        vo.setSchemaJson(form.getSchemaJson());
-        vo.setOptionJson(form.getOptionJson());
-        vo.setFieldPermissions(listFieldPermissions(model.getId(), WorkflowConstants.VirtualNode.START, model.getTenantId())
-                .stream()
-                .map(this::buildRuntimeFieldPermission)
-                .toList());
-        vo.setAssigneeSelectNodes(assigneeResolveService.buildRequiredAssigneeSelectNodes(
-                model.getId(), buildStarterContextProcessInstance(model, context), model.getTenantId(), WorkflowConstants.VirtualNode.START_DRAFT));
-        return vo;
     }
 
     private String requireTenantId(RequestContext context) {
