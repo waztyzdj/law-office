@@ -30,6 +30,7 @@ import com.lawoffice.workflow.req.AvailableProcessPageReq;
 import com.lawoffice.workflow.req.StartedInstancePageReq;
 import com.lawoffice.workflow.req.TaskPageReq;
 import com.lawoffice.workflow.service.IProcessNodeConfigService;
+import com.lawoffice.workflow.service.IRuntimeAccessService;
 import com.lawoffice.workflow.service.IRuntimeQueryService;
 import com.lawoffice.workflow.service.IRuntimeViewAssemblerService;
 import com.lawoffice.workflow.service.IWorkflowRuntimeLookupService;
@@ -61,6 +62,7 @@ public class RuntimeQueryServiceImpl implements IRuntimeQueryService {
     private final TaskCandidateMapper taskCandidateMapper;
     private final TaskMapper taskMapper;
     private final IProcessNodeConfigService processNodeConfigService;
+    private final IRuntimeAccessService runtimeAccessService;
     private final IRuntimeViewAssemblerService runtimeViewAssemblerService;
     private final IWorkflowRuntimeLookupService workflowRuntimeLookupService;
     private final IUserService userService;
@@ -74,6 +76,7 @@ public class RuntimeQueryServiceImpl implements IRuntimeQueryService {
             TaskCandidateMapper taskCandidateMapper,
             TaskMapper taskMapper,
             IProcessNodeConfigService processNodeConfigService,
+            IRuntimeAccessService runtimeAccessService,
             IRuntimeViewAssemblerService runtimeViewAssemblerService,
             IWorkflowRuntimeLookupService workflowRuntimeLookupService,
             IUserService userService) {
@@ -86,6 +89,7 @@ public class RuntimeQueryServiceImpl implements IRuntimeQueryService {
         this.taskCandidateMapper = taskCandidateMapper;
         this.taskMapper = taskMapper;
         this.processNodeConfigService = processNodeConfigService;
+        this.runtimeAccessService = runtimeAccessService;
         this.runtimeViewAssemblerService = runtimeViewAssemblerService;
         this.workflowRuntimeLookupService = workflowRuntimeLookupService;
         this.userService = userService;
@@ -289,7 +293,7 @@ public class RuntimeQueryServiceImpl implements IRuntimeQueryService {
         try {
             String tenantId = requireTenantId(context);
             ProcessInstance processInstance = requireProcessInstance(id, tenantId);
-            ensureInstanceAccess(processInstance, context);
+            runtimeAccessService.ensureInstanceAccess(processInstance, context);
             FormInstance formInstance = requireFormInstance(processInstance.getFormInstanceId(), tenantId);
             List<Task> currentTasks = listCurrentTasks(processInstance.getId(), tenantId);
             List<OperationRecord> records = listOperationRecords(processInstance.getId(), tenantId);
@@ -307,7 +311,7 @@ public class RuntimeQueryServiceImpl implements IRuntimeQueryService {
         try {
             String tenantId = requireTenantId(context);
             ProcessInstance processInstance = requireProcessInstance(id, tenantId);
-            ensureInstanceAccess(processInstance, context);
+            runtimeAccessService.ensureInstanceAccess(processInstance, context);
             return BaseResult.success(listOperationRecords(processInstance.getId(), tenantId).stream()
                     .map(runtimeViewAssemblerService::buildOperationRecordVO)
                     .toList());
@@ -363,58 +367,6 @@ public class RuntimeQueryServiceImpl implements IRuntimeQueryService {
                 .eq("delete_flag", 0)
                 .orderByAsc("operate_time")
                 .orderByAsc("create_time"));
-    }
-
-    /**
-     * 审批详情属于运行时业务数据，只允许发起人、处理人、候选人或审批记录操作人查看。
-     */
-    private void ensureInstanceAccess(ProcessInstance processInstance, RequestContext context) {
-        String userId = requireUserId(context);
-        if (userId.equals(processInstance.getStarterUserId())) {
-            return;
-        }
-        if (hasTaskAccess(processInstance.getId(), processInstance.getTenantId(), context)) {
-            return;
-        }
-        if (hasRecordAccess(processInstance.getId(), processInstance.getTenantId(), userId)) {
-            return;
-        }
-        throw new IllegalArgumentException("当前用户无权查看该审批实例");
-    }
-
-    private boolean hasTaskAccess(String processInstanceId, String tenantId, RequestContext context) {
-        QueryWrapper<Task> taskWrapper = new QueryWrapper<Task>()
-                .eq("tenant_id", tenantId)
-                .eq("process_instance_id", processInstanceId)
-                .eq("delete_flag", 0)
-                .eq("assignee_user_id", context.getUserId());
-        if (taskMapper.selectCount(taskWrapper) > 0) {
-            return true;
-        }
-        List<String> taskIds = taskMapper.selectList(new QueryWrapper<Task>()
-                        .select("id")
-                        .eq("tenant_id", tenantId)
-                        .eq("process_instance_id", processInstanceId)
-                        .eq("delete_flag", 0))
-                .stream()
-                .map(Task::getId)
-                .toList();
-        if (taskIds.isEmpty()) {
-            return false;
-        }
-        return taskCandidateMapper.selectCount(new QueryWrapper<TaskCandidate>()
-                .eq("tenant_id", tenantId)
-                .in("task_id", taskIds)
-                .eq("candidate_user_id", context.getUserId())
-                .eq("delete_flag", 0)) > 0;
-    }
-
-    private boolean hasRecordAccess(String processInstanceId, String tenantId, String userId) {
-        return operationRecordMapper.selectCount(new QueryWrapper<OperationRecord>()
-                .eq("tenant_id", tenantId)
-                .eq("process_instance_id", processInstanceId)
-                .eq("operator_user_id", userId)
-                .eq("delete_flag", 0)) > 0;
     }
 
     private PageVO<RuntimeTaskVO> pageTasks(TaskPageReq req, RequestContext context, String status) {
