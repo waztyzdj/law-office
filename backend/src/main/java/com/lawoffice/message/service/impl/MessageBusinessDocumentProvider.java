@@ -125,6 +125,9 @@ public class MessageBusinessDocumentProvider implements IBusinessDocumentProvide
         return accessibleIds;
     }
 
+    /**
+     * 业务文档权限由消息发送人和接收人共同决定，不能只看上传人。
+     */
     private SysMessage getActiveTenantMessage(String messageId, BusinessDocumentAccessContext context) {
         return messageMapper.selectOne(Wrappers.lambdaQuery(SysMessage.class)
                 .eq(SysMessage::getId, messageId)
@@ -133,6 +136,9 @@ public class MessageBusinessDocumentProvider implements IBusinessDocumentProvide
                 .last("LIMIT 1"));
     }
 
+    /**
+     * 接收人必须是当前租户、当前用户且未删除的有效收件记录。
+     */
     private boolean hasReceivedMessageAccess(String messageId, BusinessDocumentAccessContext context) {
         return receiverMapper.selectCount(Wrappers.lambdaQuery(SysMessageReceiver.class)
                 .eq(SysMessageReceiver::getMessageId, messageId)

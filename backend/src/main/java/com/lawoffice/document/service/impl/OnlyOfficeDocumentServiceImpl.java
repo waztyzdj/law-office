@@ -406,6 +406,9 @@ public class OnlyOfficeDocumentServiceImpl implements IOnlyOfficeDocumentService
         throw new IllegalArgumentException("ONLYOFFICE mode only supports view or edit");
     }
 
+    /**
+     * 下载令牌仅用于预览下载，必须绑定当前租户和具体文件。
+     */
     private String generateDownloadToken(String fileId) {
         String tenantId = requireTenantId();
         Map<String, Object> claims = new LinkedHashMap<>();
@@ -415,6 +418,9 @@ public class OnlyOfficeDocumentServiceImpl implements IOnlyOfficeDocumentService
         return buildToken(claims, previewTokenTtl());
     }
 
+    /**
+     * 历史版本下载令牌与主文件令牌使用同一过期策略，避免长时间暴露历史版本地址。
+     */
     private String generateHistoryDownloadToken(String versionId) {
         String tenantId = requireTenantId();
         Map<String, Object> claims = new LinkedHashMap<>();
@@ -424,6 +430,9 @@ public class OnlyOfficeDocumentServiceImpl implements IOnlyOfficeDocumentService
         return buildToken(claims, previewTokenTtl());
     }
 
+    /**
+     * 回调令牌额外绑定用户名，确保保存回调只能由当前租户的当前用户触发。
+     */
     private String generateCallbackToken(String fileId, String username) {
         String tenantId = requireTenantId();
         if (!StringUtils.hasText(username)) {
@@ -437,6 +446,9 @@ public class OnlyOfficeDocumentServiceImpl implements IOnlyOfficeDocumentService
         return buildToken(claims, callbackTokenTtl());
     }
 
+    /**
+     * 回调 token 必须包含目的、文件、租户和用户名，缺一项都视为非法请求。
+     */
     private OnlyOfficeCallbackContext parseCallbackToken(String token) {
         if (!StringUtils.hasText(token)) {
             throw new IllegalArgumentException("ONLYOFFICE callback token cannot be empty");
@@ -454,6 +466,9 @@ public class OnlyOfficeDocumentServiceImpl implements IOnlyOfficeDocumentService
         return new OnlyOfficeCallbackContext(fileId, tenantId, username);
     }
 
+    /**
+     * OnlyOffice 配置 token 与 document/editor 配置一起下发，避免前端篡改编辑参数。
+     */
     private OnlyOfficePreviewVO buildPreviewVO(
             Map<String, Object> document,
             String documentType,
@@ -471,6 +486,9 @@ public class OnlyOfficeDocumentServiceImpl implements IOnlyOfficeDocumentService
         return vo;
     }
 
+    /**
+     * 编辑器配置只承载当前用户身份和模式，不额外塞入业务字段。
+     */
     private Map<String, Object> buildEditorConfig(String username, String userId, String editorMode) {
         Map<String, Object> editorConfig = new LinkedHashMap<>();
         editorConfig.put("lang", "zh-CN");
@@ -482,6 +500,9 @@ public class OnlyOfficeDocumentServiceImpl implements IOnlyOfficeDocumentService
         return editorConfig;
     }
 
+    /**
+     * 只保留编辑器必要的定制项，避免把服务端业务配置泄漏到前端。
+     */
     private Map<String, Object> buildCustomization(String editorMode) {
         return Map.of(
                 "autosave", MODE_EDIT.equals(editorMode),
@@ -491,10 +512,16 @@ public class OnlyOfficeDocumentServiceImpl implements IOnlyOfficeDocumentService
         );
     }
 
+    /**
+     * 配置 token 直接使用当前配置内容作为 claims，便于 OnlyOffice 侧校验完整性。
+     */
     private String generateConfigToken(Map<String, Object> config) {
         return buildToken(new LinkedHashMap<>(config), previewTokenTtl());
     }
 
+    /**
+     * token 统一由当前实例密钥签发，避免不同调用链使用不一致的签名策略。
+     */
     private String buildToken(Map<String, Object> claims, Duration ttl) {
         Date now = new Date();
         Date expiry = new Date(now.getTime() + ttl.toMillis());
@@ -506,6 +533,9 @@ public class OnlyOfficeDocumentServiceImpl implements IOnlyOfficeDocumentService
                 .compact();
     }
 
+    /**
+     * 解析失败时统一认为 token 非法或过期，避免把底层异常细节暴露给调用方。
+     */
     private Claims parseToken(String token) {
         try {
             return Jwts.parser()
@@ -518,16 +548,25 @@ public class OnlyOfficeDocumentServiceImpl implements IOnlyOfficeDocumentService
         }
     }
 
+    /**
+     * 预览 token 生命周期默认较短，不能长期暴露文档预览入口。
+     */
     private Duration previewTokenTtl() {
         int minutes = properties.getPreviewTokenMinutes() == null ? 10 : properties.getPreviewTokenMinutes();
         return Duration.ofMinutes(Math.max(1, minutes));
     }
 
+    /**
+     * 回调 token 默认更长，但仍要有下限保护，避免配置异常导致无限期有效。
+     */
     private Duration callbackTokenTtl() {
         int minutes = properties.getCallbackTokenMinutes() == null ? 1440 : properties.getCallbackTokenMinutes();
         return Duration.ofMinutes(Math.max(1, minutes));
     }
 
+    /**
+     * JWT 密钥长度不足时直接阻断，避免生成不安全的签名令牌。
+     */
     private SecretKey secretKey() {
         String secret = properties.getJwtSecret();
         if (!StringUtils.hasText(secret) || secret.getBytes(StandardCharsets.UTF_8).length < 32) {
@@ -536,6 +575,9 @@ public class OnlyOfficeDocumentServiceImpl implements IOnlyOfficeDocumentService
         return Keys.hmacShaKeyFor(secret.getBytes(StandardCharsets.UTF_8));
     }
 
+    /**
+     * OnlyOffice 未启用或关键地址未配置时直接失败，避免把错误延迟到回调或下载阶段。
+     */
     private void assertEnabled() {
         if (!Boolean.TRUE.equals(properties.getEnabled())) {
             throw new IllegalArgumentException("ONLYOFFICE is not enabled");
@@ -548,6 +590,9 @@ public class OnlyOfficeDocumentServiceImpl implements IOnlyOfficeDocumentService
         }
     }
 
+    /**
+     * 只允许 doc/xls/ppt/pdf 这几类已支持格式进入预览链路。
+     */
     private String resolveSupportedExtension(String fileName) {
         String extension = resolveExtension(fileName);
         if (WORD_EXTENSIONS.contains(extension)
@@ -559,6 +604,9 @@ public class OnlyOfficeDocumentServiceImpl implements IOnlyOfficeDocumentService
         throw new IllegalArgumentException("Current file type does not support ONLYOFFICE preview");
     }
 
+    /**
+     * 文档类型只用于 OnlyOffice 前端配置，不影响后端文件类型本身。
+     */
     private String resolveDocumentType(String extension) {
         if (WORD_EXTENSIONS.contains(extension)) {
             return "word";
@@ -572,6 +620,9 @@ public class OnlyOfficeDocumentServiceImpl implements IOnlyOfficeDocumentService
         return "pdf";
     }
 
+    /**
+     * 如果文件名没有扩展名，直接返回空串，让上层按不支持格式处理。
+     */
     private String resolveExtension(String fileName) {
         if (!StringUtils.hasText(fileName) || !fileName.contains(".")) {
             return "";
@@ -579,6 +630,9 @@ public class OnlyOfficeDocumentServiceImpl implements IOnlyOfficeDocumentService
         return fileName.substring(fileName.lastIndexOf('.') + 1).toLowerCase(Locale.ROOT);
     }
 
+    /**
+     * 编辑器展示名优先取真实姓名，避免前端和 OnlyOffice UI 只显示账号。
+     */
     private String resolveUserDisplayName(String userId, String username) {
         if (StringUtils.hasText(userId)) {
             User user = userMapper.selectById(userId);
@@ -590,6 +644,9 @@ public class OnlyOfficeDocumentServiceImpl implements IOnlyOfficeDocumentService
         return username;
     }
 
+    /**
+     * 用户对象已查出时直接复用，避免回调和预览路径重复查库。
+     */
     private String resolveUserDisplayName(User user, String username) {
         if (user != null && StringUtils.hasText(user.getRealname())) {
             return user.getRealname();
@@ -597,16 +654,25 @@ public class OnlyOfficeDocumentServiceImpl implements IOnlyOfficeDocumentService
         return username;
     }
 
+    /**
+     * 文档 key 绑定文件和渲染版本，确保文件更新后 OnlyOffice 重新加载内容。
+     */
     private String buildDocumentKey(DocumentFileVO file) {
         String renderVersion = resolveRenderVersion();
         String versionPart = file.getUpdateTime() == null ? "0" : String.valueOf(file.getUpdateTime().hashCode());
         return sanitizeDocumentKey("file-" + file.getId() + "-" + versionPart + "-" + renderVersion);
     }
 
+    /**
+     * 历史版本 key 绑定版本号，避免不同版本在 OnlyOffice 侧共用缓存。
+     */
     private String buildHistoryDocumentKey(SysFileVersion version) {
         return sanitizeDocumentKey("file-version-" + version.getId() + "-" + version.getVersionNo() + "-" + resolveRenderVersion());
     }
 
+    /**
+     * OnlyOffice document key 只能使用安全字符，其他字符统一替换。
+     */
     private String sanitizeDocumentKey(String key) {
         return key.replaceAll("[^A-Za-z0-9._=-]", "_");
     }
@@ -616,12 +682,18 @@ public class OnlyOfficeDocumentServiceImpl implements IOnlyOfficeDocumentService
         return joinUrl(properties.getDocumentServerUrl(), "/web-apps/apps/api/documents/api.js") + "?v=" + renderVersion;
     }
 
+    /**
+     * 渲染版本只决定前端配置缓存，不参与业务数据计算。
+     */
     private String resolveRenderVersion() {
         return StringUtils.hasText(properties.getRenderVersion())
                 ? properties.getRenderVersion()
                 : "default";
     }
 
+    /**
+     * 回调下载源必须与配置的 Document Server 同源，防止把回调下载指向任意地址。
+     */
     private void validateCallbackDownloadUri(URI uri) {
         if (uri == null || (!"http".equalsIgnoreCase(uri.getScheme()) && !"https".equalsIgnoreCase(uri.getScheme()))) {
             throw new IllegalArgumentException("ONLYOFFICE callback download url is invalid");
@@ -640,6 +712,9 @@ public class OnlyOfficeDocumentServiceImpl implements IOnlyOfficeDocumentService
         }
     }
 
+    /**
+     * 端口归一化用于同源校验，默认端口需要按协议补齐。
+     */
     private int effectivePort(URI uri) {
         if (uri.getPort() >= 0) {
             return uri.getPort();
@@ -653,6 +728,9 @@ public class OnlyOfficeDocumentServiceImpl implements IOnlyOfficeDocumentService
         return -1;
     }
 
+    /**
+     * 历史版本操作只允许读取未删除版本，避免恢复或预览回收站版本。
+     */
     private SysFileVersion getActiveVersion(String versionId) {
         if (!StringUtils.hasText(versionId)) {
             throw new IllegalArgumentException("History version id cannot be empty");
@@ -667,6 +745,9 @@ public class OnlyOfficeDocumentServiceImpl implements IOnlyOfficeDocumentService
         return version;
     }
 
+    /**
+     * 最新版本按版本号倒序取一条，作为回调保存时计算下一个版本的依据。
+     */
     private SysFileVersion getLatestVersion(String fileId) {
         return sysFileVersionMapper.selectOne(Wrappers.lambdaQuery(SysFileVersion.class)
                 .eq(SysFileVersion::getFileId, fileId)
@@ -700,6 +781,9 @@ public class OnlyOfficeDocumentServiceImpl implements IOnlyOfficeDocumentService
                 .last("LIMIT 1"));
     }
 
+    /**
+     * OnlyOffice 接入必须依赖当前租户上下文，缺失时不能继续生成配置或回调地址。
+     */
     private String requireTenantId() {
         String tenantId = TenantContextHolder.getCurrentTenantId();
         if (!StringUtils.hasText(tenantId)) {
@@ -716,6 +800,9 @@ public class OnlyOfficeDocumentServiceImpl implements IOnlyOfficeDocumentService
         return value == null ? null : String.valueOf(value);
     }
 
+    /**
+     * 历史文件内容只有在有 history 对象时才序列化，序列化失败时返回空值避免污染回调结果。
+     */
     private String serializeHistory(Map<String, Object> history) {
         if (history == null || history.isEmpty()) {
             return null;
@@ -727,6 +814,9 @@ public class OnlyOfficeDocumentServiceImpl implements IOnlyOfficeDocumentService
         }
     }
 
+    /**
+     * 历史版本导出使用 SHA-256 做内容校验，失败时说明运行环境不完整。
+     */
     private MessageDigest sha256Digest() {
         try {
             return MessageDigest.getInstance("SHA-256");
@@ -735,12 +825,18 @@ public class OnlyOfficeDocumentServiceImpl implements IOnlyOfficeDocumentService
         }
     }
 
+    /**
+     * 编辑器只接受标准 Content-Type 主值，参数部分要去掉。
+     */
     private String safeContentType(String contentType) {
         return StringUtils.hasText(contentType)
                 ? contentType.split(";", 2)[0].trim()
                 : "application/octet-stream";
     }
 
+    /**
+     * 历史版本文件名需要保留原始扩展名，同时插入版本号便于回放识别。
+     */
     private String buildVersionFileName(String fileName, int versionNo) {
         if (!StringUtils.hasText(fileName)) {
             return "document-v" + versionNo;
@@ -752,6 +848,9 @@ public class OnlyOfficeDocumentServiceImpl implements IOnlyOfficeDocumentService
         return fileName.substring(0, dotIndex) + "-v" + versionNo + fileName.substring(dotIndex);
     }
 
+    /**
+     * 服务器配置的 baseUrl 可能带尾斜杠，拼接前先统一归一化。
+     */
     private String joinUrl(String baseUrl, String path) {
         String base = normalizeBaseUrl(baseUrl);
         String suffix = path == null ? "" : path.trim();
@@ -761,10 +860,16 @@ public class OnlyOfficeDocumentServiceImpl implements IOnlyOfficeDocumentService
         return base + suffix;
     }
 
+    /**
+     * token 或下载链接中的 query 参数需要 URL 编码，避免 OnlyOffice 侧解析失败。
+     */
     private String encodeUrlParam(String value) {
         return URLEncoder.encode(value, StandardCharsets.UTF_8);
     }
 
+    /**
+     * 去掉 baseUrl 尾部多余斜杠，避免 joinUrl 产生重复分隔符。
+     */
     private String normalizeBaseUrl(String baseUrl) {
         String value = baseUrl == null ? "" : baseUrl.trim();
         while (value.endsWith("/")) {
@@ -773,10 +878,16 @@ public class OnlyOfficeDocumentServiceImpl implements IOnlyOfficeDocumentService
         return value;
     }
 
+    /**
+     * 资源 ID 统一用无横线 UUID，便于作为文件键和版本键。
+     */
     private String newId() {
         return UUID.randomUUID().toString().replace("-", "");
     }
 
+    /**
+     * 关闭输入流属于补偿动作，失败不应打断主流程。
+     */
     private void closeQuietly(InputStream inputStream) {
         if (inputStream == null) {
             return;
@@ -788,12 +899,18 @@ public class OnlyOfficeDocumentServiceImpl implements IOnlyOfficeDocumentService
         }
     }
 
+    /**
+     * 临时下载产物的清理只做兜底，不让它反向影响保存和回调结果。
+     */
     private void deleteQuietly(DownloadedCallbackFile downloaded) {
         if (downloaded != null) {
             deleteQuietly(downloaded.path());
         }
     }
 
+    /**
+     * 临时文件删除失败只影响磁盘巡检，不应覆盖原始业务错误。
+     */
     private void deleteQuietly(Path path) {
         if (path == null) {
             return;
@@ -805,6 +922,9 @@ public class OnlyOfficeDocumentServiceImpl implements IOnlyOfficeDocumentService
         }
     }
 
+    /**
+     * 对象存储补偿清理失败不能掩盖 OnlyOffice 保存或恢复的原始异常。
+     */
     private void deleteObjectQuietly(String objectName) {
         if (!StringUtils.hasText(objectName)) {
             return;

@@ -90,6 +90,9 @@ public class DocumentTreeLifecycleServiceImpl implements IDocumentTreeLifecycleS
         sysFilesMapper.deleteById(file.getId());
     }
 
+    /**
+     * 版本文件和变更文件可能被其他业务文件复用，物理清理前必须先检查其他引用。
+     */
     private void hardDeleteDocumentVersions(SysFiles file) {
         List<SysFileVersion> versions = sysFileVersionMapper.selectList(Wrappers.lambdaQuery(SysFileVersion.class)
                 .eq(SysFileVersion::getTenantId, file.getTenantId())
@@ -117,6 +120,9 @@ public class DocumentTreeLifecycleServiceImpl implements IDocumentTreeLifecycleS
                 .eq(SysFileVersion::getFileId, file.getId()));
     }
 
+    /**
+     * 只有在其他文件没有复用同一个对象存储对象时，才允许清理该版本对象。
+     */
     private boolean isVersionObjectReferencedByOtherFile(SysFiles file, String objectName) {
         return sysFileVersionMapper.selectCount(Wrappers.lambdaQuery(SysFileVersion.class)
                 .eq(SysFileVersion::getTenantId, file.getTenantId())
@@ -127,6 +133,9 @@ public class DocumentTreeLifecycleServiceImpl implements IDocumentTreeLifecycleS
                         .eq(SysFileVersion::getChangesObjectName, objectName))) > 0;
     }
 
+    /**
+     * 数据库事务提交后再删除对象存储文件，避免库回滚但物理文件已经被提前删除。
+     */
     private void deleteObjectAfterCommit(String objectName) {
         if (!StringUtils.hasText(objectName)) {
             return;
@@ -143,6 +152,9 @@ public class DocumentTreeLifecycleServiceImpl implements IDocumentTreeLifecycleS
         });
     }
 
+    /**
+     * 对象存储清理是补偿动作，失败不能覆盖原始业务结果。
+     */
     private void deleteObjectQuietly(String objectName) {
         if (!StringUtils.hasText(objectName)) {
             return;
@@ -154,6 +166,9 @@ public class DocumentTreeLifecycleServiceImpl implements IDocumentTreeLifecycleS
         }
     }
 
+    /**
+     * 清理动作只负责去掉空白值，不改变业务语义，只是让后续删除和比对更稳定。
+     */
     private String trimToNull(String value) {
         if (!StringUtils.hasText(value)) {
             return null;
@@ -162,6 +177,9 @@ public class DocumentTreeLifecycleServiceImpl implements IDocumentTreeLifecycleS
         return StringUtils.hasText(trimmed) ? trimmed : null;
     }
 
+    /**
+     * 恢复/软删流程只需要回写审计字段，不能引入额外业务分支。
+     */
     private void fillUpdate(SysFiles file, String username) {
         file.setUpdateTime(LocalDateTime.now());
         file.setUpdateBy(username);

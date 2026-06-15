@@ -116,6 +116,10 @@ public class DocumentCenterServiceImpl extends BaseServiceImpl<SysFilesMapper, S
         return pageDocuments(context, pageReq);
     }
 
+    /**
+     * 文档中心列表入口按 scope 分流到个人、共享、业务文档和回收站视图。
+     * 不同视图的数据权限和目录语义不同，必须在进入普通文件查询前先完成分流。
+     */
     private PageVO<DocumentFileVO> pageDocuments(DocumentAccessContext context, DocumentPageReq pageReq) {
         String scope = documentScopeService.normalizeScope(pageReq.getScope());
         if (documentScopeService.isSharedInboxRequest(pageReq, scope)) {
@@ -824,6 +828,10 @@ public class DocumentCenterServiceImpl extends BaseServiceImpl<SysFilesMapper, S
         return pageCombinedDocuments(context, pageReq, rootFolders, rootFiles);
     }
 
+    /**
+     * “共享给我”根目录同时展示个人整理文件夹和按共享人聚合的虚拟目录。
+     * 已被个人整理的共享文件不再重复出现在共享人虚拟目录下。
+     */
     private PageVO<DocumentFileVO> pageSharedInboxDocuments(DocumentAccessContext context, DocumentPageReq pageReq) {
         String parentId = trimToNull(pageReq.getParentId());
         if (StringUtils.hasText(parentId)) {
@@ -854,6 +862,9 @@ public class DocumentCenterServiceImpl extends BaseServiceImpl<SysFilesMapper, S
         return pageCombinedDocuments(context, pageReq, folders, Collections.emptyList());
     }
 
+    /**
+     * “共享给我”下按共享人展开时，只展示指定共享人的源文件，不再混入其他共享来源。
+     */
     private PageVO<DocumentFileVO> pageSharedOwnerDocuments(
             DocumentAccessContext context,
             DocumentPageReq pageReq,
@@ -872,6 +883,9 @@ public class DocumentCenterServiceImpl extends BaseServiceImpl<SysFilesMapper, S
         return pageCombinedDocuments(context, pageReq, Collections.emptyList(), sharedFiles);
     }
 
+    /**
+     * “我共享的”只展示当前用户拥有且仍有有效授权的文件，避免暴露他人共享源。
+     */
     private PageVO<DocumentFileVO> pageSharedByMeDocuments(DocumentAccessContext context, DocumentPageReq pageReq) {
         List<String> sharedIds = filterSharedRootFileIds(findFileIdsSharedByOwner(context), context);
         List<SysFiles> sharedByMeFolders = selectSharedByMeFolders(context, null);
@@ -881,6 +895,9 @@ public class DocumentCenterServiceImpl extends BaseServiceImpl<SysFilesMapper, S
         return pageCombinedDocuments(context, pageReq, sharedByMeFolders, sharedFiles);
     }
 
+    /**
+     * 共享空间按租户、部门等目标过滤，入口处先解析并校验目标，防止用户枚举无权共享空间。
+     */
     private PageVO<DocumentFileVO> pageSharedTargetDocuments(DocumentAccessContext context, DocumentPageReq pageReq) {
         DocumentSharedTargetContext sharedTarget = documentSharedSpaceService.resolveSharedTargetContext(
                 context,
@@ -898,6 +915,9 @@ public class DocumentCenterServiceImpl extends BaseServiceImpl<SysFilesMapper, S
         return pageCombinedDocuments(context, pageReq, Collections.emptyList(), sharedFiles);
     }
 
+    /**
+     * 业务文档根目录仅生成模块和业务记录虚拟目录，真实附件访问必须通过业务关系授权判断。
+     */
     private PageVO<DocumentFileVO> pageBusinessDocuments(DocumentAccessContext context, DocumentPageReq pageReq) {
         String parentId = trimToNull(pageReq.getParentId());
         if (StringUtils.hasText(parentId)) {
@@ -935,6 +955,9 @@ public class DocumentCenterServiceImpl extends BaseServiceImpl<SysFilesMapper, S
         return pageCombinedDocuments(context, pageReq, modules, Collections.emptyList());
     }
 
+    /**
+     * 业务模块虚拟目录下只展示当前用户可访问的业务记录目录，记录名称由业务 Provider 批量解析。
+     */
     private PageVO<DocumentFileVO> pageBusinessModuleRecords(
             DocumentAccessContext context,
             DocumentPageReq pageReq,
@@ -963,6 +986,9 @@ public class DocumentCenterServiceImpl extends BaseServiceImpl<SysFilesMapper, S
         return pageCombinedDocuments(context, pageReq, records, Collections.emptyList());
     }
 
+    /**
+     * 业务记录虚拟目录下展示业务附件和个人整理文件夹，已经被个人整理的业务附件不重复展示。
+     */
     private PageVO<DocumentFileVO> pageBusinessRecordChildren(
             DocumentAccessContext context,
             DocumentPageReq pageReq,
@@ -985,6 +1011,9 @@ public class DocumentCenterServiceImpl extends BaseServiceImpl<SysFilesMapper, S
         return pageCombinedDocuments(context, pageReq, personalFolders, businessFiles);
     }
 
+    /**
+     * 业务文档个人整理文件夹只展示当前归类关系下仍有业务访问权限的文件。
+     */
     private PageVO<DocumentFileVO> pageBusinessFolderChildren(
             DocumentAccessContext context,
             DocumentPageReq pageReq,
@@ -1007,6 +1036,9 @@ public class DocumentCenterServiceImpl extends BaseServiceImpl<SysFilesMapper, S
         return pageCombinedDocuments(context, pageReq, personalFolders, businessFiles);
     }
 
+    /**
+     * 共享文档个人整理文件夹需要重新校验源文件访问权，避免共享被撤销后仍能通过整理目录看到文件。
+     */
     private PageVO<DocumentFileVO> pagePersonalSharedFolderChildren(
             DocumentAccessContext context,
             DocumentPageReq pageReq,
@@ -1074,6 +1106,9 @@ public class DocumentCenterServiceImpl extends BaseServiceImpl<SysFilesMapper, S
         return new PageVO<>(records, total, current, size);
     }
 
+    /**
+     * 时间排序按最近更新时间优先，空时间统一沉到后面，保证分页结果稳定。
+     */
     private int compareNullableTimeDesc(LocalDateTime left, LocalDateTime right) {
         if (left == null && right == null) {
             return 0;
@@ -1087,6 +1122,9 @@ public class DocumentCenterServiceImpl extends BaseServiceImpl<SysFilesMapper, S
         return right.compareTo(left);
     }
 
+    /**
+     * 虚拟目录和真实文件合并分页时无法复用 SQL 条件，这里保持与数据库查询一致的筛选口径。
+     */
     private boolean matchesDocumentFilters(SysFiles file, DocumentPageReq req) {
         if (Boolean.TRUE.equals(req.getFolderOnly()) && !FLAG_YES.equals(file.getIzFolder())) {
             return false;
@@ -1102,6 +1140,9 @@ public class DocumentCenterServiceImpl extends BaseServiceImpl<SysFilesMapper, S
                 || Objects.equals(file.getFileType(), req.getFileType().trim());
     }
 
+    /**
+     * 共享人虚拟目录根节点只按共享源文件过滤，不套用个人整理目录的 folderOnly 语义。
+     */
     private boolean matchesSharedOwnerSourceFilters(SysFiles file, DocumentPageReq req) {
         if (StringUtils.hasText(req.getKeyword())
                 && !String.valueOf(file.getFileName()).contains(req.getKeyword().trim())) {
@@ -1111,6 +1152,9 @@ public class DocumentCenterServiceImpl extends BaseServiceImpl<SysFilesMapper, S
                 || Objects.equals(file.getFileType(), req.getFileType().trim());
     }
 
+    /**
+     * 共享给我的根目录和个人整理目录依赖固定的存储语义，查询条件必须显式区分根节点与子节点。
+     */
     private List<SysFiles> selectPersonalSharedFolders(DocumentAccessContext context, String parentId) {
         LambdaQueryWrapper<SysFiles> wrapper = Wrappers.lambdaQuery(SysFiles.class)
                 .eq(SysFiles::getTenantId, context.tenantId())
@@ -1126,6 +1170,9 @@ public class DocumentCenterServiceImpl extends BaseServiceImpl<SysFilesMapper, S
         return baseMapper.selectList(wrapper);
     }
 
+    /**
+     * 我共享的整理文件夹和共享给我的整理文件夹使用不同的 storeType，不能混用同一查询条件。
+     */
     private List<SysFiles> selectSharedByMeFolders(DocumentAccessContext context, String parentId) {
         LambdaQueryWrapper<SysFiles> wrapper = Wrappers.lambdaQuery(SysFiles.class)
                 .eq(SysFiles::getTenantId, context.tenantId())
@@ -1141,6 +1188,9 @@ public class DocumentCenterServiceImpl extends BaseServiceImpl<SysFilesMapper, S
         return baseMapper.selectList(wrapper);
     }
 
+    /**
+     * 业务整理文件夹只允许出现在当前用户创建且未删除的业务视图下。
+     */
     private List<SysFiles> selectBusinessFolders(DocumentAccessContext context, String parentId) {
         LambdaQueryWrapper<SysFiles> wrapper = Wrappers.lambdaQuery(SysFiles.class)
                 .eq(SysFiles::getTenantId, context.tenantId())
@@ -1156,10 +1206,16 @@ public class DocumentCenterServiceImpl extends BaseServiceImpl<SysFilesMapper, S
         return baseMapper.selectList(wrapper);
     }
 
+    /**
+     * 统一按租户和逻辑删除条件批量取文件，避免在不同分支里重复写同一组主查询条件。
+     */
     private List<SysFiles> selectActiveFilesByIds(DocumentAccessContext context, List<String> fileIds) {
         return selectActiveFilesByIds(context, fileIds, false);
     }
 
+    /**
+     * folderOnly 只影响结果是否限定为文件夹，不影响租户、删除态和 ID 白名单。
+     */
     private List<SysFiles> selectActiveFilesByIds(DocumentAccessContext context, List<String> fileIds, Boolean folderOnly) {
         if (fileIds.isEmpty()) {
             return Collections.emptyList();
@@ -1174,6 +1230,9 @@ public class DocumentCenterServiceImpl extends BaseServiceImpl<SysFilesMapper, S
         return baseMapper.selectList(wrapper);
     }
 
+    /**
+     * scope 决定文档数据边界，所有共享、业务文档和个人文件的可见范围都在这里收口。
+     */
     private void applyDocumentScope(
             LambdaQueryWrapper<SysFiles> wrapper,
             DocumentAccessContext context,
@@ -1257,6 +1316,9 @@ public class DocumentCenterServiceImpl extends BaseServiceImpl<SysFilesMapper, S
         }
     }
 
+    /**
+     * 普通数据库分页的筛选条件集中在这里，保证各 scope 不各自拼接一套 keyword/fileType 规则。
+     */
     private void applyDocumentFilters(LambdaQueryWrapper<SysFiles> wrapper, DocumentPageReq req) {
         if (Boolean.TRUE.equals(req.getFolderOnly())) {
             wrapper.eq(SysFiles::getIzFolder, FLAG_YES);
@@ -1269,6 +1331,9 @@ public class DocumentCenterServiceImpl extends BaseServiceImpl<SysFilesMapper, S
         }
     }
 
+    /**
+     * 共享文件 ID 从 ACL 统一筛出，并同步套用共享目标过滤规则。
+     */
     private List<String> findSharedFileIds(DocumentAccessContext context, DocumentPageReq req) {
         List<SysFileAcl> acls = documentAclPermissionService.selectActiveAclsForContext(null, context);
         return acls.stream()
@@ -1279,6 +1344,9 @@ public class DocumentCenterServiceImpl extends BaseServiceImpl<SysFilesMapper, S
                 .toList();
     }
 
+    /**
+     * “全部”视图需要展示共享文件夹子孙节点，因此共享根授权要展开到可访问后代。
+     */
     private List<String> findSharedFileIdsWithDescendants(DocumentAccessContext context) {
         LinkedHashSet<String> fileIds = new LinkedHashSet<>(findSharedFileIds(context, new DocumentPageReq()));
         if (fileIds.isEmpty()) {
@@ -1319,6 +1387,9 @@ public class DocumentCenterServiceImpl extends BaseServiceImpl<SysFilesMapper, S
         return new ArrayList<>(fileIds);
     }
 
+    /**
+     * 共享和共享空间需要把可见根文件夹的子孙纳入查询；设置层级上限避免异常数据导致死循环。
+     */
     private void collectDescendantFileIds(String tenantId, LinkedHashSet<String> fileIds) {
         List<String> cursor = new ArrayList<>(fileIds);
         int guard = 0;
@@ -1360,6 +1431,9 @@ public class DocumentCenterServiceImpl extends BaseServiceImpl<SysFilesMapper, S
                 .toList();
     }
 
+    /**
+     * 共享根目录只展示最上层授权项，父链已有授权时子项不再作为根项重复展示。
+     */
     private boolean hasSharedAncestor(String parentId, Set<String> sharedIds, String tenantId) {
         String currentId = parentId;
         int guard = 0;
@@ -1399,6 +1473,9 @@ public class DocumentCenterServiceImpl extends BaseServiceImpl<SysFilesMapper, S
         return false;
     }
 
+    /**
+     * 共享目标过滤由后端按当前用户上下文校验，不能信任前端传入的租户或部门目标。
+     */
     private void validateSharedTargetFilter(DocumentPageReq req, DocumentAccessContext context) {
         String targetType = trimToNull(req.getShareTargetType());
         String targetId = trimToNull(req.getShareTargetId());
@@ -1423,6 +1500,9 @@ public class DocumentCenterServiceImpl extends BaseServiceImpl<SysFilesMapper, S
         throw new IllegalArgumentException("共享目标类型不正确");
     }
 
+    /**
+     * 共享列表的内存过滤必须同时匹配授权目标和当前用户所属范围，避免跨部门、跨角色查看。
+     */
     private boolean matchesSharedTargetFilter(SysFileAcl acl, DocumentAccessContext context, DocumentPageReq req) {
         String targetType = trimToNull(req.getShareTargetType());
         String targetId = trimToNull(req.getShareTargetId());
@@ -1523,6 +1603,9 @@ public class DocumentCenterServiceImpl extends BaseServiceImpl<SysFilesMapper, S
                 .toList();
     }
 
+    /**
+     * “我共享的”整理目录必须属于当前用户，并且自身或父链能追溯到共享入口，防止用普通文件夹 ID 越权浏览。
+     */
     private void assertSharedByMeFolderBrowsable(SysFiles folder, DocumentAccessContext context) {
         if (folder == null
                 || !FLAG_YES.equals(folder.getIzFolder())
@@ -1552,6 +1635,9 @@ public class DocumentCenterServiceImpl extends BaseServiceImpl<SysFilesMapper, S
         throw new IllegalArgumentException("无权浏览该共享文件夹");
     }
 
+    /**
+     * 共享入口父链校验需要读取已删除父节点，避免因中间节点删除而错误放行浏览权限。
+     */
     private SysFiles getFileIncludingDeleted(String fileId) {
         if (!StringUtils.hasText(fileId)) {
             return null;
@@ -1562,6 +1648,9 @@ public class DocumentCenterServiceImpl extends BaseServiceImpl<SysFilesMapper, S
                 .last("LIMIT 1"));
     }
 
+    /**
+     * 文档中心的管理动作以文件创建人为所有者口径，不能由前端传入的 scope 代替所有权校验。
+     */
     private void assertOwner(SysFiles file, String username) {
         if (!StringUtils.hasText(username) || file == null || !Objects.equals(file.getCreateBy(), username)) {
             throw new IllegalArgumentException("无权管理该文档");
@@ -1599,6 +1688,9 @@ public class DocumentCenterServiceImpl extends BaseServiceImpl<SysFilesMapper, S
         file.setUpdateTime(LocalDateTime.now());
     }
 
+    /**
+     * 移动文件时同步维护 parentId 和根目录标识，避免树查询和根目录查询出现不一致。
+     */
     private void updateDocumentParent(SysFiles file, String parentId, String username) {
         String rootFlag = StringUtils.hasText(parentId) ? FLAG_NO : FLAG_YES;
         fillUpdate(file, username);
@@ -1613,6 +1705,9 @@ public class DocumentCenterServiceImpl extends BaseServiceImpl<SysFilesMapper, S
         file.setIzRootFolder(rootFlag);
     }
 
+    /**
+     * 所有对外操作统一只读取当前租户未删除文件，避免绕过租户隔离或操作回收站数据。
+     */
     private SysFiles getActiveFile(String fileId) {
         if (!StringUtils.hasText(fileId)) {
             throw new IllegalArgumentException("文件ID不能为空");
@@ -1644,6 +1739,9 @@ public class DocumentCenterServiceImpl extends BaseServiceImpl<SysFilesMapper, S
         return relation;
     }
 
+    /**
+     * 可预览编辑文档上传时立即生成 V1 历史版本，保证后续 OnlyOffice 编辑和版本恢复有基线文件。
+     */
     private void createInitialHistoryVersion(SysFiles fileEntity, MultipartFile file, String username) {
         if (!fileMetadataService.supportsInitialHistoryVersion(fileEntity.getFileName())) {
             return;
@@ -1743,6 +1841,9 @@ public class DocumentCenterServiceImpl extends BaseServiceImpl<SysFilesMapper, S
                 .toList();
     }
 
+    /**
+     * 对象存储补偿清理不能覆盖原始业务异常，因此这里只吞掉清理失败。
+     */
     private void deleteObjectQuietly(String objectName) {
         if (!StringUtils.hasText(objectName)) {
             return;
@@ -1754,6 +1855,9 @@ public class DocumentCenterServiceImpl extends BaseServiceImpl<SysFilesMapper, S
         }
     }
 
+    /**
+     * 数据库事务提交后再删除对象存储文件，避免数据库回滚但物理文件已被提前删除。
+     */
     private void deleteObjectAfterCommit(String objectName) {
         if (!StringUtils.hasText(objectName)) {
             return;
@@ -1775,5 +1879,3 @@ public class DocumentCenterServiceImpl extends BaseServiceImpl<SysFilesMapper, S
     }
 
 }
-
-
