@@ -1,8 +1,10 @@
 package com.lawoffice.workflow.service.impl;
 
+import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.lawoffice.framework.dto.BaseDTO;
 import com.lawoffice.workflow.constant.WorkflowConstants;
 import com.lawoffice.workflow.entity.ProcessModel;
+import com.lawoffice.workflow.entity.ProcessInstance;
 import com.lawoffice.workflow.entity.ProcessNodeConfig;
 import com.lawoffice.workflow.mapper.ProcessModelMapper;
 import com.lawoffice.workflow.mapper.ProcessNodeConfigMapper;
@@ -12,6 +14,8 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
+import java.util.List;
+
 @Service
 public class ProcessNodeConfigServiceImpl extends AbstractWorkflowConfigServiceImpl<ProcessNodeConfigMapper, ProcessNodeConfig, ProcessNodeConfigVO> implements IProcessNodeConfigService {
 
@@ -20,6 +24,68 @@ public class ProcessNodeConfigServiceImpl extends AbstractWorkflowConfigServiceI
     @Autowired
     public ProcessNodeConfigServiceImpl(ProcessModelMapper processModelMapper) {
         this.processModelMapper = processModelMapper;
+    }
+
+    @Override
+    public ProcessNodeConfig requireRuntimeNodeConfig(String processModelId, String nodeId, String tenantId) {
+        ProcessNodeConfig nodeConfig = baseMapper.selectOne(new QueryWrapper<ProcessNodeConfig>()
+                .eq("tenant_id", tenantId)
+                .eq("process_model_id", processModelId)
+                .eq("node_id", nodeId)
+                .eq("delete_flag", 0));
+        if (nodeConfig == null) {
+            throw new IllegalArgumentException("流程节点未配置审批人: " + nodeId);
+        }
+        if (!StringUtils.hasText(nodeConfig.getAssigneeType())) {
+            throw new IllegalArgumentException("流程节点审批人类型不能为空: " + nodeConfig.getNodeName());
+        }
+        return nodeConfig;
+    }
+
+    @Override
+    public ProcessNodeConfig buildStartDraftNodeConfig() {
+        ProcessNodeConfig nodeConfig = new ProcessNodeConfig();
+        nodeConfig.setNodeId(WorkflowConstants.VirtualNode.START_DRAFT);
+        nodeConfig.setNodeName(WorkflowConstants.VirtualNodeName.START_DRAFT);
+        nodeConfig.setNodeType(WorkflowConstants.NodeType.START);
+        nodeConfig.setAllowTransfer(0);
+        nodeConfig.setAllowReturn(0);
+        nodeConfig.setAllowAddSign(0);
+        return nodeConfig;
+    }
+
+    @Override
+    public List<ProcessNodeConfig> listReturnableNodeConfigs(ProcessInstance processInstance,
+            ProcessNodeConfig currentNodeConfig, String tenantId) {
+        if (!isEnabled(currentNodeConfig.getAllowReturn())) {
+            return List.of();
+        }
+        Integer currentSortOrder = currentNodeConfig.getSortOrder();
+        return baseMapper.selectList(new QueryWrapper<ProcessNodeConfig>()
+                        .eq("tenant_id", tenantId)
+                        .eq("process_model_id", processInstance.getProcessModelId())
+                        .eq("node_type", WorkflowConstants.NodeType.APPROVER)
+                        .eq("delete_flag", 0)
+                        .orderByAsc("sort_order")
+                        .orderByAsc("create_time"))
+                .stream()
+                .filter(nodeConfig -> !currentNodeConfig.getNodeId().equals(nodeConfig.getNodeId()))
+                .filter(nodeConfig -> currentSortOrder == null
+                        || (nodeConfig.getSortOrder() != null && nodeConfig.getSortOrder() < currentSortOrder))
+                .toList();
+    }
+
+    @Override
+    public void ensureReturnTargetAllowed(ProcessInstance processInstance, ProcessNodeConfig currentNodeConfig,
+            ProcessNodeConfig targetNodeConfig, String tenantId) {
+        if (WorkflowConstants.VirtualNode.START_DRAFT.equals(targetNodeConfig.getNodeId())) {
+            return;
+        }
+        boolean allowed = listReturnableNodeConfigs(processInstance, currentNodeConfig, tenantId).stream()
+                .anyMatch(nodeConfig -> nodeConfig.getNodeId().equals(targetNodeConfig.getNodeId()));
+        if (!allowed) {
+            throw new IllegalArgumentException("退回目标节点不允许");
+        }
     }
 
     @Override
@@ -84,5 +150,9 @@ public class ProcessNodeConfigServiceImpl extends AbstractWorkflowConfigServiceI
         if (WorkflowConstants.Status.PUBLISHED.equals(model.getStatus())) {
             throw new IllegalArgumentException("已发布流程版本的节点配置不可修改");
         }
+    }
+
+    private boolean isEnabled(Integer flag) {
+        return Integer.valueOf(1).equals(flag);
     }
 }

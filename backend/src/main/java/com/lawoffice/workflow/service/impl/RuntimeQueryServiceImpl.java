@@ -23,7 +23,6 @@ import com.lawoffice.workflow.mapper.FormInstanceMapper;
 import com.lawoffice.workflow.mapper.OperationRecordMapper;
 import com.lawoffice.workflow.mapper.ProcessInstanceMapper;
 import com.lawoffice.workflow.mapper.ProcessModelMapper;
-import com.lawoffice.workflow.mapper.ProcessNodeConfigMapper;
 import com.lawoffice.workflow.mapper.ProcessStartPermissionMapper;
 import com.lawoffice.workflow.mapper.TaskCandidateMapper;
 import com.lawoffice.workflow.mapper.TaskMapper;
@@ -31,6 +30,7 @@ import com.lawoffice.workflow.req.AvailableProcessPageReq;
 import com.lawoffice.workflow.req.StartedInstancePageReq;
 import com.lawoffice.workflow.req.TaskPageReq;
 import com.lawoffice.workflow.service.IAssigneeResolveService;
+import com.lawoffice.workflow.service.IProcessNodeConfigService;
 import com.lawoffice.workflow.service.IRuntimeQueryService;
 import com.lawoffice.workflow.service.IWorkflowRuntimeLookupService;
 import com.lawoffice.workflow.vo.AvailableProcessVO;
@@ -60,19 +60,16 @@ import java.util.Set;
 @Service
 public class RuntimeQueryServiceImpl implements IRuntimeQueryService {
 
-    private static final String START_DRAFT_NODE_ID = "start_draft";
-    private static final String START_DRAFT_TASK_NAME = "提交申请";
-
     private final ProcessModelMapper processModelMapper;
     private final FormDefinitionMapper formDefinitionMapper;
     private final ProcessStartPermissionMapper processStartPermissionMapper;
     private final FormInstanceMapper formInstanceMapper;
     private final ProcessInstanceMapper processInstanceMapper;
-    private final ProcessNodeConfigMapper processNodeConfigMapper;
     private final OperationRecordMapper operationRecordMapper;
     private final TaskCandidateMapper taskCandidateMapper;
     private final TaskMapper taskMapper;
     private final IAssigneeResolveService assigneeResolveService;
+    private final IProcessNodeConfigService processNodeConfigService;
     private final IWorkflowRuntimeLookupService workflowRuntimeLookupService;
     private final IUserService userService;
 
@@ -81,11 +78,11 @@ public class RuntimeQueryServiceImpl implements IRuntimeQueryService {
             ProcessStartPermissionMapper processStartPermissionMapper,
             FormInstanceMapper formInstanceMapper,
             ProcessInstanceMapper processInstanceMapper,
-            ProcessNodeConfigMapper processNodeConfigMapper,
             OperationRecordMapper operationRecordMapper,
             TaskCandidateMapper taskCandidateMapper,
             TaskMapper taskMapper,
             IAssigneeResolveService assigneeResolveService,
+            IProcessNodeConfigService processNodeConfigService,
             IWorkflowRuntimeLookupService workflowRuntimeLookupService,
             IUserService userService) {
         this.processModelMapper = processModelMapper;
@@ -93,11 +90,11 @@ public class RuntimeQueryServiceImpl implements IRuntimeQueryService {
         this.processStartPermissionMapper = processStartPermissionMapper;
         this.formInstanceMapper = formInstanceMapper;
         this.processInstanceMapper = processInstanceMapper;
-        this.processNodeConfigMapper = processNodeConfigMapper;
         this.operationRecordMapper = operationRecordMapper;
         this.taskCandidateMapper = taskCandidateMapper;
         this.taskMapper = taskMapper;
         this.assigneeResolveService = assigneeResolveService;
+        this.processNodeConfigService = processNodeConfigService;
         this.workflowRuntimeLookupService = workflowRuntimeLookupService;
         this.userService = userService;
     }
@@ -283,8 +280,8 @@ public class RuntimeQueryServiceImpl implements IRuntimeQueryService {
                     ? listFieldPermissions(processInstance.getProcessModelId(), WorkflowConstants.VirtualNode.START, tenantId)
                     : listFieldPermissions(processInstance.getProcessModelId(), task.getNodeId(), tenantId);
             ProcessNodeConfig nodeConfig = startDraftTask
-                    ? buildStartDraftNodeConfig()
-                    : requireNodeConfig(processInstance.getProcessModelId(), task.getNodeId(), tenantId);
+                    ? processNodeConfigService.buildStartDraftNodeConfig()
+                    : processNodeConfigService.requireRuntimeNodeConfig(processInstance.getProcessModelId(), task.getNodeId(), tenantId);
             return BaseResult.success(buildTaskForm(task, processInstance, formInstance, permissions, nodeConfig));
         } catch (IllegalArgumentException e) {
             return BaseResult.error(400, e.getMessage());
@@ -887,7 +884,7 @@ public class RuntimeQueryServiceImpl implements IRuntimeQueryService {
         boolean startDraftTask = WorkflowConstants.TaskType.START_DRAFT.equals(task.getTaskType());
         List<ProcessNodeConfig> returnableNodes = startDraftTask
                 ? List.of()
-                : listReturnableNodeConfigs(processInstance, nodeConfig, task.getTenantId());
+                : processNodeConfigService.listReturnableNodeConfigs(processInstance, nodeConfig, task.getTenantId());
         TaskFormVO vo = new TaskFormVO();
         vo.setTaskId(task.getId());
         vo.setProcessInstanceId(processInstance.getId());
@@ -949,34 +946,11 @@ public class RuntimeQueryServiceImpl implements IRuntimeQueryService {
 
     private TaskReturnNodeVO buildStartDraftReturnNode() {
         TaskReturnNodeVO vo = new TaskReturnNodeVO();
-        vo.setNodeId(START_DRAFT_NODE_ID);
-        vo.setNodeName(START_DRAFT_TASK_NAME);
+        vo.setNodeId(WorkflowConstants.VirtualNode.START_DRAFT);
+        vo.setNodeName(WorkflowConstants.VirtualNodeName.START_DRAFT);
         vo.setNodeType(WorkflowConstants.NodeType.START);
         vo.setSortOrder(0);
         return vo;
-    }
-
-    /**
-     * 一期退回目标只开放当前流程模型中顺序在当前节点之前的审批节点，避免退回到开始、结束或未来节点。
-     */
-    private List<ProcessNodeConfig> listReturnableNodeConfigs(ProcessInstance processInstance,
-            ProcessNodeConfig currentNodeConfig, String tenantId) {
-        if (!isEnabled(currentNodeConfig.getAllowReturn())) {
-            return List.of();
-        }
-        Integer currentSortOrder = currentNodeConfig.getSortOrder();
-        return processNodeConfigMapper.selectList(new QueryWrapper<ProcessNodeConfig>()
-                        .eq("tenant_id", tenantId)
-                        .eq("process_model_id", processInstance.getProcessModelId())
-                        .eq("node_type", WorkflowConstants.NodeType.APPROVER)
-                        .eq("delete_flag", 0)
-                        .orderByAsc("sort_order")
-                        .orderByAsc("create_time"))
-                .stream()
-                .filter(nodeConfig -> !currentNodeConfig.getNodeId().equals(nodeConfig.getNodeId()))
-                .filter(nodeConfig -> currentSortOrder == null
-                        || (nodeConfig.getSortOrder() != null && nodeConfig.getSortOrder() < currentSortOrder))
-                .toList();
     }
 
     private boolean isEnabled(Integer flag) {
@@ -1001,32 +975,6 @@ public class RuntimeQueryServiceImpl implements IRuntimeQueryService {
 
     private void checkStartPermission(ProcessModel model, RequestContext context) {
         workflowRuntimeLookupService.checkStartPermission(model, context);
-    }
-
-    private ProcessNodeConfig buildStartDraftNodeConfig() {
-        ProcessNodeConfig nodeConfig = new ProcessNodeConfig();
-        nodeConfig.setNodeId(START_DRAFT_NODE_ID);
-        nodeConfig.setNodeName(START_DRAFT_TASK_NAME);
-        nodeConfig.setNodeType(WorkflowConstants.NodeType.START);
-        nodeConfig.setAllowTransfer(0);
-        nodeConfig.setAllowReturn(0);
-        nodeConfig.setAllowAddSign(0);
-        return nodeConfig;
-    }
-
-    private ProcessNodeConfig requireNodeConfig(String processModelId, String nodeId, String tenantId) {
-        ProcessNodeConfig nodeConfig = processNodeConfigMapper.selectOne(new QueryWrapper<ProcessNodeConfig>()
-                .eq("tenant_id", tenantId)
-                .eq("process_model_id", processModelId)
-                .eq("node_id", nodeId)
-                .eq("delete_flag", 0));
-        if (nodeConfig == null) {
-            throw new IllegalArgumentException("流程节点未配置审批人: " + nodeId);
-        }
-        if (!StringUtils.hasText(nodeConfig.getAssigneeType())) {
-            throw new IllegalArgumentException("流程节点审批人类型不能为空: " + nodeConfig.getNodeName());
-        }
-        return nodeConfig;
     }
 
     private ProcessInstance buildStarterContextProcessInstance(ProcessModel model, RequestContext context) {
@@ -1054,7 +1002,7 @@ public class RuntimeQueryServiceImpl implements IRuntimeQueryService {
                 .map(this::buildRuntimeFieldPermission)
                 .toList());
         vo.setAssigneeSelectNodes(assigneeResolveService.buildRequiredAssigneeSelectNodes(
-                model.getId(), buildStarterContextProcessInstance(model, context), model.getTenantId(), START_DRAFT_NODE_ID));
+                model.getId(), buildStarterContextProcessInstance(model, context), model.getTenantId(), WorkflowConstants.VirtualNode.START_DRAFT));
         return vo;
     }
 

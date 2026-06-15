@@ -18,13 +18,13 @@ import com.lawoffice.workflow.entity.Task;
 import com.lawoffice.workflow.entity.TaskCandidate;
 import com.lawoffice.workflow.mapper.FormInstanceMapper;
 import com.lawoffice.workflow.mapper.ProcessInstanceMapper;
-import com.lawoffice.workflow.mapper.ProcessNodeConfigMapper;
 import com.lawoffice.workflow.mapper.TaskCandidateMapper;
 import com.lawoffice.workflow.mapper.TaskMapper;
 import com.lawoffice.workflow.req.TaskActionReq;
 import com.lawoffice.workflow.service.IAssigneeResolveService;
 import com.lawoffice.workflow.service.IFlowableService;
 import com.lawoffice.workflow.service.IInstanceStateService;
+import com.lawoffice.workflow.service.IProcessNodeConfigService;
 import com.lawoffice.workflow.service.ITaskActionService;
 import com.lawoffice.workflow.service.IWorkflowFormDataService;
 import com.lawoffice.workflow.service.IWorkflowRuntimeLookupService;
@@ -47,40 +47,38 @@ import java.util.function.Supplier;
 public class TaskActionServiceImpl implements ITaskActionService {
 
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
-    private static final String START_DRAFT_NODE_ID = "start_draft";
-    private static final String START_DRAFT_TASK_NAME = "提交申请";
 
     private final FormInstanceMapper formInstanceMapper;
     private final ProcessInstanceMapper processInstanceMapper;
-    private final ProcessNodeConfigMapper processNodeConfigMapper;
     private final TaskMapper taskMapper;
     private final TaskCandidateMapper taskCandidateMapper;
     private final IFlowableService flowableService;
     private final IAssigneeResolveService assigneeResolveService;
     private final IInstanceStateService instanceStateService;
+    private final IProcessNodeConfigService processNodeConfigService;
     private final IWorkflowFormDataService workflowFormDataService;
     private final IWorkflowRuntimeLookupService workflowRuntimeLookupService;
     private final TransactionTemplate transactionTemplate;
 
     public TaskActionServiceImpl(FormInstanceMapper formInstanceMapper,
             ProcessInstanceMapper processInstanceMapper,
-            ProcessNodeConfigMapper processNodeConfigMapper,
             TaskMapper taskMapper,
             TaskCandidateMapper taskCandidateMapper,
             IFlowableService flowableService,
             IAssigneeResolveService assigneeResolveService,
             IInstanceStateService instanceStateService,
+            IProcessNodeConfigService processNodeConfigService,
             IWorkflowFormDataService workflowFormDataService,
             IWorkflowRuntimeLookupService workflowRuntimeLookupService,
             PlatformTransactionManager transactionManager) {
         this.formInstanceMapper = formInstanceMapper;
         this.processInstanceMapper = processInstanceMapper;
-        this.processNodeConfigMapper = processNodeConfigMapper;
         this.taskMapper = taskMapper;
         this.taskCandidateMapper = taskCandidateMapper;
         this.flowableService = flowableService;
         this.assigneeResolveService = assigneeResolveService;
         this.instanceStateService = instanceStateService;
+        this.processNodeConfigService = processNodeConfigService;
         this.workflowFormDataService = workflowFormDataService;
         this.workflowRuntimeLookupService = workflowRuntimeLookupService;
         this.transactionTemplate = new TransactionTemplate(transactionManager);
@@ -262,10 +260,10 @@ public class TaskActionServiceImpl implements ITaskActionService {
         if (req == null || !StringUtils.hasText(req.getTargetNodeId())) {
             throw new IllegalArgumentException("退回目标节点不能为空");
         }
-        ProcessNodeConfig targetNodeConfig = START_DRAFT_NODE_ID.equals(req.getTargetNodeId())
-                ? buildStartDraftNodeConfig()
+        ProcessNodeConfig targetNodeConfig = WorkflowConstants.VirtualNode.START_DRAFT.equals(req.getTargetNodeId())
+                ? processNodeConfigService.buildStartDraftNodeConfig()
                 : requireNodeConfig(processInstance.getProcessModelId(), req.getTargetNodeId(), tenantId);
-        ensureReturnTargetAllowed(processInstance, currentNodeConfig, targetNodeConfig, tenantId);
+        processNodeConfigService.ensureReturnTargetAllowed(processInstance, currentNodeConfig, targetNodeConfig, tenantId);
         FormInstance formInstance = requireFormInstance(processInstance.getFormInstanceId(), tenantId);
         saveTaskFormData(req, formInstance, listFieldPermissions(processInstance.getProcessModelId(), task.getNodeId(), tenantId), context);
 
@@ -275,7 +273,7 @@ public class TaskActionServiceImpl implements ITaskActionService {
         EntityFillUtils.fillAuditFields(task, context, false);
         taskMapper.updateById(task);
         instanceStateService.cancelActiveCandidates(task, context);
-        if (START_DRAFT_NODE_ID.equals(targetNodeConfig.getNodeId())) {
+        if (WorkflowConstants.VirtualNode.START_DRAFT.equals(targetNodeConfig.getNodeId())) {
             returnToStartDraft(processInstance, formInstance, tenantId, context);
         } else {
             flowableService.moveActivityTo(processInstance.getFlowableProcessInstanceId(), task.getNodeId(), targetNodeConfig.getNodeId());
@@ -371,18 +369,6 @@ public class TaskActionServiceImpl implements ITaskActionService {
     private void ensureNotAddSignTask(Task task, String message) {
         if (WorkflowConstants.TaskType.ADD_SIGN.equals(task.getTaskType())) {
             throw new IllegalArgumentException(message);
-        }
-    }
-
-    private void ensureReturnTargetAllowed(ProcessInstance processInstance, ProcessNodeConfig currentNodeConfig,
-            ProcessNodeConfig targetNodeConfig, String tenantId) {
-        if (START_DRAFT_NODE_ID.equals(targetNodeConfig.getNodeId())) {
-            return;
-        }
-        boolean allowed = listReturnableNodeConfigs(processInstance, currentNodeConfig, tenantId).stream()
-                .anyMatch(nodeConfig -> nodeConfig.getNodeId().equals(targetNodeConfig.getNodeId()));
-        if (!allowed) {
-            throw new IllegalArgumentException("退回目标节点不允许");
         }
     }
 
@@ -586,33 +572,6 @@ public class TaskActionServiceImpl implements ITaskActionService {
         return vo;
     }
 
-    /**
-     * 一期退回目标只开放当前流程模型中顺序在当前节点之前的审批节点，避免退回到开始、结束或未来节点。
-     */
-    private List<ProcessNodeConfig> listReturnableNodeConfigs(ProcessInstance processInstance,
-            ProcessNodeConfig currentNodeConfig, String tenantId) {
-        if (!isEnabled(currentNodeConfig.getAllowReturn())) {
-            return List.of();
-        }
-        Integer currentSortOrder = currentNodeConfig.getSortOrder();
-        return processNodeConfigMapper.selectList(new QueryWrapper<ProcessNodeConfig>()
-                        .eq("tenant_id", tenantId)
-                        .eq("process_model_id", processInstance.getProcessModelId())
-                        .eq("node_type", WorkflowConstants.NodeType.APPROVER)
-                        .eq("delete_flag", 0)
-                        .orderByAsc("sort_order")
-                        .orderByAsc("create_time"))
-                .stream()
-                .filter(nodeConfig -> !currentNodeConfig.getNodeId().equals(nodeConfig.getNodeId()))
-                .filter(nodeConfig -> currentSortOrder == null
-                        || (nodeConfig.getSortOrder() != null && nodeConfig.getSortOrder() < currentSortOrder))
-                .toList();
-    }
-
-    private boolean isEnabled(Integer flag) {
-        return Integer.valueOf(1).equals(flag);
-    }
-
     private ProcessModel requirePublishedModel(String processModelId, String tenantId) {
         return workflowRuntimeLookupService.requirePublishedModel(processModelId, tenantId);
     }
@@ -621,30 +580,8 @@ public class TaskActionServiceImpl implements ITaskActionService {
         workflowRuntimeLookupService.checkStartPermission(model, context);
     }
 
-    private ProcessNodeConfig buildStartDraftNodeConfig() {
-        ProcessNodeConfig nodeConfig = new ProcessNodeConfig();
-        nodeConfig.setNodeId(START_DRAFT_NODE_ID);
-        nodeConfig.setNodeName(START_DRAFT_TASK_NAME);
-        nodeConfig.setNodeType(WorkflowConstants.NodeType.START);
-        nodeConfig.setAllowTransfer(0);
-        nodeConfig.setAllowReturn(0);
-        nodeConfig.setAllowAddSign(0);
-        return nodeConfig;
-    }
-
     private ProcessNodeConfig requireNodeConfig(String processModelId, String nodeId, String tenantId) {
-        ProcessNodeConfig nodeConfig = processNodeConfigMapper.selectOne(new QueryWrapper<ProcessNodeConfig>()
-                .eq("tenant_id", tenantId)
-                .eq("process_model_id", processModelId)
-                .eq("node_id", nodeId)
-                .eq("delete_flag", 0));
-        if (nodeConfig == null) {
-            throw new IllegalArgumentException("流程节点未配置审批人: " + nodeId);
-        }
-        if (!StringUtils.hasText(nodeConfig.getAssigneeType())) {
-            throw new IllegalArgumentException("流程节点审批人类型不能为空: " + nodeConfig.getNodeName());
-        }
-        return nodeConfig;
+        return processNodeConfigService.requireRuntimeNodeConfig(processModelId, nodeId, tenantId);
     }
 
     private void createStartDraftTask(ProcessInstance processInstance, String tenantId, RequestContext context) {
@@ -657,8 +594,8 @@ public class TaskActionServiceImpl implements ITaskActionService {
         task.setTenantId(tenantId);
         task.setProcessInstanceId(processInstance.getId());
         task.setFlowableTaskId("draft:" + task.getId());
-        task.setNodeId(START_DRAFT_NODE_ID);
-        task.setTaskName(START_DRAFT_TASK_NAME);
+        task.setNodeId(WorkflowConstants.VirtualNode.START_DRAFT);
+        task.setTaskName(WorkflowConstants.VirtualNodeName.START_DRAFT);
         task.setTaskType(WorkflowConstants.TaskType.START_DRAFT);
         task.setAssigneeUserId(processInstance.getStarterUserId());
         task.setAssigneeUsername(processInstance.getStarterUsername());
@@ -666,7 +603,7 @@ public class TaskActionServiceImpl implements ITaskActionService {
         task.setStatus(WorkflowConstants.Status.TODO);
         EntityFillUtils.fillAuditFields(task, context, true);
         taskMapper.insert(task);
-        processInstance.setCurrentTaskNames(START_DRAFT_TASK_NAME);
+        processInstance.setCurrentTaskNames(WorkflowConstants.VirtualNodeName.START_DRAFT);
         processInstance.setCurrentAssigneeNames(starterDisplayName);
         EntityFillUtils.fillAuditFields(processInstance, context, false);
         processInstanceMapper.updateById(processInstance);

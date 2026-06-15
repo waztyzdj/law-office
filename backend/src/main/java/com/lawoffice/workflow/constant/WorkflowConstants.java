@@ -67,8 +67,16 @@ public final class WorkflowConstants {
 
     public static final class VirtualNode {
         public static final String START = "start";
+        public static final String START_DRAFT = "start_draft";
 
         private VirtualNode() {
+        }
+    }
+
+    public static final class VirtualNodeName {
+        public static final String START_DRAFT = "提交申请";
+
+        private VirtualNodeName() {
         }
     }
 
