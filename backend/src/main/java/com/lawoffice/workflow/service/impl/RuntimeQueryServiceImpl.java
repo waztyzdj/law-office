@@ -19,7 +19,6 @@ import com.lawoffice.workflow.entity.ProcessStartPermission;
 import com.lawoffice.workflow.entity.Task;
 import com.lawoffice.workflow.entity.TaskCandidate;
 import com.lawoffice.workflow.mapper.FormDefinitionMapper;
-import com.lawoffice.workflow.mapper.FormInstanceMapper;
 import com.lawoffice.workflow.mapper.OperationRecordMapper;
 import com.lawoffice.workflow.mapper.ProcessInstanceMapper;
 import com.lawoffice.workflow.mapper.ProcessModelMapper;
@@ -56,7 +55,6 @@ public class RuntimeQueryServiceImpl implements IRuntimeQueryService {
     private final ProcessModelMapper processModelMapper;
     private final FormDefinitionMapper formDefinitionMapper;
     private final ProcessStartPermissionMapper processStartPermissionMapper;
-    private final FormInstanceMapper formInstanceMapper;
     private final ProcessInstanceMapper processInstanceMapper;
     private final OperationRecordMapper operationRecordMapper;
     private final TaskCandidateMapper taskCandidateMapper;
@@ -70,7 +68,6 @@ public class RuntimeQueryServiceImpl implements IRuntimeQueryService {
     public RuntimeQueryServiceImpl(ProcessModelMapper processModelMapper,
             FormDefinitionMapper formDefinitionMapper,
             ProcessStartPermissionMapper processStartPermissionMapper,
-            FormInstanceMapper formInstanceMapper,
             ProcessInstanceMapper processInstanceMapper,
             OperationRecordMapper operationRecordMapper,
             TaskCandidateMapper taskCandidateMapper,
@@ -83,7 +80,6 @@ public class RuntimeQueryServiceImpl implements IRuntimeQueryService {
         this.processModelMapper = processModelMapper;
         this.formDefinitionMapper = formDefinitionMapper;
         this.processStartPermissionMapper = processStartPermissionMapper;
-        this.formInstanceMapper = formInstanceMapper;
         this.processInstanceMapper = processInstanceMapper;
         this.operationRecordMapper = operationRecordMapper;
         this.taskCandidateMapper = taskCandidateMapper;

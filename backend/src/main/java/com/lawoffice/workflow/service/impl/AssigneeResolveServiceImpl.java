@@ -60,7 +60,6 @@ import javax.xml.parsers.DocumentBuilderFactory;
 public class AssigneeResolveServiceImpl implements IAssigneeResolveService {
 
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
-    private static final String START_DRAFT_NODE_ID = "start_draft";
     private static final String SELECT_TYPE_SINGLE = "single";
 
     private record ResolvedAssignee(String userId, String username, String realname, String sourceType, String sourceId) {
@@ -193,7 +192,7 @@ public class AssigneeResolveServiceImpl implements IAssigneeResolveService {
     @Override
     public void saveFirstAssigneeSnapshot(ProcessInstance processInstance, List<SelectedAssigneeReq> selectedAssignees,
             String tenantId, RequestContext context) {
-        saveSelectedAssigneeSnapshots(processInstance, selectedAssignees, tenantId, context, START_DRAFT_NODE_ID);
+        saveSelectedAssigneeSnapshots(processInstance, selectedAssignees, tenantId, context, WorkflowConstants.VirtualNode.START_DRAFT);
     }
 
     @Override
@@ -263,7 +262,7 @@ public class AssigneeResolveServiceImpl implements IAssigneeResolveService {
         if (bpmnNext.resolvedByBpmn()) {
             return bpmnNext.nodeConfig();
         }
-        if (!StringUtils.hasText(currentNodeId) || START_DRAFT_NODE_ID.equals(currentNodeId)) {
+        if (!StringUtils.hasText(currentNodeId) || WorkflowConstants.VirtualNode.START_DRAFT.equals(currentNodeId)) {
             return Optional.of(nodes.get(0));
         }
         for (int i = 0; i < nodes.size(); i++) {
@@ -287,7 +286,7 @@ public class AssigneeResolveServiceImpl implements IAssigneeResolveService {
         if (model == null || !StringUtils.hasText(model.getBpmnXml())) {
             return new NextNodeLookupResult(false, Optional.empty());
         }
-        String sourceNodeId = START_DRAFT_NODE_ID.equals(currentNodeId) || !StringUtils.hasText(currentNodeId)
+        String sourceNodeId = WorkflowConstants.VirtualNode.START_DRAFT.equals(currentNodeId) || !StringUtils.hasText(currentNodeId)
                 ? findBpmnStartEventId(model.getBpmnXml()).orElse(null)
                 : currentNodeId;
         if (!StringUtils.hasText(sourceNodeId)) {

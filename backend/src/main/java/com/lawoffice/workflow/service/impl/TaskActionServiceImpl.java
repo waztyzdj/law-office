@@ -2,7 +2,6 @@ package com.lawoffice.workflow.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.lawoffice.framework.dto.RequestContext;
 import com.lawoffice.framework.result.BaseResult;
 import com.lawoffice.system.entity.User;
@@ -45,8 +44,6 @@ import java.util.function.Supplier;
 @Service
 @Slf4j
 public class TaskActionServiceImpl implements ITaskActionService {
-
-    private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
 
     private final FormInstanceMapper formInstanceMapper;
     private final ProcessInstanceMapper processInstanceMapper;

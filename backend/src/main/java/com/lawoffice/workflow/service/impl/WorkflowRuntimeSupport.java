@@ -1,6 +1,5 @@
 package com.lawoffice.workflow.service.impl;
 
-import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.lawoffice.framework.dto.RequestContext;
 import com.lawoffice.framework.result.BaseResult;
@@ -43,8 +42,6 @@ public class WorkflowRuntimeSupport {
 
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
     private static final DateTimeFormatter INSTANCE_NO_FORMATTER = DateTimeFormatter.ofPattern("yyyyMMddHHmmssSSS");
-    private static final String START_DRAFT_NODE_ID = "start_draft";
-    private static final String START_DRAFT_TASK_NAME = "提交申请";
 
     private final FormInstanceMapper formInstanceMapper;
     private final ProcessInstanceMapper processInstanceMapper;
@@ -243,8 +240,8 @@ public class WorkflowRuntimeSupport {
         task.setTenantId(tenantId);
         task.setProcessInstanceId(processInstance.getId());
         task.setFlowableTaskId("draft:" + task.getId());
-        task.setNodeId(START_DRAFT_NODE_ID);
-        task.setTaskName(START_DRAFT_TASK_NAME);
+        task.setNodeId(WorkflowConstants.VirtualNode.START_DRAFT);
+        task.setTaskName(WorkflowConstants.VirtualNodeName.START_DRAFT);
         task.setTaskType(WorkflowConstants.TaskType.START_DRAFT);
         task.setAssigneeUserId(processInstance.getStarterUserId());
         task.setAssigneeUsername(processInstance.getStarterUsername());
@@ -252,7 +249,7 @@ public class WorkflowRuntimeSupport {
         task.setStatus(WorkflowConstants.Status.TODO);
         EntityFillUtils.fillAuditFields(task, context, true);
         taskMapper.insert(task);
-        processInstance.setCurrentTaskNames(START_DRAFT_TASK_NAME);
+        processInstance.setCurrentTaskNames(WorkflowConstants.VirtualNodeName.START_DRAFT);
         processInstance.setCurrentAssigneeNames(starterDisplayName);
         EntityFillUtils.fillAuditFields(processInstance, context, false);
         processInstanceMapper.updateById(processInstance);
@@ -271,8 +268,8 @@ public class WorkflowRuntimeSupport {
         task.setTenantId(tenantId);
         task.setProcessInstanceId(processInstance.getId());
         task.setFlowableTaskId("start:" + task.getId());
-        task.setNodeId(START_DRAFT_NODE_ID);
-        task.setTaskName(START_DRAFT_TASK_NAME);
+        task.setNodeId(WorkflowConstants.VirtualNode.START_DRAFT);
+        task.setTaskName(WorkflowConstants.VirtualNodeName.START_DRAFT);
         task.setTaskType(WorkflowConstants.TaskType.START_DRAFT);
         task.setAssigneeUserId(processInstance.getStarterUserId());
         task.setAssigneeUsername(processInstance.getStarterUsername());
