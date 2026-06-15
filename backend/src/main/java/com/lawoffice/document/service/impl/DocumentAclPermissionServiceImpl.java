@@ -168,6 +168,9 @@ public class DocumentAclPermissionServiceImpl implements IDocumentAclPermissionS
         return false;
     }
 
+    /**
+     * ACL 权限按当前租户、用户、部门祖先和角色一次性筛选，并排除已过期授权。
+     */
     private List<SysFileAcl> queryActiveAclsForContext(String fileId, DocumentAccessContext context) {
         LambdaQueryWrapper<SysFileAcl> wrapper = Wrappers.lambdaQuery(SysFileAcl.class)
                 .eq(SysFileAcl::getTenantId, context.tenantId())
@@ -193,6 +196,9 @@ public class DocumentAclPermissionServiceImpl implements IDocumentAclPermissionS
         return fileAclMapper.selectList(wrapper);
     }
 
+    /**
+     * 同一文件可能命中多个授权目标，最终权限取最高等级。
+     */
     private int maxAclRank(String fileId, DocumentAccessContext context) {
         return selectActiveAclsForContext(fileId, context).stream()
                 .map(SysFileAcl::getPermission)
@@ -201,6 +207,9 @@ public class DocumentAclPermissionServiceImpl implements IDocumentAclPermissionS
                 .orElse(0);
     }
 
+    /**
+     * 权限继承需要沿父链判断，父节点已删除时也要读取出来用于阻断继承。
+     */
     private SysFiles getFileIncludingDeleted(String fileId, String tenantId) {
         if (!StringUtils.hasText(fileId)) {
             return null;

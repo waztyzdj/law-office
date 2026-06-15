@@ -155,6 +155,9 @@ public class DocumentShareManagementServiceImpl implements IDocumentShareManagem
         return defaultValue;
     }
 
+    /**
+     * 共享管理只能操作当前租户未删除文件，避免给回收站或其他租户文件授权。
+     */
     private SysFiles getActiveFile(String fileId, String tenantId) {
         if (!StringUtils.hasText(fileId)) {
             throw new IllegalArgumentException("文件ID不能为空");

@@ -83,6 +83,9 @@ public class DocumentShareTargetServiceImpl implements IDocumentShareTargetServi
         return targetType;
     }
 
+    /**
+     * 租户共享只能共享给当前租户，不能由前端传入其他租户 ID。
+     */
     private void validateTenantTarget(String targetId, String tenantId) {
         if (!Objects.equals(targetId, tenantId)) {
             throw new IllegalArgumentException("只能共享给当前租户");
@@ -93,6 +96,9 @@ public class DocumentShareTargetServiceImpl implements IDocumentShareTargetServi
         }
     }
 
+    /**
+     * 用户共享必须校验用户存在且属于当前租户，避免跨租户授权。
+     */
     private void validateUserTarget(String targetId, String tenantId) {
         User user = userMapper.selectById(targetId);
         if (user == null || Objects.equals(user.getDeleteFlag(), 1)) {
@@ -107,6 +113,9 @@ public class DocumentShareTargetServiceImpl implements IDocumentShareTargetServi
         }
     }
 
+    /**
+     * 部门共享必须限定当前租户未删除部门。
+     */
     private void validateDepartTarget(String targetId, String tenantId) {
         SysDepart depart = sysDepartMapper.selectOne(Wrappers.lambdaQuery(SysDepart.class)
                 .eq(SysDepart::getId, targetId)
@@ -118,6 +127,9 @@ public class DocumentShareTargetServiceImpl implements IDocumentShareTargetServi
         }
     }
 
+    /**
+     * 角色共享必须限定当前租户未删除角色。
+     */
     private void validateRoleTarget(String targetId, String tenantId) {
         Role role = roleMapper.selectOne(Wrappers.lambdaQuery(Role.class)
                 .eq(Role::getId, targetId)

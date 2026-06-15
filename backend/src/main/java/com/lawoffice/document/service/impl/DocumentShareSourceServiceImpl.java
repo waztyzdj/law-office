@@ -111,6 +111,9 @@ public class DocumentShareSourceServiceImpl implements IDocumentShareSourceServi
         return null;
     }
 
+    /**
+     * 分享来源可能来自当前文件或父级文件夹，沿父链找到最近的有效 ACL 作为来源说明。
+     */
     private DocumentShareSourceVO resolveShareSource(
             SysFiles file,
             DocumentAccessContext context,
@@ -177,6 +180,9 @@ public class DocumentShareSourceServiceImpl implements IDocumentShareSourceServi
         return source;
     }
 
+    /**
+     * 共享空间不是普通 ACL，共享来源要按租户/部门共享根节点解释。
+     */
     private DocumentShareSourceVO resolveSharedSpaceSource(SysFiles file, DocumentAccessContext context) {
         if (TENANT_SHARED_STORE_TYPE.equals(file.getStoreType())) {
             SysFiles root = resolveRootFile(file);
@@ -237,6 +243,9 @@ public class DocumentShareSourceServiceImpl implements IDocumentShareSourceServi
         return StringUtils.hasText(targetName) ? targetName : targetTypeText;
     }
 
+    /**
+     * 部门共享空间访问权来自根节点部门关系，租户共享空间对当前租户用户开放。
+     */
     private boolean hasSharedSpaceAccess(SysFiles file, DocumentAccessContext context) {
         if (file == null || !Objects.equals(file.getTenantId(), context.tenantId())) {
             return false;
@@ -260,6 +269,9 @@ public class DocumentShareSourceServiceImpl implements IDocumentShareSourceServi
                 .eq(SysFileRelation::getDeleteFlag, 0)) > 0;
     }
 
+    /**
+     * 共享来源展示需要定位共享根节点，子文件继承根节点的共享描述。
+     */
     private SysFiles resolveRootFile(SysFiles file) {
         SysFiles current = file;
         int guard = 0;
@@ -273,6 +285,9 @@ public class DocumentShareSourceServiceImpl implements IDocumentShareSourceServi
         return current;
     }
 
+    /**
+     * 部门共享根可能命中多个部门，优先展示当前用户所属部门范围内的目标。
+     */
     private String resolveDepartSharedRootTarget(SysFiles root, DocumentAccessContext context) {
         if (root == null) {
             return null;
@@ -294,6 +309,9 @@ public class DocumentShareSourceServiceImpl implements IDocumentShareSourceServi
                         .orElse(null));
     }
 
+    /**
+     * 分享来源父链需要读取已删除节点，遇到已删除源时停止继承展示。
+     */
     private SysFiles getFileIncludingDeleted(String fileId, String tenantId) {
         if (!StringUtils.hasText(fileId)) {
             return null;
@@ -311,6 +329,9 @@ public class DocumentShareSourceServiceImpl implements IDocumentShareSourceServi
         return resolveUsernameDisplayNames(List.of(username)).getOrDefault(username, username);
     }
 
+    /**
+     * 分享来源展示批量解析用户真实姓名，避免列表逐条查询用户信息。
+     */
     private Map<String, String> resolveUsernameDisplayNames(Collection<String> usernames) {
         List<String> normalizedUsernames = usernames.stream()
                 .filter(StringUtils::hasText)

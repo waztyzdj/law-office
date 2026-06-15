@@ -118,6 +118,9 @@ public class DocumentContentAccessServiceImpl implements IDocumentContentAccessS
         sysFilesMapper.updateById(file);
     }
 
+    /**
+     * 读取内容前统一校验文件存在、不是文件夹，并确认当前用户具备查看权限。
+     */
     private SysFiles checkDocumentReadAccess(String fileId, DocumentAccessContext context) {
         SysFiles file = getReadableDocumentFile(fileId, context);
         if (FLAG_YES.equals(file.getIzFolder())) {
@@ -127,6 +130,9 @@ public class DocumentContentAccessServiceImpl implements IDocumentContentAccessS
         return file;
     }
 
+    /**
+     * 回收站文件只允许所有者读取元数据，避免被共享或业务关系继续打开内容。
+     */
     private SysFiles getReadableDocumentFile(String fileId, DocumentAccessContext context) {
         SysFiles file = getFileIncludingDeleted(fileId, context.tenantId());
         if (file == null) {
@@ -151,6 +157,9 @@ public class DocumentContentAccessServiceImpl implements IDocumentContentAccessS
         }
     }
 
+    /**
+     * 下载、预览和编辑入口需要识别回收站状态，因此这里读取当前租户下包含已删除的文件。
+     */
     private SysFiles getFileIncludingDeleted(String fileId, String tenantId) {
         if (!StringUtils.hasText(fileId)) {
             return null;
@@ -161,6 +170,9 @@ public class DocumentContentAccessServiceImpl implements IDocumentContentAccessS
                 .last("LIMIT 1"));
     }
 
+    /**
+     * 回收站访问和编辑类操作必须以文件创建人为所有者口径。
+     */
     private void assertOwner(SysFiles file, String username) {
         if (!StringUtils.hasText(username) || file == null || !Objects.equals(file.getCreateBy(), username)) {
             throw new IllegalArgumentException("无权管理该文档");

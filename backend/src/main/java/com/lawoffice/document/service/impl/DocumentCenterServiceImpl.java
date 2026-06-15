@@ -1369,6 +1369,9 @@ public class DocumentCenterServiceImpl extends BaseServiceImpl<SysFilesMapper, S
         return new ArrayList<>(fileIds);
     }
 
+    /**
+     * “全部”视图需要把当前用户可进入的租户共享空间和部门共享空间都纳入可见范围。
+     */
     private List<String> findAccessibleSharedSpaceFileIds(DocumentAccessContext context) {
         LinkedHashSet<String> fileIds = new LinkedHashSet<>();
         DocumentSharedTargetContext tenantTarget = new DocumentSharedTargetContext(TARGET_TENANT, context.tenantId());
@@ -1538,6 +1541,9 @@ public class DocumentCenterServiceImpl extends BaseServiceImpl<SysFilesMapper, S
         return false;
     }
 
+    /**
+     * “我共享的”必须同时满足 ACL 由当前用户创建且源文件仍属于当前用户，避免展示已转移或无效的授权。
+     */
     private List<String> findFileIdsSharedByOwner(DocumentAccessContext context) {
         List<String> sharedFileIds = fileAclMapper.selectList(Wrappers.lambdaQuery(SysFileAcl.class)
                         .select(SysFileAcl::getFileId)
@@ -1567,6 +1573,9 @@ public class DocumentCenterServiceImpl extends BaseServiceImpl<SysFilesMapper, S
                 .toList();
     }
 
+    /**
+     * 按共享目标查看“我共享的”时，仍要回查文件所有者，不能只依赖 ACL 创建人。
+     */
     private List<String> findFileIdsSharedByOwnerAndTarget(
             DocumentAccessContext context,
             DocumentSharedTargetContext sharedTarget) {
@@ -1723,6 +1732,9 @@ public class DocumentCenterServiceImpl extends BaseServiceImpl<SysFilesMapper, S
         return file;
     }
 
+    /**
+     * 业务文档个人归类关系必须限定当前租户且未删除，避免操作其他租户或已失效关系。
+     */
     private SysFileRelation getActiveRelation(String relationId) {
         if (!StringUtils.hasText(relationId)) {
             throw new IllegalArgumentException("文件关联ID不能为空");

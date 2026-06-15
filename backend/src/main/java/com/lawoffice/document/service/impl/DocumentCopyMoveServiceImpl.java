@@ -239,6 +239,9 @@ public class DocumentCopyMoveServiceImpl implements IDocumentCopyMoveService {
         }
     }
 
+    /**
+     * 文件复制必须复制对象存储内容，不能让新文件和源文件共用同一个 object key。
+     */
     private String copyObjectName(SysFiles source) {
         if (!StringUtils.hasText(source.getUrl())) {
             throw new IllegalArgumentException("源文件内容不存在，无法复制");
@@ -250,6 +253,9 @@ public class DocumentCopyMoveServiceImpl implements IDocumentCopyMoveService {
         }
     }
 
+    /**
+     * 目录复制只递归当前租户未删除子节点，回收站内容不随目录复制。
+     */
     private List<SysFiles> selectActiveChildren(String tenantId, String parentId) {
         if (!StringUtils.hasText(parentId)) {
             return Collections.emptyList();
@@ -262,6 +268,9 @@ public class DocumentCopyMoveServiceImpl implements IDocumentCopyMoveService {
                 .orderByAsc(SysFiles::getCreateTime));
     }
 
+    /**
+     * 复制/移动目标必须是当前租户未删除文件，避免跨租户或回收站操作。
+     */
     private SysFiles getActiveFile(String fileId, String tenantId) {
         SysFiles file = sysFilesMapper.selectOne(Wrappers.lambdaQuery(SysFiles.class)
                 .eq(SysFiles::getId, fileId)

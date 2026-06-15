@@ -331,12 +331,18 @@ public class DocumentSharedSpaceServiceImpl implements IDocumentSharedSpaceServi
                 && isInDepartSharedSpace(file, sharedTarget.targetId());
     }
 
+    /**
+     * 共享空间文件通过 storeType 标识，移动和上传时都要据此判断是否跨空间。
+     */
     private boolean isSharedSpaceDocument(SysFiles file) {
         return file != null
                 && (TENANT_SHARED_STORE_TYPE.equals(file.getStoreType())
                 || DEPART_SHARED_STORE_TYPE.equals(file.getStoreType()));
     }
 
+    /**
+     * 部门共享空间以根节点关系授权，子级文件通过根节点判断是否属于该部门。
+     */
     private boolean isInDepartSharedSpace(SysFiles file, String departId) {
         if (file == null || !StringUtils.hasText(departId)) {
             return false;
@@ -352,6 +358,9 @@ public class DocumentSharedSpaceServiceImpl implements IDocumentSharedSpaceServi
                 .eq(SysFileRelation::getDeleteFlag, 0)) > 0;
     }
 
+    /**
+     * 共享空间权限挂在根节点上，子节点需要向上追溯根文件。
+     */
     private SysFiles resolveRootFile(SysFiles file) {
         SysFiles current = file;
         int guard = 0;
@@ -382,6 +391,9 @@ public class DocumentSharedSpaceServiceImpl implements IDocumentSharedSpaceServi
         return false;
     }
 
+    /**
+     * 共享目标节点移动时以当前目标的有效 ACL 作为边界，不能跨目标移动。
+     */
     private boolean hasActiveAclForTarget(String fileId, String tenantId, DocumentSharedTargetContext sharedTarget) {
         if (!StringUtils.hasText(fileId) || sharedTarget == null) {
             return false;
@@ -433,6 +445,9 @@ public class DocumentSharedSpaceServiceImpl implements IDocumentSharedSpaceServi
         }
     }
 
+    /**
+     * 共享空间 storeType 变更需要递归处理未删除子节点，回收站内容不跟随移动。
+     */
     private List<SysFiles> selectActiveChildren(String tenantId, String parentId) {
         return sysFilesMapper.selectList(Wrappers.lambdaQuery(SysFiles.class)
                 .eq(SysFiles::getTenantId, tenantId)
@@ -440,6 +455,9 @@ public class DocumentSharedSpaceServiceImpl implements IDocumentSharedSpaceServi
                 .eq(SysFiles::getDeleteFlag, 0));
     }
 
+    /**
+     * 共享空间父节点必须是当前租户未删除文件，避免跨租户或回收站移动。
+     */
     private SysFiles getActiveFile(String fileId, String tenantId) {
         SysFiles file = sysFilesMapper.selectOne(Wrappers.lambdaQuery(SysFiles.class)
                 .eq(SysFiles::getId, fileId)
@@ -452,6 +470,9 @@ public class DocumentSharedSpaceServiceImpl implements IDocumentSharedSpaceServi
         return file;
     }
 
+    /**
+     * 追溯共享空间父链时需要读取已删除节点，用于中断无效继承链。
+     */
     private SysFiles getFileIncludingDeleted(String fileId, String tenantId) {
         if (!StringUtils.hasText(fileId)) {
             return null;

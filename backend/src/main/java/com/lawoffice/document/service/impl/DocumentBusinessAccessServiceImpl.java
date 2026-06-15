@@ -188,6 +188,9 @@ public class DocumentBusinessAccessServiceImpl implements IDocumentBusinessAcces
                 context.roleIds());
     }
 
+    /**
+     * 业务文档访问权交给各业务 Provider 批量判断，文档中心不硬编码具体业务模块规则。
+     */
     private Map<String, Set<String>> resolveAccessibleBusinessBizIds(
             List<SysFileRelation> relations,
             Map<String, SysFiles> fileMap,
@@ -226,6 +229,9 @@ public class DocumentBusinessAccessServiceImpl implements IDocumentBusinessAcces
         return provider != null && provider.canAccess(relation.getBizId(), toBusinessDocumentAccessContext(context));
     }
 
+    /**
+     * 业务关系只在源文件仍属于当前租户且未删除时生效，避免业务目录展示失效附件。
+     */
     private List<SysFiles> selectActiveFilesByIds(DocumentAccessContext context, List<String> fileIds) {
         if (fileIds.isEmpty()) {
             return Collections.emptyList();

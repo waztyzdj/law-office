@@ -66,6 +66,9 @@ public class DocumentAccessContextServiceImpl implements IDocumentAccessContextS
         return new DocumentAccessContext(username, user.getId(), tenantId, departIds, roleIds, new DocumentRequestCache());
     }
 
+    /**
+     * 部门共享要继承父级部门授权，构建上下文时把当前部门和祖先部门一起纳入权限匹配范围。
+     */
     private List<String> resolveDepartIdsWithAncestors(List<String> departIds, String tenantId) {
         if (departIds == null || departIds.isEmpty()) {
             return new ArrayList<>();
