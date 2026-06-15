@@ -8,6 +8,7 @@ import com.lawoffice.workflow.req.StartProcessReq;
 import com.lawoffice.workflow.req.StartedInstancePageReq;
 import com.lawoffice.workflow.req.TaskActionReq;
 import com.lawoffice.workflow.req.TaskPageReq;
+import com.lawoffice.workflow.service.IProcessStartService;
 import com.lawoffice.workflow.service.IRuntimeQueryService;
 import com.lawoffice.workflow.service.IRuntimeService;
 import com.lawoffice.workflow.service.ITaskActionService;
@@ -29,14 +30,14 @@ public class RuntimeServiceImpl implements IRuntimeService {
 
     private final IRuntimeQueryService runtimeQueryService;
     private final ITaskActionService taskActionService;
-    private final WorkflowRuntimeSupport runtimeSupport;
+    private final IProcessStartService processStartService;
 
     public RuntimeServiceImpl(IRuntimeQueryService runtimeQueryService,
             ITaskActionService taskActionService,
-            WorkflowRuntimeSupport runtimeSupport) {
+            IProcessStartService processStartService) {
         this.runtimeQueryService = runtimeQueryService;
         this.taskActionService = taskActionService;
-        this.runtimeSupport = runtimeSupport;
+        this.processStartService = processStartService;
     }
 
     @Override
@@ -51,12 +52,12 @@ public class RuntimeServiceImpl implements IRuntimeService {
 
     @Override
     public BaseResult<StartProcessVO> start(StartProcessReq req, RequestContext context) {
-        return runtimeSupport.start(req, context);
+        return processStartService.start(req, context);
     }
 
     @Override
     public BaseResult<StartProcessVO> saveStartDraft(StartProcessReq req, RequestContext context) {
-        return runtimeSupport.saveStartDraft(req, context);
+        return processStartService.saveStartDraft(req, context);
     }
 
     @Override
