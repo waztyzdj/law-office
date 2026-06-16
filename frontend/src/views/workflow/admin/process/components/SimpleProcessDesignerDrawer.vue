@@ -75,7 +75,7 @@ const [Drawer, drawerApi] = useVbenDrawer({
   onConfirm: handleSubmit,
   onOpened: syncMountedDesigner,
   title: drawerTitle.value,
-  zIndex: 3000,
+  zIndex: 1001,
 });
 
 function parseJsonValue<T>(json: string | undefined, fallback: T): T {
@@ -241,7 +241,12 @@ function validateNodes() {
 }
 
 function needsAssigneeConfig(node: SimpleNode) {
-  return !['starter', 'depart_leader', 'starter_select'].includes(node.assigneeType);
+  return ![
+    'starter',
+    'depart_leader',
+    'starter_select',
+    'starter_supervisor',
+  ].includes(node.assigneeType);
 }
 
 function hasAssigneeConfig(value: Record<string, unknown>) {

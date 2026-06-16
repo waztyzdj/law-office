@@ -343,7 +343,7 @@ const [Drawer, drawerApi] = useVbenDrawer({
   onConfirm: handleSubmit,
   onOpened: syncModeler,
   title: drawerTitle.value,
-  zIndex: 3000,
+  zIndex: 1001,
 });
 
 function createDefaultBpmnXml(process: WorkflowProcessModelInfo) {
@@ -597,7 +597,12 @@ function validateNodeConfigs() {
 }
 
 function needsAssigneeConfig(config: NodeConfigDraft) {
-  return !['starter', 'depart_leader', 'starter_select'].includes(config.assigneeType);
+  return ![
+    'starter',
+    'depart_leader',
+    'starter_select',
+    'starter_supervisor',
+  ].includes(config.assigneeType);
 }
 
 function hasAssigneeConfig(value: Record<string, unknown>) {

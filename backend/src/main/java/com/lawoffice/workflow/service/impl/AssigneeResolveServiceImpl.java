@@ -167,7 +167,7 @@ public class AssigneeResolveServiceImpl implements IAssigneeResolveService {
     }
 
     /**
-     * 只要求当前办理人选择下一审批节点的多人角色/部门岗位，其它节点到对应环节再解析。
+     * 只要求当前办理人提前处理下一审批节点的多人选择或空审批人兜底，其它节点到对应环节再解析。
      */
     @Override
     public List<AssigneeSelectNodeVO> buildRequiredAssigneeSelectNodes(String processModelId,
@@ -380,6 +380,7 @@ public class AssigneeResolveServiceImpl implements IAssigneeResolveService {
     private boolean requiresStarterSelection(ProcessNodeConfig nodeConfig) {
         return WorkflowConstants.AssigneeType.ROLE.equals(nodeConfig.getAssigneeType())
                 || WorkflowConstants.AssigneeType.DEPART_ROLE.equals(nodeConfig.getAssigneeType())
+                || WorkflowConstants.AssigneeType.STARTER_SUPERVISOR.equals(nodeConfig.getAssigneeType())
                 || WorkflowConstants.AssigneeType.STARTER_SELECT.equals(nodeConfig.getAssigneeType());
     }
 
@@ -545,6 +546,7 @@ public class AssigneeResolveServiceImpl implements IAssigneeResolveService {
             case WorkflowConstants.AssigneeType.ROLE -> resolveRoleAssignees(nodeConfig, tenantId);
             case WorkflowConstants.AssigneeType.DEPART_LEADER -> resolveDepartLeaderAssignees(nodeConfig, processInstance, tenantId);
             case WorkflowConstants.AssigneeType.DEPART_ROLE -> resolveDepartRoleAssignees(nodeConfig, tenantId);
+            case WorkflowConstants.AssigneeType.STARTER_SUPERVISOR -> resolveStarterSupervisorAssignees(processInstance, tenantId);
             case WorkflowConstants.AssigneeType.STARTER -> resolveStarterAssignee(processInstance, tenantId);
             default -> throw new IllegalArgumentException("不支持的审批人类型: " + nodeConfig.getAssigneeType());
         };
@@ -646,6 +648,36 @@ public class AssigneeResolveServiceImpl implements IAssigneeResolveService {
                 .map(user -> new ResolvedAssignee(user.getId(), user.getUsername(), user.getRealname(),
                         WorkflowConstants.AssigneeType.DEPART_ROLE, sourceRoleByUserId.get(user.getId())))
                 .toList();
+    }
+
+    private List<ResolvedAssignee> resolveStarterSupervisorAssignees(ProcessInstance processInstance, String tenantId) {
+        String supervisorUserId = userDepartMapper.selectList(new QueryWrapper<UserDepart>()
+                        .select("supervisor_user_id", "primary_depart_flag")
+                        .eq("tenant_id", tenantId)
+                        .eq("user_id", processInstance.getStarterUserId())
+                        .isNotNull("supervisor_user_id")
+                        .ne("supervisor_user_id", "")
+                        .eq("delete_flag", 0)
+                        .orderByDesc("primary_depart_flag")
+                        .orderByAsc("create_time"))
+                .stream()
+                .map(UserDepart::getSupervisorUserId)
+                .filter(StringUtils::hasText)
+                .findFirst()
+                .orElse(null);
+        if (!StringUtils.hasText(supervisorUserId)) {
+            return List.of();
+        }
+        Map<String, User> users = loadTenantActiveUsers(List.of(supervisorUserId), tenantId);
+        User supervisor = users.get(supervisorUserId);
+        return supervisor == null
+                ? List.of()
+                : List.of(new ResolvedAssignee(
+                        supervisor.getId(),
+                        supervisor.getUsername(),
+                        supervisor.getRealname(),
+                        WorkflowConstants.AssigneeType.STARTER_SUPERVISOR,
+                        supervisor.getId()));
     }
 
     private List<ResolvedAssignee> resolveStarterAssignee(ProcessInstance processInstance, String tenantId) {

@@ -53,6 +53,7 @@ const assigneeTypeOptions = [
   { label: '指定角色', value: 'role' },
   { label: '部门负责人', value: 'depart_leader' },
   { label: '部门岗位', value: 'depart_role' },
+  { label: '发起人直属上级', value: 'starter_supervisor' },
   { label: '审批人自选', value: 'starter_select' },
 ];
 
@@ -64,7 +65,7 @@ const selectedUserIds = ref<string[]>([]);
 const selectedRoleIds = ref<string[]>([]);
 const selectedDepartRoleIds = ref<string[]>([]);
 const syncing = ref(false);
-const selectDropdownStyle = { zIndex: 3101 };
+const selectDropdownStyle = { zIndex: 1002 };
 
 const userOptions = computed<SelectOption[]>(() =>
   users.value
@@ -184,6 +185,10 @@ function emitAssigneeJson(type = props.type) {
   }
   if (type === 'depart_role') {
     emit('update:modelValue', { departRoleIds: selectedDepartRoleIds.value });
+    return;
+  }
+  if (type === 'starter_supervisor') {
+    emit('update:modelValue', {});
     return;
   }
   emit('update:modelValue', {});
@@ -308,6 +313,14 @@ function handleDepartRoleChange(value: unknown) {
         show-search
         @change="handleDepartRoleChange"
       />
+    </FormItem>
+
+    <FormItem
+      v-else-if="type === 'starter_supervisor'"
+      label="上级规则"
+    >
+      <Tag color="blue">发起人直属上级</Tag>
+      <div class="assignee-tip">运行时按发起人主部门关系中的直属上级解析审批人。</div>
     </FormItem>
 
     <div
