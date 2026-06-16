@@ -167,7 +167,7 @@ public class AssigneeResolveServiceImpl implements IAssigneeResolveService {
     }
 
     /**
-     * 只要求当前办理人提前处理下一审批节点的多人选择或空审批人兜底，其它节点到对应环节再解析。
+     * 当前办理人提交前先解析真实下一审批节点，空审批人统一转审批人自选兜底。
      */
     @Override
     public List<AssigneeSelectNodeVO> buildRequiredAssigneeSelectNodes(String processModelId,
@@ -180,7 +180,7 @@ public class AssigneeResolveServiceImpl implements IAssigneeResolveService {
         }
         return listApproverNodeConfigs(processModelId, tenantId).stream()
                 .filter(nodeConfig -> targetNodeId.equals(nodeConfig.getNodeId()))
-                .filter(this::requiresStarterSelection)
+                .filter(this::requiresRuntimeAssigneeSelection)
                 .map(nodeConfig -> buildAssigneeSelectNode(nodeConfig, processInstance, tenantId))
                 .filter(Objects::nonNull)
                 .toList();
@@ -377,10 +377,19 @@ public class AssigneeResolveServiceImpl implements IAssigneeResolveService {
                 .orderByAsc("create_time"));
     }
 
-    private boolean requiresStarterSelection(ProcessNodeConfig nodeConfig) {
-        return WorkflowConstants.AssigneeType.ROLE.equals(nodeConfig.getAssigneeType())
+    private boolean requiresRuntimeAssigneeSelection(ProcessNodeConfig nodeConfig) {
+        return WorkflowConstants.AssigneeType.USER.equals(nodeConfig.getAssigneeType())
+                || WorkflowConstants.AssigneeType.ROLE.equals(nodeConfig.getAssigneeType())
+                || WorkflowConstants.AssigneeType.DEPART_LEADER.equals(nodeConfig.getAssigneeType())
                 || WorkflowConstants.AssigneeType.DEPART_ROLE.equals(nodeConfig.getAssigneeType())
                 || WorkflowConstants.AssigneeType.STARTER_SUPERVISOR.equals(nodeConfig.getAssigneeType())
+                || WorkflowConstants.AssigneeType.STARTER_SELECT.equals(nodeConfig.getAssigneeType())
+                || WorkflowConstants.AssigneeType.STARTER.equals(nodeConfig.getAssigneeType());
+    }
+
+    private boolean requiresExplicitAssigneeSelection(ProcessNodeConfig nodeConfig) {
+        return WorkflowConstants.AssigneeType.ROLE.equals(nodeConfig.getAssigneeType())
+                || WorkflowConstants.AssigneeType.DEPART_ROLE.equals(nodeConfig.getAssigneeType())
                 || WorkflowConstants.AssigneeType.STARTER_SELECT.equals(nodeConfig.getAssigneeType());
     }
 
@@ -395,7 +404,7 @@ public class AssigneeResolveServiceImpl implements IAssigneeResolveService {
         } catch (IllegalArgumentException e) {
             return buildStarterSelectNode(nodeConfig, true);
         }
-        if (assignees.size() <= 1) {
+        if (assignees.size() <= 1 || !requiresExplicitAssigneeSelection(nodeConfig)) {
             return null;
         }
         AssigneeSelectNodeVO vo = new AssigneeSelectNodeVO();
@@ -531,7 +540,7 @@ public class AssigneeResolveServiceImpl implements IAssigneeResolveService {
             throw new IllegalArgumentException("请选择下一审批人: " + nodeConfig.getNodeName());
         }
         List<ResolvedAssignee> assignees = resolveTaskAssignees(nodeConfig, processInstance, tenantId);
-        if (requiresStarterSelection(nodeConfig) && assignees.size() > 1) {
+        if (requiresExplicitAssigneeSelection(nodeConfig) && assignees.size() > 1) {
             throw new IllegalArgumentException("节点存在多个可选审批人，请选择后再提交: " + nodeConfig.getNodeName());
         }
         return assignees;

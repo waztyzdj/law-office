@@ -31,11 +31,13 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import java.util.ArrayList;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.reset;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -142,6 +144,66 @@ class AssigneeResolveServiceImplTest {
         assertEquals(List.of(), node.getOptions());
     }
 
+    @Test
+    void shouldFallbackToStarterSelectWhenAnySupportedAssigneeTypeResolvesEmpty() {
+        List<ProcessNodeConfig> missingNodes = new ArrayList<>();
+        missingNodes.add(node("approve_user", "指定人员审批", WorkflowConstants.AssigneeType.USER,
+                "{\"userIds\":[\"missing-user\"]}"));
+        missingNodes.add(node("approve_role", "指定角色审批", WorkflowConstants.AssigneeType.ROLE,
+                "{\"roleIds\":[\"missing-role\"]}"));
+        missingNodes.add(node("approve_depart_leader", "部门负责人审批", WorkflowConstants.AssigneeType.DEPART_LEADER, null));
+        missingNodes.add(node("approve_depart_role", "部门岗位审批", WorkflowConstants.AssigneeType.DEPART_ROLE,
+                "{\"departRoleIds\":[\"missing-depart-role\"]}"));
+        missingNodes.add(starterSupervisorNode());
+        missingNodes.add(node("approve_starter", "发起人本人审批", WorkflowConstants.AssigneeType.STARTER, null));
+
+        for (ProcessNodeConfig missingNode : missingNodes) {
+            assertFallbackToStarterSelect(missingNode);
+        }
+    }
+
+    private void assertFallbackToStarterSelect(ProcessNodeConfig missingNode) {
+        reset(processModelMapper, processNodeConfigMapper, userDepartMapper, userTenantMapper,
+                userRoleMapper, departRoleUserMapper, userMapper);
+        ProcessInstance processInstance = processInstance();
+        when(processModelMapper.selectOne(any(Wrapper.class))).thenReturn(null);
+        when(processNodeConfigMapper.selectList(any(Wrapper.class))).thenReturn(List.of(missingNode));
+        mockEmptyResolverResult(missingNode.getAssigneeType());
+
+        List<AssigneeSelectNodeVO> nodes = service.buildRequiredAssigneeSelectNodes(
+                PROCESS_MODEL_ID,
+                processInstance,
+                TENANT_ID,
+                WorkflowConstants.VirtualNode.START_DRAFT);
+
+        assertEquals(1, nodes.size(), missingNode.getAssigneeType());
+        AssigneeSelectNodeVO node = nodes.get(0);
+        assertEquals(missingNode.getNodeId(), node.getNodeId());
+        assertEquals(WorkflowConstants.AssigneeType.STARTER_SELECT, node.getAssigneeType());
+        assertEquals(Boolean.TRUE, node.getFallback());
+        assertEquals(List.of(), node.getOptions());
+    }
+
+    private void mockEmptyResolverResult(String assigneeType) {
+        if (WorkflowConstants.AssigneeType.USER.equals(assigneeType)
+                || WorkflowConstants.AssigneeType.STARTER.equals(assigneeType)) {
+            when(userTenantMapper.selectList(any(Wrapper.class))).thenReturn(List.of());
+            return;
+        }
+        if (WorkflowConstants.AssigneeType.ROLE.equals(assigneeType)) {
+            when(userRoleMapper.selectList(any(Wrapper.class))).thenReturn(List.of());
+            return;
+        }
+        if (WorkflowConstants.AssigneeType.DEPART_LEADER.equals(assigneeType)
+                || WorkflowConstants.AssigneeType.STARTER_SUPERVISOR.equals(assigneeType)) {
+            when(userDepartMapper.selectList(any(Wrapper.class))).thenReturn(List.of());
+            return;
+        }
+        if (WorkflowConstants.AssigneeType.DEPART_ROLE.equals(assigneeType)) {
+            when(departRoleUserMapper.selectList(any(Wrapper.class))).thenReturn(List.of());
+        }
+    }
+
     private ProcessInstance processInstance() {
         ProcessInstance processInstance = new ProcessInstance();
         processInstance.setId(PROCESS_INSTANCE_ID);
@@ -150,6 +212,15 @@ class AssigneeResolveServiceImplTest {
         processInstance.setFlowableProcessInstanceId(FLOWABLE_INSTANCE_ID);
         processInstance.setStarterUserId(STARTER_ID);
         return processInstance;
+    }
+
+    private ProcessNodeConfig node(String nodeId, String nodeName, String assigneeType, String assigneeJson) {
+        ProcessNodeConfig nodeConfig = new ProcessNodeConfig();
+        nodeConfig.setNodeId(nodeId);
+        nodeConfig.setNodeName(nodeName);
+        nodeConfig.setAssigneeType(assigneeType);
+        nodeConfig.setAssigneeJson(assigneeJson);
+        return nodeConfig;
     }
 
     private ProcessNodeConfig starterSupervisorNode() {
