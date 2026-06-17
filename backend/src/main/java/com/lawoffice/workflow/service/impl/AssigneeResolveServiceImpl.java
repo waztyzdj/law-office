@@ -388,7 +388,8 @@ public class AssigneeResolveServiceImpl implements IAssigneeResolveService {
     }
 
     private boolean requiresExplicitAssigneeSelection(ProcessNodeConfig nodeConfig) {
-        return WorkflowConstants.AssigneeType.ROLE.equals(nodeConfig.getAssigneeType())
+        return WorkflowConstants.AssigneeType.USER.equals(nodeConfig.getAssigneeType())
+                || WorkflowConstants.AssigneeType.ROLE.equals(nodeConfig.getAssigneeType())
                 || WorkflowConstants.AssigneeType.DEPART_ROLE.equals(nodeConfig.getAssigneeType())
                 || WorkflowConstants.AssigneeType.STARTER_SELECT.equals(nodeConfig.getAssigneeType());
     }

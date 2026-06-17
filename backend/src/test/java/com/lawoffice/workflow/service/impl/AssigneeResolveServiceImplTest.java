@@ -162,6 +162,33 @@ class AssigneeResolveServiceImplTest {
         }
     }
 
+    @Test
+    void shouldRequireExplicitSelectionForUserNodesWithMultipleAssignees() {
+        ProcessInstance processInstance = processInstance();
+        when(processModelMapper.selectOne(any(Wrapper.class))).thenReturn(null);
+        when(processNodeConfigMapper.selectList(any(Wrapper.class))).thenReturn(List.of(node(
+                "approve_user",
+                "指定人员审批",
+                WorkflowConstants.AssigneeType.USER,
+                "{\"userIds\":[\"user-1\",\"user-2\"]}"
+        )));
+        when(userTenantMapper.selectList(any(Wrapper.class))).thenReturn(List.of(userTenant("user-1"), userTenant("user-2")));
+        when(userMapper.selectList(any(Wrapper.class))).thenReturn(List.of(user("user-1", "u1", "张三"), user("user-2", "u2", "李四")));
+
+        List<AssigneeSelectNodeVO> nodes = service.buildRequiredAssigneeSelectNodes(
+                PROCESS_MODEL_ID,
+                processInstance,
+                TENANT_ID,
+                WorkflowConstants.VirtualNode.START_DRAFT);
+
+        assertEquals(1, nodes.size());
+        AssigneeSelectNodeVO node = nodes.get(0);
+        assertEquals(WorkflowConstants.AssigneeType.USER, node.getAssigneeType());
+        assertEquals(2, node.getOptions().size());
+        assertEquals("user-1", node.getOptions().get(0).getUserId());
+        assertEquals("user-2", node.getOptions().get(1).getUserId());
+    }
+
     private void assertFallbackToStarterSelect(ProcessNodeConfig missingNode) {
         reset(processModelMapper, processNodeConfigMapper, userDepartMapper, userTenantMapper,
                 userRoleMapper, departRoleUserMapper, userMapper);
@@ -241,18 +268,26 @@ class AssigneeResolveServiceImplTest {
     }
 
     private UserTenant userTenant() {
+        return userTenant(SUPERVISOR_ID);
+    }
+
+    private UserTenant userTenant(String userId) {
         UserTenant userTenant = new UserTenant();
-        userTenant.setUserId(SUPERVISOR_ID);
+        userTenant.setUserId(userId);
         userTenant.setTenantId(TENANT_ID);
         userTenant.setStatus("1");
         return userTenant;
     }
 
     private User supervisor() {
+        return user(SUPERVISOR_ID, "supervisor", "直属上级");
+    }
+
+    private User user(String id, String username, String realname) {
         User user = new User();
-        user.setId(SUPERVISOR_ID);
-        user.setUsername("supervisor");
-        user.setRealname("直属上级");
+        user.setId(id);
+        user.setUsername(username);
+        user.setRealname(realname);
         user.setStatus(1);
         return user;
     }
