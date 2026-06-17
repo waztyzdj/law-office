@@ -34,12 +34,20 @@ public class WorkflowFormDataServiceImpl implements IWorkflowFormDataService {
         if (!StringUtils.hasText(formDataJson)) {
             return;
         }
-        saveRuntimeFormData(formDataJson, formInstance, permissions, context, validateRequired);
+        saveFormData(formDataJson, formInstance, permissions, context, validateRequired,
+                WorkflowConstants.FieldPermission.EDITABLE);
     }
 
     @Override
     public void saveRuntimeFormData(String formDataJson, FormInstance formInstance,
             List<FieldPermission> permissions, RequestContext context, boolean validateRequired) {
+        saveFormData(formDataJson, formInstance, permissions, context, validateRequired,
+                WorkflowConstants.FieldPermission.READONLY);
+    }
+
+    private void saveFormData(String formDataJson, FormInstance formInstance,
+            List<FieldPermission> permissions, RequestContext context, boolean validateRequired,
+            String defaultPermission) {
         try {
             JsonNode submitted = OBJECT_MAPPER.readTree(formDataJson);
             JsonNode current = StringUtils.hasText(formInstance.getFormDataJson())
@@ -47,22 +55,8 @@ public class WorkflowFormDataServiceImpl implements IWorkflowFormDataService {
             if (!submitted.isObject() || !current.isObject()) {
                 throw new IllegalArgumentException("表单数据必须是JSON对象");
             }
-            if (permissions == null || permissions.isEmpty()) {
-                if (validateRequired) {
-                    validateRequiredFields(List.of(), (ObjectNode) submitted);
-                }
-                formInstance.setFormDataJson(OBJECT_MAPPER.writeValueAsString(submitted));
-                EntityFillUtils.fillAuditFields(formInstance, context, false);
-                formInstanceMapper.updateById(formInstance);
-                return;
-            }
             ObjectNode merged = ((ObjectNode) current).deepCopy();
-            Set<String> editableFields = new HashSet<>();
-            for (FieldPermission permission : permissions) {
-                if (WorkflowConstants.FieldPermission.EDITABLE.equals(permission.getPermission())) {
-                    editableFields.add(permission.getFieldKey());
-                }
-            }
+            Set<String> editableFields = resolveEditableFields((ObjectNode) submitted, permissions, defaultPermission);
             for (String fieldKey : editableFields) {
                 if (submitted.has(fieldKey)) {
                     merged.set(fieldKey, submitted.get(fieldKey));
@@ -79,6 +73,33 @@ public class WorkflowFormDataServiceImpl implements IWorkflowFormDataService {
         } catch (Exception e) {
             throw new IllegalArgumentException("表单数据JSON处理失败");
         }
+    }
+
+    private Set<String> resolveEditableFields(ObjectNode submitted, List<FieldPermission> permissions, String defaultPermission) {
+        Set<String> editableFields = WorkflowConstants.FieldPermission.EDITABLE.equals(defaultPermission)
+                ? fieldNames(submitted)
+                : new HashSet<>();
+        if (permissions == null || permissions.isEmpty()) {
+            return editableFields;
+        }
+        for (FieldPermission permission : permissions) {
+            if (!StringUtils.hasText(permission.getFieldKey())) {
+                continue;
+            }
+            if (WorkflowConstants.FieldPermission.EDITABLE.equals(permission.getPermission())) {
+                editableFields.add(permission.getFieldKey());
+            } else if (WorkflowConstants.FieldPermission.READONLY.equals(permission.getPermission())
+                    || WorkflowConstants.FieldPermission.HIDDEN.equals(permission.getPermission())) {
+                editableFields.remove(permission.getFieldKey());
+            }
+        }
+        return editableFields;
+    }
+
+    private Set<String> fieldNames(ObjectNode node) {
+        Set<String> names = new HashSet<>();
+        node.fieldNames().forEachRemaining(names::add);
+        return names;
     }
 
     private void validateRequiredFields(List<FieldPermission> permissions, ObjectNode formData) {

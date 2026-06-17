@@ -12,7 +12,7 @@ import java.util.List;
 public interface IWorkflowFormDataService {
 
     /**
-     * 保存发起环节表单数据。
+     * 保存发起环节表单数据。未配置字段权限时，发起节点默认可编辑。
      *
      * @param formDataJson 表单数据JSON
      * @param formInstance 表单实例
@@ -24,7 +24,7 @@ public interface IWorkflowFormDataService {
             List<FieldPermission> permissions, RequestContext context, boolean validateRequired);
 
     /**
-     * 保存运行时表单数据，并按字段权限合并可编辑字段。
+     * 保存运行时表单数据，并按字段权限合并可编辑字段。未配置字段权限时，审批节点默认只读。
      *
      * @param formDataJson 表单数据JSON
      * @param formInstance 表单实例

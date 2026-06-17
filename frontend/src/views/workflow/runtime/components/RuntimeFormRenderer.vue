@@ -19,6 +19,7 @@ const props = withDefaults(
     loading?: boolean;
     optionJson?: string;
     readonly?: boolean;
+    defaultPermission?: FieldPermission;
     schemaJson?: string;
   }>(),
   {
@@ -28,6 +29,7 @@ const props = withDefaults(
     loading: false,
     optionJson: '{}',
     readonly: false,
+    defaultPermission: 'readonly',
     schemaJson: '[]',
   },
 );
@@ -74,7 +76,7 @@ function normalizePermission(
     return 'readonly';
   }
   if (!item?.permission) {
-    return 'editable';
+    return props.defaultPermission;
   }
   if (item.permission === 'hidden' || item.permission === 'readonly') {
     return item.permission;

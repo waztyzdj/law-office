@@ -44,6 +44,9 @@ export function useRuntimeFormData(options: UseRuntimeFormDataOptions) {
     () => options.taskForm.value?.taskType === 'start_draft',
   );
   const readonly = computed(() => !isStartMode.value && !isTodoMode.value);
+  const defaultFieldPermission = computed(() =>
+    isStartMode.value || isStartDraftTask.value ? 'editable' : 'readonly',
+  );
   const showApprovalComment = computed(
     () => isTodoMode.value && !isStartDraftTask.value,
   );
@@ -145,6 +148,7 @@ export function useRuntimeFormData(options: UseRuntimeFormDataOptions) {
     approvalComment,
     businessKey,
     collectFormDataJson,
+    defaultFieldPermission,
     drawerTitle,
     fieldPermissions,
     formDataJson,

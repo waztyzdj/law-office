@@ -188,7 +188,7 @@ public class ProcessStartServiceImpl implements IProcessStartService {
         formInstance.setFormKey(form.getFormKey());
         formInstance.setFormName(form.getFormName());
         formInstance.setFormVersion(form.getVersion());
-        formInstance.setFormDataJson(req.getFormDataJson());
+        formInstance.setFormDataJson("{}");
         formInstance.setFormSchemaSnapshotJson(form.getSchemaJson());
         formInstance.setFormOptionSnapshotJson(form.getOptionJson());
         formInstance.setStatus(status);

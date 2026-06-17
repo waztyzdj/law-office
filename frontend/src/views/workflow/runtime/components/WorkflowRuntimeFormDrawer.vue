@@ -90,6 +90,7 @@ const {
   approvalComment,
   businessKey,
   collectFormDataJson,
+  defaultFieldPermission,
   drawerTitle,
   fieldPermissions,
   formDataJson,
@@ -296,6 +297,7 @@ defineExpose({
             <div class="runtime-form-content">
               <RuntimeFormRenderer
                 :ref="handleRuntimeFormRef"
+                :default-permission="defaultFieldPermission"
                 :field-permissions="fieldPermissions"
                 :form-data-json="formDataJson"
                 :loading="loading"
