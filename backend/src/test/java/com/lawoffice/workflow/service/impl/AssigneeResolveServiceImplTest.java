@@ -2,10 +2,12 @@ package com.lawoffice.workflow.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.Wrapper;
 import com.lawoffice.framework.dto.RequestContext;
+import com.lawoffice.system.entity.DepartRole;
 import com.lawoffice.system.entity.DepartRoleUser;
 import com.lawoffice.system.entity.User;
 import com.lawoffice.system.entity.UserDepart;
 import com.lawoffice.system.entity.UserTenant;
+import com.lawoffice.system.mapper.DepartRoleMapper;
 import com.lawoffice.system.mapper.DepartRoleUserMapper;
 import com.lawoffice.system.mapper.UserDepartMapper;
 import com.lawoffice.system.mapper.UserMapper;
@@ -55,6 +57,8 @@ class AssigneeResolveServiceImplTest {
     @Mock
     private DepartRoleUserMapper departRoleUserMapper;
     @Mock
+    private DepartRoleMapper departRoleMapper;
+    @Mock
     private IFlowableService flowableService;
     @Mock
     private IInstanceStateService instanceStateService;
@@ -83,6 +87,7 @@ class AssigneeResolveServiceImplTest {
     void setUp() {
         service = new AssigneeResolveServiceImpl(
                 departRoleUserMapper,
+                departRoleMapper,
                 flowableService,
                 instanceStateService,
                 processInstanceAssigneeMapper,
@@ -189,9 +194,35 @@ class AssigneeResolveServiceImplTest {
         assertEquals("user-2", node.getOptions().get(1).getUserId());
     }
 
+    @Test
+    void shouldOnlyResolveWorkflowEnabledDepartRoles() {
+        ProcessInstance processInstance = processInstance();
+        when(processModelMapper.selectOne(any(Wrapper.class))).thenReturn(null);
+        when(processNodeConfigMapper.selectList(any(Wrapper.class))).thenReturn(List.of(node(
+                "approve_depart_role",
+                "部门岗位审批",
+                WorkflowConstants.AssigneeType.DEPART_ROLE,
+                "{\"departRoleIds\":[\"workflow-role\",\"normal-role\"]}"
+        )));
+        when(departRoleMapper.selectList(any(Wrapper.class))).thenReturn(List.of(departRole("workflow-role")));
+        DepartRoleUser enabledUser = departRoleUser("workflow-role", "user-1");
+        DepartRoleUser disabledUser = departRoleUser("normal-role", "user-2");
+        when(departRoleUserMapper.selectList(any(Wrapper.class))).thenReturn(List.of(enabledUser, disabledUser));
+        when(userTenantMapper.selectList(any(Wrapper.class))).thenReturn(List.of(userTenant("user-1")));
+        when(userMapper.selectList(any(Wrapper.class))).thenReturn(List.of(user("user-1", "u1", "张三")));
+
+        List<AssigneeSelectNodeVO> nodes = service.buildRequiredAssigneeSelectNodes(
+                PROCESS_MODEL_ID,
+                processInstance,
+                TENANT_ID,
+                WorkflowConstants.VirtualNode.START_DRAFT);
+
+        assertEquals(0, nodes.size());
+    }
+
     private void assertFallbackToStarterSelect(ProcessNodeConfig missingNode) {
         reset(processModelMapper, processNodeConfigMapper, userDepartMapper, userTenantMapper,
-                userRoleMapper, departRoleUserMapper, userMapper);
+                userRoleMapper, departRoleUserMapper, departRoleMapper, userMapper);
         ProcessInstance processInstance = processInstance();
         when(processModelMapper.selectOne(any(Wrapper.class))).thenReturn(null);
         when(processNodeConfigMapper.selectList(any(Wrapper.class))).thenReturn(List.of(missingNode));
@@ -227,8 +258,24 @@ class AssigneeResolveServiceImplTest {
             return;
         }
         if (WorkflowConstants.AssigneeType.DEPART_ROLE.equals(assigneeType)) {
-            when(departRoleUserMapper.selectList(any(Wrapper.class))).thenReturn(List.of());
+            when(departRoleMapper.selectList(any(Wrapper.class))).thenReturn(List.of());
+            return;
         }
+    }
+
+    private DepartRole departRole(String id) {
+        DepartRole departRole = new DepartRole();
+        departRole.setId(id);
+        departRole.setWorkflowEnabled(1);
+        return departRole;
+    }
+
+    private DepartRoleUser departRoleUser(String droleId, String userId) {
+        DepartRoleUser roleUser = new DepartRoleUser();
+        roleUser.setDroleId(droleId);
+        roleUser.setUserId(userId);
+        roleUser.setTenantId(TENANT_ID);
+        return roleUser;
     }
 
     private ProcessInstance processInstance() {

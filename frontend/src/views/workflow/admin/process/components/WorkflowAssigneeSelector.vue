@@ -99,6 +99,11 @@ function formatUserLabel(user: UserInfo) {
     .join(' ');
 }
 
+function isWorkflowEnabledRole(role: DepartRoleInfo) {
+  const value = role.workflowEnabled as unknown;
+  return value === 1 || value === true || value === '1';
+}
+
 function readIds(value: Record<string, unknown> | undefined, ...keys: string[]) {
   if (!value) {
     return [];
@@ -154,13 +159,18 @@ async function loadDepartRoles() {
   );
   departRoles.value = roleGroups.flatMap(({ departId, roles }) =>
     (roles ?? [])
-      .filter((role: DepartRoleInfo) => role.id)
+      .filter((role: DepartRoleInfo) => role.id && isWorkflowEnabledRole(role))
       .map((role: DepartRoleInfo) => ({
         departId,
         label: `${departNameMap[departId] ?? departId} / ${role.roleName ?? role.roleCode ?? role.id}`,
         value: role.id!,
       })),
   );
+  const workflowRoleIds = new Set(departRoles.value.map((role) => role.value));
+  selectedDepartRoleIds.value = selectedDepartRoleIds.value.filter((roleId) => workflowRoleIds.has(roleId));
+  if (props.type === 'depart_role') {
+    emitAssigneeJson();
+  }
 }
 
 function emitAssigneeJson(type = props.type) {

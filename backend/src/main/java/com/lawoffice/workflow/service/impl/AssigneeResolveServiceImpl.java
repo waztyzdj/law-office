@@ -5,11 +5,13 @@ import com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.lawoffice.framework.dto.RequestContext;
+import com.lawoffice.system.entity.DepartRole;
 import com.lawoffice.system.entity.DepartRoleUser;
 import com.lawoffice.system.entity.User;
 import com.lawoffice.system.entity.UserDepart;
 import com.lawoffice.system.entity.UserRole;
 import com.lawoffice.system.entity.UserTenant;
+import com.lawoffice.system.mapper.DepartRoleMapper;
 import com.lawoffice.system.mapper.DepartRoleUserMapper;
 import com.lawoffice.system.mapper.UserDepartMapper;
 import com.lawoffice.system.mapper.UserMapper;
@@ -69,6 +71,7 @@ public class AssigneeResolveServiceImpl implements IAssigneeResolveService {
     }
 
     private final DepartRoleUserMapper departRoleUserMapper;
+    private final DepartRoleMapper departRoleMapper;
     private final IFlowableService flowableService;
     private final IInstanceStateService instanceStateService;
     private final ProcessInstanceAssigneeMapper processInstanceAssigneeMapper;
@@ -82,6 +85,7 @@ public class AssigneeResolveServiceImpl implements IAssigneeResolveService {
     private final UserTenantMapper userTenantMapper;
 
     public AssigneeResolveServiceImpl(DepartRoleUserMapper departRoleUserMapper,
+            DepartRoleMapper departRoleMapper,
             IFlowableService flowableService,
             IInstanceStateService instanceStateService,
             ProcessInstanceAssigneeMapper processInstanceAssigneeMapper,
@@ -94,6 +98,7 @@ public class AssigneeResolveServiceImpl implements IAssigneeResolveService {
             UserRoleMapper userRoleMapper,
             UserTenantMapper userTenantMapper) {
         this.departRoleUserMapper = departRoleUserMapper;
+        this.departRoleMapper = departRoleMapper;
         this.flowableService = flowableService;
         this.instanceStateService = instanceStateService;
         this.processInstanceAssigneeMapper = processInstanceAssigneeMapper;
@@ -645,8 +650,21 @@ public class AssigneeResolveServiceImpl implements IAssigneeResolveService {
         if (departRoleIds.isEmpty()) {
             return List.of();
         }
+        Set<String> workflowDepartRoleIds = departRoleMapper.selectList(new QueryWrapper<DepartRole>()
+                        .select("id")
+                        .in("id", departRoleIds)
+                        .eq("tenant_id", tenantId)
+                        .eq("workflow_enabled", 1)
+                        .eq("delete_flag", 0))
+                .stream()
+                .map(DepartRole::getId)
+                .filter(StringUtils::hasText)
+                .collect(java.util.stream.Collectors.toSet());
+        if (workflowDepartRoleIds.isEmpty()) {
+            return List.of();
+        }
         List<DepartRoleUser> roleUsers = departRoleUserMapper.selectList(new QueryWrapper<DepartRoleUser>()
-                .in("drole_id", departRoleIds)
+                .in("drole_id", workflowDepartRoleIds)
                 .eq("tenant_id", tenantId)
                 .eq("delete_flag", 0));
         Map<String, String> sourceRoleByUserId = new LinkedHashMap<>();
@@ -655,6 +673,7 @@ public class AssigneeResolveServiceImpl implements IAssigneeResolveService {
         }
         Map<String, User> users = loadTenantActiveUsers(new ArrayList<>(sourceRoleByUserId.keySet()), tenantId);
         return users.values().stream()
+                .filter(user -> workflowDepartRoleIds.contains(sourceRoleByUserId.get(user.getId())))
                 .map(user -> new ResolvedAssignee(user.getId(), user.getUsername(), user.getRealname(),
                         WorkflowConstants.AssigneeType.DEPART_ROLE, sourceRoleByUserId.get(user.getId())))
                 .toList();
