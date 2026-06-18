@@ -31,6 +31,101 @@
 | `view` | 查看、列表、详情、导出 |
 | `edit` | 新增、修改、删除、导入 |
 
+## 审批中心枚举
+
+### 流程实例状态
+
+| 值 | 说明 |
+| --- | --- |
+| `draft` | 草稿待提交 |
+| `running` | 流转中 |
+| `approved` | 已通过 |
+| `rejected` | 不通过 |
+| `withdrawn` | 已撤回 |
+| `terminated` | 已终止 |
+
+### 任务类型
+
+| 值 | 说明 |
+| --- | --- |
+| `start_draft` | 发起草稿待提交 |
+| `normal` | 普通审批 |
+| `transfer` | 转办 |
+| `add_sign` | 加签 |
+| `countersign` | 会签 |
+| `orsign` | 或签 |
+
+### 任务状态
+
+| 值 | 说明 |
+| --- | --- |
+| `todo` | 待办 |
+| `done` | 已办 |
+| `transferred` | 已转办 |
+| `returned` | 已退回 |
+| `canceled` | 已取消 |
+| `withdrawn` | 因撤回取消 |
+
+### 节点办理策略
+
+| 值 | 说明 |
+| --- | --- |
+| `single` | 单人审批 |
+| `countersign` | 并行会签 |
+| `orsign` | 或签 |
+
+### 流程节点类型
+
+| 值 | 说明 |
+| --- | --- |
+| `start` | 开始 |
+| `approver` | 审批 |
+| `gateway` | 网关 |
+| `end` | 结束 |
+
+### 审批动作
+
+| 值 | 说明 |
+| --- | --- |
+| `save_draft` | 保存草稿 |
+| `start` | 发起 |
+| `approve` | 通过 |
+| `reject` | 不通过 |
+| `return` | 退回 |
+| `transfer` | 转办 |
+| `add_sign` | 加签 |
+| `withdraw` | 撤回 |
+| `cc` | 抄送 |
+| `urge` | 催办 |
+| `timeout_remind` | 超时提醒 |
+| `task_cancel` | 任务取消 |
+| `branch_match` | 条件分支命中 |
+| `attachment_upload` | 上传附件 |
+| `attachment_delete` | 删除附件 |
+| `system_complete` | 系统完成 |
+
+### 抄送状态
+
+| 值 | 说明 |
+| --- | --- |
+| `unread` | 未读 |
+| `read` | 已读 |
+| `canceled` | 已取消 |
+
+### 提醒类型
+
+| 值 | 说明 |
+| --- | --- |
+| `urge` | 人工催办 |
+| `timeout` | 超时提醒 |
+
+### 审批附件状态
+
+| 值 | 说明 |
+| --- | --- |
+| `active` | 有效 |
+| `deleted` | 已删除 |
+
 ## 维护要求
 
 - 新增状态值时同步更新后端常量/枚举、前端展示、数据库注释和模块文档。

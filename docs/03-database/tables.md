@@ -185,14 +185,14 @@
 重点字段：
 
 - `file_id`：文件 ID。
-- `biz_type`：业务类型；文档中心内部使用 `document_shared:<userId>` 记录“共享给我”个人归类；历史数据中可能存在 `document_business:<userId>` 业务文档个人归类，仅兼容只读展示。
+- `biz_type`：业务类型；审批中心附件使用 `workflow_approval`；文档中心内部使用 `document_shared:<userId>` 记录“共享给我”个人归类；历史数据中可能存在 `document_business:<userId>` 业务文档个人归类，仅兼容只读展示。
 - `biz_id`：业务数据 ID；文档中心个人归类场景下为目标整理文件夹 ID。
 - `relation_type`：关系类型，`1` 表示业务附件，`2` 表示“共享给我”个人整理；历史数据中可能存在 `3` 表示旧版“业务文档”个人整理。
 - `tenant_id`：租户 ID。
 
-## 审批中心一期表
+## 审批中心表
 
-审批中心业务表统一使用 `wf_*` 前缀，Flowable 自带 `ACT_*` 表只作为流程运行时数据，不直接暴露给前端。完整字段、枚举和索引以 `sql/建表脚本.sql` 为准，模块设计以 `docs/05-modules/workflow/approval-center-phase1-design.md` 为准。
+审批中心业务表统一使用 `wf_*` 前缀，Flowable 自带 `ACT_*` 表只作为流程运行时数据，不直接暴露给前端。完整字段、枚举和索引以 `sql/建表脚本.sql` 为准，模块设计以 `docs/05-modules/workflow/approval-center-phase1-design.md` 和 `docs/05-modules/workflow/approval-center-phase2-data-model.md` 为准。
 
 ### `wf_process_category`
 
@@ -242,6 +242,8 @@ FormCreate 表单实例表，用于保存发起后的表单数据、schema 快�
 - `start_scope_type`：发起范围，取值 `all`、`specified`。
 - `node_json`：简单设计器节点 JSON。
 - `bpmn_xml`：BPMN XML，发布时必须存在。
+- `bpmn_security_status`：BPMN 安全校验状态，取值 `passed`、`failed`。
+- `bpmn_security_message`：BPMN 安全校验摘要。
 - `flowable_deployment_id`：Flowable 部署 ID。
 - `flowable_process_definition_id`：Flowable 流程定义 ID。
 
@@ -264,8 +266,15 @@ FormCreate 表单实例表，用于保存发起后的表单数据、schema 快�
 
 - `process_model_id`：流程模型版本 ID。
 - `node_id`：节点 ID，对应 BPMN `taskDefinitionKey`。
+- `node_type`：节点类型，取值 `start`、`approver`、`gateway`、`end`。
 - `assignee_type`：审批人类型，取值 `user`、`role`、`depart_leader`、`depart_role`、`starter_supervisor`、`starter_select`、`starter`。
 - `assignee_json`：审批人配置 JSON。
+- `approval_mode`：办理策略，取值 `single`、`countersign`、`orsign`。
+- `reject_policy`：不通过策略，二期取值 `terminate`。
+- `branch_json`：条件分支配置 JSON。
+- `cc_json`：抄送配置 JSON。
+- `timeout_json`：超时提醒配置 JSON。
+- `attachment_json`：附件权限配置 JSON。
 - `allow_transfer`、`allow_add_sign`、`allow_return`：节点动作开关。
 
 ### `wf_field_permission`
@@ -293,7 +302,7 @@ FormCreate 表单实例表，用于保存发起后的表单数据、schema 快�
 - `instance_no`：审批编号，同一租户内软删范围唯一。
 - `current_task_names`：当前节点名称摘要。
 - `current_assignee_names`：当前处理人姓名摘要。
-- `status`：状态，取值 `draft`、`running`、`approved`、`rejected`、`terminated`；`draft` 表示发起申请已保存但尚未提交到 Flowable。
+- `status`：状态，取值 `draft`、`running`、`approved`、`rejected`、`withdrawn`、`terminated`；`draft` 表示发起申请已保存但尚未提交到 Flowable，`withdrawn` 表示发起人撤回。
 
 ### `wf_task`
 
@@ -304,12 +313,32 @@ FormCreate 表单实例表，用于保存发起后的表单数据、schema 快�
 - `flowable_task_id`：Flowable 任务 ID；发起草稿待办尚未进入 Flowable，使用 `draft:{task_id}` 本地标识。
 - `node_id`：节点 ID。
 - `parent_task_id`：父任务扩展 ID，转办或加签任务关联原任务。
-- `task_type`：任务类型，取值 `start_draft`、`normal`、`transfer`、`add_sign`；`start_draft` 表示发起人待提交草稿。
+- `task_type`：任务类型，取值 `start_draft`、`normal`、`transfer`、`add_sign`、`countersign`、`orsign`；`start_draft` 表示发起人待提交草稿。
+- `approval_mode`：任务所属节点办理策略，取值 `single`、`countersign`、`orsign`。
+- `task_group_id`：同一节点同一批会签或或签任务组 ID。
+- `group_total`、`group_completed`：同组任务总数和已完成数摘要。
 - `owner_user_id`：原处理人用户 ID，转办或加签时记录。
 - `assignee_user_id`：当前处理人用户 ID；候选任务提交审批时自动认领并写入。
-- `status`：状态，取值 `todo`、`done`、`transferred`、`returned`、`canceled`。
+- `status`：状态，取值 `todo`、`done`、`transferred`、`returned`、`canceled`、`withdrawn`。
+- `due_time`：超时截止时间。
+- `last_remind_time`、`remind_count`：超时提醒防重复字段。
 - `claim_time`：自动认领时间。
 - `complete_time`：完成时间。
+
+### `wf_process_instance_assignee`
+
+流程实例节点审批人快照表，用于保存运行时选择的审批人，避免组织关系变更影响已流转实例。
+
+重点字段：
+
+- `process_instance_id`：审批实例 ID。
+- `process_model_id`：流程模型版本 ID。
+- `node_id`、`node_name`：节点快照。
+- `assignee_type`：审批人类型快照。
+- `assignee_user_id`、`assignee_username`、`assignee_realname`：选定审批人快照。
+- `source_type`、`source_id`：审批人来源。
+- `select_type`：选择方式，取值 `single`、`multiple`。
+- `status`：状态，取值 `active`、`canceled`。
 
 ### `wf_task_candidate`
 
@@ -330,12 +359,76 @@ FormCreate 表单实例表，用于保存发起后的表单数据、schema 快�
 
 - `process_instance_id`：审批实例 ID。
 - `task_id`：任务扩展 ID。
-- `action`：审批动作，取值 `start`、`approve`、`reject`、`return`、`transfer`、`add_sign`、`system_complete`。
+- `action`：审批动作，取值 `save_draft`、`start`、`approve`、`reject`、`return`、`transfer`、`add_sign`、`withdraw`、`cc`、`urge`、`timeout_remind`、`task_cancel`、`branch_match`、`attachment_upload`、`attachment_delete`、`system_complete`。
 - `operator_user_id`：操作人用户 ID。
 - `target_user_id`：目标用户 ID，转办或加签时使用。
 - `target_node_id`、`target_node_name`：退回目标节点。
 - `form_data_snapshot_json`：操作时表单数据快照。
 - `operate_time`：操作时间。
+
+### `wf_cc_record`
+
+审批抄送记录表，用于“我的抄送”、审批详情访问权和抄送已读状态。
+
+重点字段：
+
+- `process_instance_id`：审批实例 ID。
+- `process_model_id`：流程模型版本 ID。
+- `task_id`：触发抄送的任务 ID。
+- `node_id`、`node_name`：触发节点。
+- `trigger_action`：触发动作，取值 `start`、`approve`、`process_finished`、`manual`。
+- `source_type`、`source_id`：抄送来源。
+- `receiver_user_id`、`receiver_username`、`receiver_realname`：抄送接收人。
+- `status`：状态，取值 `unread`、`read`、`canceled`。
+- `read_time`：阅读时间。
+- `message_id`：关联站内消息 ID。
+
+### `wf_reminder_record`
+
+催办和超时提醒记录表，用于防重复提醒、消息追踪和审批详情展示。
+
+重点字段：
+
+- `process_instance_id`：审批实例 ID。
+- `task_id`：任务扩展 ID。
+- `flowable_task_id`：Flowable 任务 ID。
+- `remind_type`：提醒类型，取值 `urge`、`timeout`。
+- `sender_user_id`、`sender_username`、`sender_realname`：发送人；系统超时提醒可为空或 `system`。
+- `receiver_user_id`、`receiver_username`、`receiver_realname`：接收人。
+- `message_id`：关联站内消息 ID。
+- `remind_round`：第几轮提醒。
+- `operate_time`：提醒时间。
+
+### `wf_attachment`
+
+审批附件表，用于记录审批语义和权限，文件元数据仍以 `sys_files` 为准。
+
+重点字段：
+
+- `process_instance_id`：审批实例 ID。
+- `task_id`：任务扩展 ID。
+- `approval_record_id`：审批记录 ID。
+- `node_id`、`node_name`：上传节点。
+- `file_id`：文件 ID，对应 `sys_files.id`。
+- `file_relation_id`：文件业务关联 ID，对应 `sys_file_relation.id`。
+- `attachment_source`：来源，取值 `start`、`task`、`comment`。
+- `uploader_user_id`、`uploader_username`、`uploader_realname`：上传人。
+- `status`：状态，取值 `active`、`deleted`。
+
+### `wf_branch_record`
+
+条件分支命中记录表，用于流程图高亮、审计和排查。
+
+重点字段：
+
+- `process_instance_id`：审批实例 ID。
+- `process_model_id`：流程模型版本 ID。
+- `source_node_id`、`source_node_name`：分支来源节点。
+- `branch_id`、`branch_name`：命中分支。
+- `target_node_id`、`target_node_name`：目标节点。
+- `condition_snapshot_json`：判断条件快照。
+- `form_data_snapshot_json`：判断时表单数据快照。
+- `matched_time`：命中时间。
 
 ## `sys_log`
 
