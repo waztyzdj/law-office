@@ -4,17 +4,30 @@ import com.lawoffice.framework.dto.RequestContext;
 import com.lawoffice.framework.result.BaseResult;
 import com.lawoffice.framework.vo.PageVO;
 import com.lawoffice.workflow.req.AvailableProcessPageReq;
+import com.lawoffice.workflow.req.AttachmentBindReq;
+import com.lawoffice.workflow.req.BranchRecordReq;
+import com.lawoffice.workflow.req.CcPageReq;
 import com.lawoffice.workflow.req.StartProcessReq;
 import com.lawoffice.workflow.req.StartedInstancePageReq;
 import com.lawoffice.workflow.req.TaskActionReq;
 import com.lawoffice.workflow.req.TaskPageReq;
+import com.lawoffice.workflow.service.IAttachmentRuntimeService;
+import com.lawoffice.workflow.service.IBranchRuntimeService;
+import com.lawoffice.workflow.service.ICcRuntimeService;
+import com.lawoffice.workflow.service.IDiagramService;
 import com.lawoffice.workflow.service.IProcessStartService;
+import com.lawoffice.workflow.service.IReminderRuntimeService;
 import com.lawoffice.workflow.service.IRuntimeQueryService;
 import com.lawoffice.workflow.service.IRuntimeService;
 import com.lawoffice.workflow.service.ITaskActionService;
+import com.lawoffice.workflow.vo.AttachmentVO;
 import com.lawoffice.workflow.vo.AvailableProcessVO;
+import com.lawoffice.workflow.vo.BranchRecordVO;
+import com.lawoffice.workflow.vo.CcRecordVO;
+import com.lawoffice.workflow.vo.InstanceDiagramVO;
 import com.lawoffice.workflow.vo.InstanceDetailVO;
 import com.lawoffice.workflow.vo.OperationRecordVO;
+import com.lawoffice.workflow.vo.ReminderRecordVO;
 import com.lawoffice.workflow.vo.RuntimeTaskVO;
 import com.lawoffice.workflow.vo.StartFormVO;
 import com.lawoffice.workflow.vo.StartProcessVO;
@@ -31,13 +44,28 @@ public class RuntimeServiceImpl implements IRuntimeService {
     private final IRuntimeQueryService runtimeQueryService;
     private final ITaskActionService taskActionService;
     private final IProcessStartService processStartService;
+    private final ICcRuntimeService ccRuntimeService;
+    private final IReminderRuntimeService reminderRuntimeService;
+    private final IAttachmentRuntimeService attachmentRuntimeService;
+    private final IBranchRuntimeService branchRuntimeService;
+    private final IDiagramService diagramService;
 
     public RuntimeServiceImpl(IRuntimeQueryService runtimeQueryService,
             ITaskActionService taskActionService,
-            IProcessStartService processStartService) {
+            IProcessStartService processStartService,
+            ICcRuntimeService ccRuntimeService,
+            IReminderRuntimeService reminderRuntimeService,
+            IAttachmentRuntimeService attachmentRuntimeService,
+            IBranchRuntimeService branchRuntimeService,
+            IDiagramService diagramService) {
         this.runtimeQueryService = runtimeQueryService;
         this.taskActionService = taskActionService;
         this.processStartService = processStartService;
+        this.ccRuntimeService = ccRuntimeService;
+        this.reminderRuntimeService = reminderRuntimeService;
+        this.attachmentRuntimeService = attachmentRuntimeService;
+        this.branchRuntimeService = branchRuntimeService;
+        this.diagramService = diagramService;
     }
 
     @Override
@@ -123,5 +151,50 @@ public class RuntimeServiceImpl implements IRuntimeService {
     @Override
     public BaseResult<List<OperationRecordVO>> listInstanceRecords(String id, RequestContext context) {
         return runtimeQueryService.listInstanceRecords(id, context);
+    }
+
+    @Override
+    public BaseResult<PageVO<CcRecordVO>> pageCc(CcPageReq req, RequestContext context) {
+        return ccRuntimeService.pageMine(req, context);
+    }
+
+    @Override
+    public BaseResult<CcRecordVO> markCcRead(String ccRecordId, RequestContext context) {
+        return ccRuntimeService.markRead(ccRecordId, context);
+    }
+
+    @Override
+    public BaseResult<ReminderRecordVO> urgeTask(String taskId, String remark, RequestContext context) {
+        return reminderRuntimeService.urgeTask(taskId, remark, context);
+    }
+
+    @Override
+    public BaseResult<List<AttachmentVO>> listAttachments(String processInstanceId, RequestContext context) {
+        return attachmentRuntimeService.listByInstance(processInstanceId, context);
+    }
+
+    @Override
+    public BaseResult<AttachmentVO> bindAttachment(AttachmentBindReq req, RequestContext context) {
+        return attachmentRuntimeService.bind(req, context);
+    }
+
+    @Override
+    public BaseResult<Void> deleteAttachment(String attachmentId, RequestContext context) {
+        return attachmentRuntimeService.delete(attachmentId, context);
+    }
+
+    @Override
+    public BaseResult<BranchRecordVO> recordBranch(BranchRecordReq req, RequestContext context) {
+        return branchRuntimeService.recordMatch(req, context);
+    }
+
+    @Override
+    public BaseResult<List<BranchRecordVO>> listBranches(String processInstanceId, RequestContext context) {
+        return branchRuntimeService.listByInstance(processInstanceId, context);
+    }
+
+    @Override
+    public BaseResult<InstanceDiagramVO> getInstanceDiagram(String processInstanceId, RequestContext context) {
+        return diagramService.getInstanceDiagram(processInstanceId, context);
     }
 }

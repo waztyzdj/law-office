@@ -26,6 +26,18 @@ public class ProcessNodeConfig extends BaseTenantEntity {
 
     private String assigneeJson;
 
+    private String approvalMode;
+
+    private String rejectPolicy;
+
+    private String branchJson;
+
+    private String ccJson;
+
+    private String timeoutJson;
+
+    private String attachmentJson;
+
     private Integer allowTransfer;
 
     private Integer allowAddSign;

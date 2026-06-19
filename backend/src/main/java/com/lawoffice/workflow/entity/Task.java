@@ -28,6 +28,14 @@ public class Task extends BaseTenantEntity {
 
     private String taskType;
 
+    private String approvalMode;
+
+    private String taskGroupId;
+
+    private Integer groupTotal;
+
+    private Integer groupCompleted;
+
     private String ownerUserId;
 
     private String ownerUsername;
@@ -41,6 +49,12 @@ public class Task extends BaseTenantEntity {
     private String assigneeRealname;
 
     private String status;
+
+    private LocalDateTime dueTime;
+
+    private LocalDateTime lastRemindTime;
+
+    private Integer remindCount;
 
     private LocalDateTime claimTime;
 

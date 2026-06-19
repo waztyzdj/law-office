@@ -4,13 +4,21 @@ import com.lawoffice.framework.dto.RequestContext;
 import com.lawoffice.framework.result.BaseResult;
 import com.lawoffice.framework.vo.PageVO;
 import com.lawoffice.workflow.req.AvailableProcessPageReq;
+import com.lawoffice.workflow.req.AttachmentBindReq;
+import com.lawoffice.workflow.req.BranchRecordReq;
+import com.lawoffice.workflow.req.CcPageReq;
 import com.lawoffice.workflow.req.StartedInstancePageReq;
 import com.lawoffice.workflow.req.StartProcessReq;
 import com.lawoffice.workflow.req.TaskActionReq;
 import com.lawoffice.workflow.req.TaskPageReq;
+import com.lawoffice.workflow.vo.AttachmentVO;
 import com.lawoffice.workflow.vo.AvailableProcessVO;
+import com.lawoffice.workflow.vo.BranchRecordVO;
+import com.lawoffice.workflow.vo.CcRecordVO;
+import com.lawoffice.workflow.vo.InstanceDiagramVO;
 import com.lawoffice.workflow.vo.InstanceDetailVO;
 import com.lawoffice.workflow.vo.OperationRecordVO;
+import com.lawoffice.workflow.vo.ReminderRecordVO;
 import com.lawoffice.workflow.vo.RuntimeTaskVO;
 import com.lawoffice.workflow.vo.StartFormVO;
 import com.lawoffice.workflow.vo.StartProcessVO;
@@ -184,4 +192,86 @@ public interface IRuntimeService {
      * @return 审批记录
      */
     BaseResult<List<OperationRecordVO>> listInstanceRecords(String id, RequestContext context);
+
+    /**
+     * 查询当前用户收到的抄送。
+     *
+     * @param req 分页筛选请求
+     * @param context 当前请求上下文
+     * @return 抄送记录分页
+     */
+    BaseResult<PageVO<CcRecordVO>> pageCc(CcPageReq req, RequestContext context);
+
+    /**
+     * 标记当前用户收到的抄送为已读。
+     *
+     * @param ccRecordId 抄送记录ID
+     * @param context 当前请求上下文
+     * @return 抄送记录
+     */
+    BaseResult<CcRecordVO> markCcRead(String ccRecordId, RequestContext context);
+
+    /**
+     * 催办待处理任务。
+     *
+     * @param taskId 任务ID
+     * @param remark 催办备注
+     * @param context 当前请求上下文
+     * @return 催办记录
+     */
+    BaseResult<ReminderRecordVO> urgeTask(String taskId, String remark, RequestContext context);
+
+    /**
+     * 查询审批实例附件。
+     *
+     * @param processInstanceId 流程实例ID
+     * @param context 当前请求上下文
+     * @return 审批附件
+     */
+    BaseResult<List<AttachmentVO>> listAttachments(String processInstanceId, RequestContext context);
+
+    /**
+     * 绑定审批附件。
+     *
+     * @param req 附件绑定请求
+     * @param context 当前请求上下文
+     * @return 审批附件记录
+     */
+    BaseResult<AttachmentVO> bindAttachment(AttachmentBindReq req, RequestContext context);
+
+    /**
+     * 删除审批附件。
+     *
+     * @param attachmentId 附件ID
+     * @param context 当前请求上下文
+     * @return 删除结果
+     */
+    BaseResult<Void> deleteAttachment(String attachmentId, RequestContext context);
+
+    /**
+     * 记录审批实例条件分支命中。
+     *
+     * @param req 分支命中请求
+     * @param context 当前请求上下文
+     * @return 分支命中记录
+     */
+    BaseResult<BranchRecordVO> recordBranch(BranchRecordReq req, RequestContext context);
+
+    /**
+     * 查询审批实例条件分支命中记录。
+     *
+     * @param processInstanceId 流程实例ID
+     * @param context 当前请求上下文
+     * @return 分支命中记录
+     */
+    BaseResult<List<BranchRecordVO>> listBranches(String processInstanceId, RequestContext context);
+
+    /**
+     * 查询审批实例流程图数据。
+     *
+     * @param processInstanceId 流程实例ID
+     * @param context 当前请求上下文
+     * @return 流程图数据
+     */
+    BaseResult<InstanceDiagramVO> getInstanceDiagram(String processInstanceId, RequestContext context);
 }

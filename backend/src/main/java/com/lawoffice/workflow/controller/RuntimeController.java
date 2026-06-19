@@ -4,7 +4,12 @@ import com.lawoffice.framework.dto.RequestContext;
 import com.lawoffice.framework.result.BaseResult;
 import com.lawoffice.framework.util.RequestContextUtils;
 import com.lawoffice.framework.vo.PageVO;
+import com.lawoffice.workflow.req.AttachmentBindReq;
 import com.lawoffice.workflow.req.AvailableProcessPageReq;
+import com.lawoffice.workflow.req.BranchRecordReq;
+import com.lawoffice.workflow.req.CcPageReq;
+import com.lawoffice.workflow.req.CcReadReq;
+import com.lawoffice.workflow.req.InstanceDiagramReq;
 import com.lawoffice.workflow.req.InstanceReq;
 import com.lawoffice.workflow.req.StartFormReq;
 import com.lawoffice.workflow.req.StartProcessReq;
@@ -12,10 +17,16 @@ import com.lawoffice.workflow.req.StartedInstancePageReq;
 import com.lawoffice.workflow.req.TaskActionReq;
 import com.lawoffice.workflow.req.TaskFormReq;
 import com.lawoffice.workflow.req.TaskPageReq;
+import com.lawoffice.workflow.req.TaskUrgeReq;
 import com.lawoffice.workflow.service.IRuntimeService;
+import com.lawoffice.workflow.vo.AttachmentVO;
 import com.lawoffice.workflow.vo.AvailableProcessVO;
+import com.lawoffice.workflow.vo.BranchRecordVO;
+import com.lawoffice.workflow.vo.CcRecordVO;
+import com.lawoffice.workflow.vo.InstanceDiagramVO;
 import com.lawoffice.workflow.vo.InstanceDetailVO;
 import com.lawoffice.workflow.vo.OperationRecordVO;
+import com.lawoffice.workflow.vo.ReminderRecordVO;
 import com.lawoffice.workflow.vo.RuntimeTaskVO;
 import com.lawoffice.workflow.vo.StartFormVO;
 import com.lawoffice.workflow.vo.StartProcessVO;
@@ -179,5 +190,76 @@ public class RuntimeController {
             HttpServletRequest request) {
         RequestContext context = RequestContextUtils.buildContext(request);
         return runtimeService.addSign(req == null ? null : req.getTaskId(), req, context);
+    }
+
+    @PostMapping("/cc/page")
+    @Operation(summary = "我的抄送")
+    public BaseResult<PageVO<CcRecordVO>> pageCc(@RequestBody(required = false) CcPageReq req,
+            HttpServletRequest request) {
+        RequestContext context = RequestContextUtils.buildContext(request);
+        return runtimeService.pageCc(req, context);
+    }
+
+    @PostMapping("/cc/read")
+    @Operation(summary = "标记抄送已读")
+    public BaseResult<CcRecordVO> markCcRead(@RequestBody CcReadReq req, HttpServletRequest request) {
+        RequestContext context = RequestContextUtils.buildContext(request);
+        return runtimeService.markCcRead(req == null ? null : req.getId(), context);
+    }
+
+    @PostMapping("/task/urge")
+    @Operation(summary = "催办任务")
+    public BaseResult<ReminderRecordVO> urgeTask(@RequestBody TaskUrgeReq req, HttpServletRequest request) {
+        RequestContext context = RequestContextUtils.buildContext(request);
+        return runtimeService.urgeTask(req == null ? null : req.getTaskId(),
+                req == null ? null : req.getRemark(), context);
+    }
+
+    @PostMapping("/attachment/list")
+    @Operation(summary = "查询审批附件")
+    public BaseResult<List<AttachmentVO>> listAttachments(@RequestBody InstanceReq req,
+            HttpServletRequest request) {
+        RequestContext context = RequestContextUtils.buildContext(request);
+        return runtimeService.listAttachments(req == null ? null : req.getId(), context);
+    }
+
+    @PostMapping("/attachment/bind")
+    @Operation(summary = "绑定审批附件")
+    public BaseResult<AttachmentVO> bindAttachment(@RequestBody AttachmentBindReq req,
+            HttpServletRequest request) {
+        RequestContext context = RequestContextUtils.buildContext(request);
+        return runtimeService.bindAttachment(req, context);
+    }
+
+    @PostMapping("/attachment/delete")
+    @Operation(summary = "删除审批附件")
+    public BaseResult<Void> deleteAttachment(@RequestBody InstanceReq req,
+            HttpServletRequest request) {
+        RequestContext context = RequestContextUtils.buildContext(request);
+        return runtimeService.deleteAttachment(req == null ? null : req.getId(), context);
+    }
+
+    @PostMapping("/branch/record")
+    @Operation(summary = "记录分支命中")
+    public BaseResult<BranchRecordVO> recordBranch(@RequestBody BranchRecordReq req,
+            HttpServletRequest request) {
+        RequestContext context = RequestContextUtils.buildContext(request);
+        return runtimeService.recordBranch(req, context);
+    }
+
+    @PostMapping("/branch/list")
+    @Operation(summary = "查询分支记录")
+    public BaseResult<List<BranchRecordVO>> listBranches(@RequestBody InstanceReq req,
+            HttpServletRequest request) {
+        RequestContext context = RequestContextUtils.buildContext(request);
+        return runtimeService.listBranches(req == null ? null : req.getId(), context);
+    }
+
+    @PostMapping("/instance/diagram")
+    @Operation(summary = "获取实例图谱")
+    public BaseResult<InstanceDiagramVO> getInstanceDiagram(@RequestBody InstanceDiagramReq req,
+            HttpServletRequest request) {
+        RequestContext context = RequestContextUtils.buildContext(request);
+        return runtimeService.getInstanceDiagram(req == null ? null : req.getId(), context);
     }
 }

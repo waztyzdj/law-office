@@ -30,6 +30,8 @@
 - 标准 CRUD Service 接口继承 `IBaseService<E, V>`，实现继承 `BaseServiceImpl<M, E, V>`；非 CRUD 的协作服务也必须提供接口和实现，调用方优先依赖接口。
 - 不把可复用的业务协作能力直接写成无接口的 `Service` 类；例如租户上下文执行、默认数据同步、用户-租户关系同步、授权范围校验等，都应优先抽成接口 + 实现。
 - 应用 Service 负责组织业务流程和事务边界；关系同步、默认数据复制、权限范围校验等协作逻辑应沉淀为清晰命名的协作 Service，避免堆在单个实现类中。
+- 复杂业务域采用“表级 CRUD Service + 运行时能力 Service”拆分：一张业务表对应一个基础 CRUD Service；跨表业务按稳定能力拆分为独立协作 Service。门面 Service 只负责编排，不承载抄送、催办、附件、分支、图谱、安全校验等多类细节规则。
+- Controller 按项目现有模块入口风格划分。工作流用户运行时能力统一放在 `RuntimeController`，定义和管理端能力使用 `/模块/admin/...` 下的独立 Controller，并保持 `POST + body` 协议风格。
 
 ## 代码注释约定
 

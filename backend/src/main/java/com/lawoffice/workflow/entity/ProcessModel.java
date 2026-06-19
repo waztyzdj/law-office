@@ -32,6 +32,10 @@ public class ProcessModel extends BaseTenantEntity {
 
     private String bpmnXml;
 
+    private String bpmnSecurityStatus;
+
+    private String bpmnSecurityMessage;
+
     private String status;
 
     private String startScopeType;

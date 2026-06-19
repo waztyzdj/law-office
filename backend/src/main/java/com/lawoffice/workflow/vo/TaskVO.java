@@ -17,6 +17,10 @@ public class TaskVO extends BaseVO {
     private String nodeId;
     private String taskName;
     private String taskType;
+    private String approvalMode;
+    private String taskGroupId;
+    private Integer groupTotal;
+    private Integer groupCompleted;
     private String ownerUserId;
     private String ownerUsername;
     private String ownerRealname;
@@ -24,6 +28,11 @@ public class TaskVO extends BaseVO {
     private String assigneeUsername;
     private String assigneeRealname;
     private String status;
+    @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss", timezone = "GMT+8")
+    private LocalDateTime dueTime;
+    @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss", timezone = "GMT+8")
+    private LocalDateTime lastRemindTime;
+    private Integer remindCount;
     @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss", timezone = "GMT+8")
     private LocalDateTime claimTime;
     @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss", timezone = "GMT+8")

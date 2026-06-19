@@ -19,6 +19,8 @@ public class ProcessModelVO extends BaseVO {
     private String designerType;
     private String nodeJson;
     private String bpmnXml;
+    private String bpmnSecurityStatus;
+    private String bpmnSecurityMessage;
     private String status;
     private String startScopeType;
     private String flowableDeploymentId;

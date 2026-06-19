@@ -18,6 +18,8 @@ public class TaskPageReq extends BasePageReq {
 
     private String taskType;
 
+    private String approvalMode;
+
     private String status;
 
     private String starterRealname;

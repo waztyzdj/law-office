@@ -41,6 +41,7 @@
 - Entity 映射数据库表，不直接作为复杂接口响应对象扩散到前端。
 - Req 接收前端请求并承担入参校验；VO 返回前端展示数据；DTO 用于服务层内部上下文传递。
 - 业务扩展优先重写 `BaseController` / `BaseServiceImpl` 的 `doBeforeXxx`、`doAfterXxx` 钩子，避免复制整套 CRUD。
+- 工作流等复杂业务域必须区分“表级 CRUD Service”和“运行时能力 Service”：一张业务表对应一个基础 CRUD Service；抄送、催办、附件、分支、图谱、安全校验等能力各自沉淀为独立 Service，不得继续堆入单个 Runtime/Process 大 Service。
 
 ## 命名规范
 
@@ -82,6 +83,7 @@ public class UserController extends BaseController<IUserService, User, UserVO, U
 - 不在 Controller 中手动拼接大量业务数据；调用 Service 返回 VO 或简单结果。
 - 自定义接口优先让异常交给 `GlobalExceptionHandler` 统一处理。不要把未知异常的 `e.getMessage()` 直接返回给前端。
 - 文件下载/导出接口必须设置响应头、文件名编码、Content-Type，并处理写出失败日志。
+- Controller 按现有模块入口风格划分。工作流用户运行时能力统一放在 `RuntimeController`，并保持运行时接口当前权限风格；流程定义、模型安全校验等管理端能力单独 Controller，放 `/workflow/admin/...` 并复用 `workflow:process:*` 等稳定权限前缀。
 
 ## Service 规范
 
@@ -94,6 +96,7 @@ public class UserController extends BaseController<IUserService, User, UserVO, U
 - 不在 Service 返回敏感字段，如密码、salt、token 原文。
 - 批量操作避免逐条无事务写入；如必须逐条处理，要明确失败策略：全量回滚、跳过失败、返回失败明细。
 - 认证、权限、租户、审计、逻辑删除属于核心规则，扩展时优先复用现有工具和上下文。
+- Service 颗粒度以“一个稳定业务能力”为上限。一个 Service 同时长期依赖多类互不相关 Mapper，或同时处理配置、运行时动作、消息、附件、图谱等多个业务方向时，必须拆分为门面 Service + 多个协作 Service；门面只编排，不承载细节规则。
 
 ## 业务文档接入规范
 

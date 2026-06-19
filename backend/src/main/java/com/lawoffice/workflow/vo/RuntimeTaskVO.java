@@ -31,6 +31,14 @@ public class RuntimeTaskVO extends BaseVO {
 
     private String taskType;
 
+    private String approvalMode;
+
+    private String taskGroupId;
+
+    private Integer groupTotal;
+
+    private Integer groupCompleted;
+
     private String assigneeUserId;
 
     private String assigneeUsername;
@@ -40,6 +48,14 @@ public class RuntimeTaskVO extends BaseVO {
     private String candidateAssigneeNames;
 
     private String status;
+
+    @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss", timezone = "GMT+8")
+    private LocalDateTime dueTime;
+
+    @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss", timezone = "GMT+8")
+    private LocalDateTime lastRemindTime;
+
+    private Integer remindCount;
 
     @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss", timezone = "GMT+8")
     private LocalDateTime claimTime;
