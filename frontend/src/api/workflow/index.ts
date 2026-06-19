@@ -66,12 +66,14 @@ export interface WorkflowProcessNodeConfigInfo {
   allowAddSign?: number;
   allowReturn?: number;
   allowTransfer?: number;
+  approvalMode?: string;
   assigneeJson?: string;
   assigneeType?: string;
   nodeId?: string;
   nodeName?: string;
   nodeType?: string;
   processModelId?: string;
+  rejectPolicy?: string;
   sortOrder?: number;
   tenantId?: string;
 }

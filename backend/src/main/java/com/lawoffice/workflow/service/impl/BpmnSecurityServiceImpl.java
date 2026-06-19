@@ -13,9 +13,69 @@ import com.lawoffice.workflow.vo.ProcessModelVO;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
+import org.w3c.dom.Document;
+import org.w3c.dom.Element;
+import org.w3c.dom.NamedNodeMap;
+import org.w3c.dom.Node;
+import org.w3c.dom.NodeList;
+import org.xml.sax.InputSource;
+
+import javax.xml.XMLConstants;
+import javax.xml.parsers.DocumentBuilderFactory;
+import java.io.StringReader;
+import java.util.Set;
 
 @Service
 public class BpmnSecurityServiceImpl implements IBpmnSecurityService {
+
+    private static final int MAX_BPMN_XML_LENGTH = 200_000;
+    private static final Set<String> ALLOWED_ELEMENT_NAMES = Set.of(
+            "definitions",
+            "process",
+            "startEvent",
+            "endEvent",
+            "userTask",
+            "sequenceFlow",
+            "exclusiveGateway",
+            "parallelGateway",
+            "incoming",
+            "outgoing",
+            "BPMNDiagram",
+            "BPMNPlane",
+            "BPMNShape",
+            "BPMNEdge",
+            "Bounds",
+            "waypoint"
+    );
+    private static final Set<String> FORBIDDEN_ELEMENT_NAMES = Set.of(
+            "scriptTask",
+            "serviceTask",
+            "sendTask",
+            "receiveTask",
+            "businessRuleTask",
+            "callActivity",
+            "subProcess",
+            "intermediateCatchEvent",
+            "intermediateThrowEvent",
+            "boundaryEvent",
+            "eventBasedGateway",
+            "complexGateway",
+            "conditionExpression",
+            "extensionElements",
+            "executionListener",
+            "taskListener"
+    );
+    private static final Set<String> FORBIDDEN_ATTRIBUTE_NAMES = Set.of(
+            "class",
+            "delegateExpression",
+            "expression",
+            "resultVariable",
+            "scriptFormat"
+    );
+    private static final Set<String> FORBIDDEN_ATTRIBUTE_NAMESPACES = Set.of(
+            "http://flowable.org/bpmn",
+            "http://activiti.org/bpmn"
+    );
 
     private final ProcessModelMapper processModelMapper;
 
@@ -51,16 +111,74 @@ public class BpmnSecurityServiceImpl implements IBpmnSecurityService {
         }
     }
 
-    private String validateBpmnXml(String bpmnXml) {
+    @Override
+    public String validateBpmnXml(String bpmnXml) {
         if (!StringUtils.hasText(bpmnXml)) {
             throw new IllegalArgumentException("BPMN XML不能为空");
         }
-        if (bpmnXml.contains("<scriptTask") || bpmnXml.contains(":scriptTask")) {
-            throw new IllegalArgumentException("BPMN暂不允许使用脚本任务");
+        if (bpmnXml.length() > MAX_BPMN_XML_LENGTH) {
+            throw new IllegalArgumentException("BPMN XML超过大小限制");
         }
-        if (bpmnXml.contains("<serviceTask") || bpmnXml.contains(":serviceTask")) {
-            throw new IllegalArgumentException("BPMN暂不允许使用服务任务");
+        Document document = parseSecurely(bpmnXml);
+        NodeList elements = document.getElementsByTagName("*");
+        for (int i = 0; i < elements.getLength(); i++) {
+            Element element = (Element) elements.item(i);
+            validateElement(element);
+            validateAttributes(element);
         }
         return "BPMN安全校验通过";
+    }
+
+    /**
+     * 使用 JDK XML 安全解析能力，禁止外部实体和 DTD，避免解析阶段访问外部资源。
+     */
+    private Document parseSecurely(String bpmnXml) {
+        try {
+            DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
+            factory.setNamespaceAware(true);
+            factory.setFeature(XMLConstants.FEATURE_SECURE_PROCESSING, true);
+            factory.setFeature("http://apache.org/xml/features/disallow-doctype-decl", true);
+            factory.setFeature("http://xml.org/sax/features/external-general-entities", false);
+            factory.setFeature("http://xml.org/sax/features/external-parameter-entities", false);
+            factory.setXIncludeAware(false);
+            factory.setExpandEntityReferences(false);
+            return factory.newDocumentBuilder()
+                    .parse(new InputSource(new StringReader(bpmnXml)));
+        } catch (IllegalArgumentException e) {
+            throw e;
+        } catch (Exception e) {
+            throw new IllegalArgumentException("BPMN XML解析失败");
+        }
+    }
+
+    private void validateElement(Element element) {
+        String elementName = element.getLocalName();
+        if (!StringUtils.hasText(elementName)) {
+            elementName = element.getNodeName();
+        }
+        if (FORBIDDEN_ELEMENT_NAMES.contains(elementName)) {
+            throw new IllegalArgumentException("BPMN暂不允许使用元素: " + elementName);
+        }
+        if (!ALLOWED_ELEMENT_NAMES.contains(elementName)) {
+            throw new IllegalArgumentException("BPMN元素不在二期白名单内: " + elementName);
+        }
+    }
+
+    private void validateAttributes(Element element) {
+        NamedNodeMap attributes = element.getAttributes();
+        for (int i = 0; i < attributes.getLength(); i++) {
+            Node attribute = attributes.item(i);
+            String namespaceUri = attribute.getNamespaceURI();
+            String attributeName = attribute.getLocalName();
+            if (!StringUtils.hasText(attributeName)) {
+                attributeName = attribute.getNodeName();
+            }
+            if (StringUtils.hasText(namespaceUri) && FORBIDDEN_ATTRIBUTE_NAMESPACES.contains(namespaceUri)) {
+                throw new IllegalArgumentException("BPMN暂不允许使用Flowable/Activiti扩展属性: " + attributeName);
+            }
+            if (FORBIDDEN_ATTRIBUTE_NAMES.contains(attributeName)) {
+                throw new IllegalArgumentException("BPMN暂不允许使用执行型属性: " + attributeName);
+            }
+        }
     }
 }

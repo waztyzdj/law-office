@@ -3,6 +3,8 @@ package com.lawoffice.workflow.service.impl;
 import cn.hutool.core.bean.BeanUtil;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.lawoffice.framework.dto.BaseDTO;
 import com.lawoffice.framework.dto.BasePageDTO;
 import com.lawoffice.framework.dto.RequestContext;
@@ -23,6 +25,7 @@ import com.lawoffice.workflow.mapper.ProcessInstanceMapper;
 import com.lawoffice.workflow.mapper.ProcessModelMapper;
 import com.lawoffice.workflow.mapper.ProcessNodeConfigMapper;
 import com.lawoffice.workflow.mapper.ProcessStartPermissionMapper;
+import com.lawoffice.workflow.service.IBpmnSecurityService;
 import com.lawoffice.workflow.service.IFlowableService;
 import com.lawoffice.workflow.service.IProcessModelService;
 import com.lawoffice.workflow.vo.ProcessModelVO;
@@ -46,6 +49,8 @@ import java.util.Set;
 @Service
 public class ProcessModelServiceImpl extends AbstractWorkflowConfigServiceImpl<ProcessModelMapper, ProcessModel, ProcessModelVO> implements IProcessModelService {
 
+    private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
+
     private static final String LATEST_VERSION_ID_SQL = """
             SELECT latest_model.id
             FROM wf_process_model latest_model
@@ -68,6 +73,7 @@ public class ProcessModelServiceImpl extends AbstractWorkflowConfigServiceImpl<P
     private final FieldPermissionMapper fieldPermissionMapper;
     private final ProcessStartPermissionMapper processStartPermissionMapper;
     private final IFlowableService flowableService;
+    private final IBpmnSecurityService bpmnSecurityService;
 
     @Autowired
     public ProcessModelServiceImpl(ProcessCategoryMapper processCategoryMapper,
@@ -76,7 +82,8 @@ public class ProcessModelServiceImpl extends AbstractWorkflowConfigServiceImpl<P
             ProcessNodeConfigMapper processNodeConfigMapper,
             FieldPermissionMapper fieldPermissionMapper,
             ProcessStartPermissionMapper processStartPermissionMapper,
-            IFlowableService flowableService) {
+            IFlowableService flowableService,
+            IBpmnSecurityService bpmnSecurityService) {
         this.processCategoryMapper = processCategoryMapper;
         this.formDefinitionMapper = formDefinitionMapper;
         this.processInstanceMapper = processInstanceMapper;
@@ -84,6 +91,7 @@ public class ProcessModelServiceImpl extends AbstractWorkflowConfigServiceImpl<P
         this.fieldPermissionMapper = fieldPermissionMapper;
         this.processStartPermissionMapper = processStartPermissionMapper;
         this.flowableService = flowableService;
+        this.bpmnSecurityService = bpmnSecurityService;
     }
 
     @Override
@@ -151,7 +159,7 @@ public class ProcessModelServiceImpl extends AbstractWorkflowConfigServiceImpl<P
         requireText(model.getProcessName(), "流程名称不能为空");
         requireActiveById(processCategoryMapper, model.getCategoryId(), model.getTenantId(), "流程分类不存在");
         requireActiveById(formDefinitionMapper, model.getFormDefinitionId(), model.getTenantId(), "表单定义不存在");
-        validateJson(model.getNodeJson(), "简单设计器节点JSON", false);
+        validateDesignerPayload(model);
         validateUnique(model, "同一租户下流程标识和版本不能重复",
                 "process_key", model.getProcessKey(),
                 "version", model.getVersion());
@@ -299,8 +307,13 @@ public class ProcessModelServiceImpl extends AbstractWorkflowConfigServiceImpl<P
     }
 
     private void validateBeforePublish(ProcessModel model) {
-        validateJson(model.getNodeJson(), "简单设计器节点JSON", false);
+        validateDesignerPayload(model);
         requireText(model.getBpmnXml(), "BPMN XML不能为空");
+        if (WorkflowConstants.DesignerType.BPMN.equals(model.getDesignerType())) {
+            String message = bpmnSecurityService.validateBpmnXml(model.getBpmnXml());
+            model.setBpmnSecurityStatus(WorkflowConstants.BpmnSecurityStatus.PASSED);
+            model.setBpmnSecurityMessage(message);
+        }
         FormDefinition form = requireActiveById(formDefinitionMapper, model.getFormDefinitionId(), model.getTenantId(), "表单定义不存在");
         if (!WorkflowConstants.Status.PUBLISHED.equals(form.getStatus())) {
             throw new IllegalArgumentException("流程发布必须绑定已发布表单版本");
@@ -310,10 +323,94 @@ public class ProcessModelServiceImpl extends AbstractWorkflowConfigServiceImpl<P
                 "node_type", WorkflowConstants.NodeType.APPROVER) == 0) {
             throw new IllegalArgumentException("流程至少需要配置一个审批节点");
         }
+        validateNodeConfigsBeforePublish(model);
         validateBpmnUserTaskNodeConfigs(model);
         if (WorkflowConstants.StartScopeType.SPECIFIED.equals(model.getStartScopeType())
                 && countActive(processStartPermissionMapper, model.getTenantId(), "process_model_id", model.getId()) == 0) {
             throw new IllegalArgumentException("指定发起范围时必须配置发起权限");
+        }
+    }
+
+    private void validateDesignerPayload(ProcessModel model) {
+        if (WorkflowConstants.DesignerType.SIMPLE.equals(model.getDesignerType())) {
+            validateJson(model.getNodeJson(), "简单设计器节点JSON", true);
+            return;
+        }
+        if (WorkflowConstants.DesignerType.BPMN.equals(model.getDesignerType())) {
+            requireText(model.getBpmnXml(), "BPMN XML不能为空");
+            return;
+        }
+        throw new IllegalArgumentException("设计器类型不合法");
+    }
+
+    private void validateNodeConfigsBeforePublish(ProcessModel model) {
+        List<ProcessNodeConfig> nodeConfigs = processNodeConfigMapper.selectList(new QueryWrapper<ProcessNodeConfig>()
+                .eq("tenant_id", model.getTenantId())
+                .eq("process_model_id", model.getId())
+                .eq("delete_flag", 0));
+        Set<String> nodeIds = nodeConfigs.stream()
+                .map(ProcessNodeConfig::getNodeId)
+                .filter(StringUtils::hasText)
+                .collect(java.util.stream.Collectors.toSet());
+        for (ProcessNodeConfig nodeConfig : nodeConfigs) {
+            validateNodeConfigBeforePublish(nodeConfig, nodeIds);
+        }
+    }
+
+    private void validateNodeConfigBeforePublish(ProcessNodeConfig nodeConfig, Set<String> nodeIds) {
+        if (WorkflowConstants.NodeType.APPROVER.equals(nodeConfig.getNodeType())) {
+            if (!StringUtils.hasText(nodeConfig.getAssigneeType())) {
+                throw new IllegalArgumentException("审批节点审批人类型不能为空: " + nodeConfig.getNodeName());
+            }
+            if (!StringUtils.hasText(nodeConfig.getApprovalMode())) {
+                throw new IllegalArgumentException("审批节点办理策略不能为空: " + nodeConfig.getNodeName());
+            }
+            validateIn(nodeConfig.getApprovalMode(), "审批节点办理策略不合法: " + nodeConfig.getNodeName(),
+                    WorkflowConstants.ApprovalMode.SINGLE,
+                    WorkflowConstants.ApprovalMode.COUNTERSIGN,
+                    WorkflowConstants.ApprovalMode.ORSIGN);
+            if (!StringUtils.hasText(nodeConfig.getRejectPolicy())) {
+                throw new IllegalArgumentException("审批节点不通过策略不能为空: " + nodeConfig.getNodeName());
+            }
+            validateIn(nodeConfig.getRejectPolicy(), "审批节点不通过策略不合法: " + nodeConfig.getNodeName(),
+                    WorkflowConstants.RejectPolicy.TERMINATE);
+        }
+        if (WorkflowConstants.NodeType.GATEWAY.equals(nodeConfig.getNodeType())) {
+            if (!StringUtils.hasText(nodeConfig.getBranchJson())) {
+                throw new IllegalArgumentException("网关节点必须配置条件分支: " + nodeConfig.getNodeName());
+            }
+            validateGatewayBranchTargets(nodeConfig, nodeIds);
+        }
+    }
+
+    private void validateGatewayBranchTargets(ProcessNodeConfig nodeConfig, Set<String> nodeIds) {
+        try {
+            JsonNode branches = OBJECT_MAPPER.readTree(nodeConfig.getBranchJson()).get("branches");
+            if (branches == null || !branches.isArray() || branches.isEmpty()) {
+                throw new IllegalArgumentException("条件分支配置必须包含branches数组: " + nodeConfig.getNodeName());
+            }
+            boolean hasDefaultBranch = false;
+            for (JsonNode branch : branches) {
+                String branchId = branch.path("branchId").asText(null);
+                String targetNodeId = branch.path("targetNodeId").asText(null);
+                if (!StringUtils.hasText(branchId)) {
+                    throw new IllegalArgumentException("条件分支ID不能为空: " + nodeConfig.getNodeName());
+                }
+                if (!StringUtils.hasText(targetNodeId)) {
+                    throw new IllegalArgumentException("条件分支目标节点不能为空: " + nodeConfig.getNodeName());
+                }
+                if (!nodeIds.contains(targetNodeId)) {
+                    throw new IllegalArgumentException("条件分支目标节点不存在: " + targetNodeId);
+                }
+                hasDefaultBranch = hasDefaultBranch || branch.path("defaultBranch").asBoolean(false);
+            }
+            if (!hasDefaultBranch) {
+                throw new IllegalArgumentException("条件分支必须配置默认分支: " + nodeConfig.getNodeName());
+            }
+        } catch (IllegalArgumentException e) {
+            throw e;
+        } catch (Exception e) {
+            throw new IllegalArgumentException("条件分支配置JSON不是合法JSON: " + nodeConfig.getNodeName());
         }
     }
 

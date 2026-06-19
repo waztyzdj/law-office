@@ -22,6 +22,7 @@ import {
   Form,
   FormItem,
   Input,
+  RadioGroup,
   Space,
   Tag,
   message,
@@ -69,9 +70,11 @@ interface NodeConfigDraft {
   allowAddSign: boolean;
   allowReturn: boolean;
   allowTransfer: boolean;
+  approvalMode: ApprovalMode;
   assigneeJson: Record<string, unknown>;
   assigneeType: string;
   id?: string;
+  rejectPolicy: string;
 }
 
 interface BpmnElementRegistry {
@@ -124,6 +127,13 @@ interface BpmnToolEntry {
 }
 
 type BpmnToolEntries = Record<string, BpmnToolEntry>;
+type ApprovalMode = 'single' | 'countersign' | 'orsign';
+
+const approvalModeOptions = [
+  { label: '单人审批', value: 'single' },
+  { label: '会签', value: 'countersign' },
+  { label: '或签', value: 'orsign' },
+];
 
 const bpmnTranslateMap: Record<string, string> = {
   'Activate the create/remove space tool': '启用创建/删除空间工具',
@@ -432,10 +442,16 @@ function buildNodeConfigDraft(
     allowReturn: config?.allowReturn === undefined ? true : config.allowReturn === 1,
     allowTransfer:
       config?.allowTransfer === undefined ? true : config.allowTransfer === 1,
+    approvalMode: normalizeApprovalMode(config?.approvalMode),
     assigneeJson: parseJsonValue<Record<string, unknown>>(config?.assigneeJson, {}),
     assigneeType,
     id: config?.id,
+    rejectPolicy: config?.rejectPolicy || 'terminate',
   };
+}
+
+function normalizeApprovalMode(value: unknown): ApprovalMode {
+  return value === 'countersign' || value === 'orsign' ? value : 'single';
 }
 
 function createModeler() {
@@ -635,12 +651,14 @@ async function saveNodeConfigs(processId: string) {
       allowAddSign: config?.allowAddSign ? 1 : 0,
       allowReturn: config?.allowReturn ? 1 : 0,
       allowTransfer: config?.allowTransfer ? 1 : 0,
+      approvalMode: config?.approvalMode || 'single',
       assigneeJson: JSON.stringify(config?.assigneeJson || {}),
       assigneeType: config?.assigneeType || 'starter',
       nodeId: node.id,
       nodeName: node.name,
       nodeType: 'approver',
       processModelId: processId,
+      rejectPolicy: config?.rejectPolicy || 'terminate',
       sortOrder: (index + 1) * 10,
     });
   }
@@ -834,6 +852,15 @@ defineExpose({
                 v-model:type="activeNodeConfig.assigneeType"
                 :disabled="isPublished"
               />
+              <FormItem label="办理策略">
+                <RadioGroup
+                  v-model:value="activeNodeConfig.approvalMode"
+                  :disabled="isPublished"
+                  :options="approvalModeOptions"
+                  button-style="solid"
+                  option-type="button"
+                />
+              </FormItem>
               <FormItem label="节点动作">
                 <Space wrap>
                   <Checkbox

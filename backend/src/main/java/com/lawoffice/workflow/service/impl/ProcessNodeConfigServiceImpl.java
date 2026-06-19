@@ -1,6 +1,7 @@
 package com.lawoffice.workflow.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.lawoffice.framework.dto.BaseDTO;
 import com.lawoffice.workflow.constant.WorkflowConstants;
 import com.lawoffice.workflow.entity.ProcessModel;
@@ -98,6 +99,11 @@ public class ProcessNodeConfigServiceImpl extends AbstractWorkflowConfigServiceI
         requireText(config.getNodeId(), "节点ID不能为空");
         requireText(config.getNodeName(), "节点名称不能为空");
         validateJson(config.getAssigneeJson(), "审批人配置JSON", false);
+        validateJson(config.getBranchJson(), "条件分支配置JSON", false);
+        validateJson(config.getCcJson(), "抄送配置JSON", false);
+        validateJson(config.getTimeoutJson(), "超时提醒配置JSON", false);
+        validateJson(config.getAttachmentJson(), "附件权限配置JSON", false);
+        validateDefinitionRules(config);
         validateUnique(config, "同一流程模型下节点ID不能重复",
                 "process_model_id", config.getProcessModelId(),
                 "node_id", config.getNodeId());
@@ -122,7 +128,20 @@ public class ProcessNodeConfigServiceImpl extends AbstractWorkflowConfigServiceI
         validateIn(config.getNodeType(), "节点类型不合法",
                 WorkflowConstants.NodeType.START,
                 WorkflowConstants.NodeType.APPROVER,
+                WorkflowConstants.NodeType.GATEWAY,
                 WorkflowConstants.NodeType.END);
+        if (!StringUtils.hasText(config.getApprovalMode())) {
+            config.setApprovalMode(WorkflowConstants.ApprovalMode.SINGLE);
+        }
+        validateIn(config.getApprovalMode(), "办理策略不合法",
+                WorkflowConstants.ApprovalMode.SINGLE,
+                WorkflowConstants.ApprovalMode.COUNTERSIGN,
+                WorkflowConstants.ApprovalMode.ORSIGN);
+        if (!StringUtils.hasText(config.getRejectPolicy())) {
+            config.setRejectPolicy(WorkflowConstants.RejectPolicy.TERMINATE);
+        }
+        validateIn(config.getRejectPolicy(), "不通过策略不合法",
+                WorkflowConstants.RejectPolicy.TERMINATE);
         if (StringUtils.hasText(config.getAssigneeType())) {
             validateIn(config.getAssigneeType(), "审批人类型不合法",
                     WorkflowConstants.AssigneeType.USER,
@@ -144,6 +163,109 @@ public class ProcessNodeConfigServiceImpl extends AbstractWorkflowConfigServiceI
         }
         if (config.getSortOrder() == null) {
             config.setSortOrder(0);
+        }
+    }
+
+    private void validateDefinitionRules(ProcessNodeConfig config) {
+        if (WorkflowConstants.NodeType.APPROVER.equals(config.getNodeType())) {
+            requireText(config.getAssigneeType(), "审批节点审批人类型不能为空");
+            if (WorkflowConstants.ApprovalMode.COUNTERSIGN.equals(config.getApprovalMode())
+                    || WorkflowConstants.ApprovalMode.ORSIGN.equals(config.getApprovalMode())) {
+                validateConfiguredAssigneeJson(config);
+            }
+        } else if (StringUtils.hasText(config.getAssigneeType()) || StringUtils.hasText(config.getAssigneeJson())) {
+            throw new IllegalArgumentException("非审批节点不能配置审批人");
+        }
+
+        if (WorkflowConstants.NodeType.GATEWAY.equals(config.getNodeType())) {
+            validateBranchJson(config.getBranchJson(), true);
+        } else {
+            validateBranchJson(config.getBranchJson(), false);
+        }
+        validateCcJson(config.getCcJson());
+        validateTimeoutJson(config.getTimeoutJson());
+        validateAttachmentJson(config.getAttachmentJson());
+    }
+
+    private void validateBranchJson(String branchJson, boolean required) {
+        if (!StringUtils.hasText(branchJson)) {
+            if (required) {
+                throw new IllegalArgumentException("网关节点必须配置条件分支");
+            }
+            return;
+        }
+        JsonNode root = parseJson(branchJson, "条件分支配置JSON");
+        JsonNode branches = root.get("branches");
+        if (branches == null || !branches.isArray() || branches.isEmpty()) {
+            throw new IllegalArgumentException("条件分支配置必须包含branches数组");
+        }
+        boolean hasDefaultBranch = false;
+        for (JsonNode branch : branches) {
+            requireJsonText(branch, "branchId", "条件分支ID不能为空");
+            requireJsonText(branch, "targetNodeId", "条件分支目标节点不能为空");
+            hasDefaultBranch = hasDefaultBranch || branch.path("defaultBranch").asBoolean(false);
+        }
+        if (!hasDefaultBranch) {
+            throw new IllegalArgumentException("条件分支必须配置默认分支");
+        }
+    }
+
+    private void validateConfiguredAssigneeJson(ProcessNodeConfig config) {
+        if (WorkflowConstants.AssigneeType.USER.equals(config.getAssigneeType())
+                || WorkflowConstants.AssigneeType.ROLE.equals(config.getAssigneeType())
+                || WorkflowConstants.AssigneeType.DEPART_ROLE.equals(config.getAssigneeType())) {
+            validateJson(config.getAssigneeJson(), "会签/或签审批人配置JSON", true);
+        }
+    }
+
+    private void validateCcJson(String ccJson) {
+        if (!StringUtils.hasText(ccJson)) {
+            return;
+        }
+        JsonNode root = parseJson(ccJson, "抄送配置JSON");
+        JsonNode receivers = root.get("receivers");
+        if (receivers != null && (!receivers.isArray() || receivers.isEmpty())) {
+            throw new IllegalArgumentException("抄送配置receivers必须为非空数组");
+        }
+    }
+
+    private void validateTimeoutJson(String timeoutJson) {
+        if (!StringUtils.hasText(timeoutJson)) {
+            return;
+        }
+        JsonNode root = parseJson(timeoutJson, "超时提醒配置JSON");
+        if (root.has("durationMinutes") && root.path("durationMinutes").asInt(0) < 0) {
+            throw new IllegalArgumentException("超时时长不能小于0");
+        }
+        if (root.has("maxRemindCount") && root.path("maxRemindCount").asInt(0) < 0) {
+            throw new IllegalArgumentException("最大提醒次数不能小于0");
+        }
+    }
+
+    private void validateAttachmentJson(String attachmentJson) {
+        if (!StringUtils.hasText(attachmentJson)) {
+            return;
+        }
+        JsonNode root = parseJson(attachmentJson, "附件权限配置JSON");
+        if (root.has("allowUpload") && !root.path("allowUpload").isBoolean()) {
+            throw new IllegalArgumentException("附件权限allowUpload必须为布尔值");
+        }
+        if (root.has("allowDelete") && !root.path("allowDelete").isBoolean()) {
+            throw new IllegalArgumentException("附件权限allowDelete必须为布尔值");
+        }
+    }
+
+    private JsonNode parseJson(String json, String fieldName) {
+        try {
+            return com.fasterxml.jackson.databind.json.JsonMapper.builder().build().readTree(json);
+        } catch (Exception e) {
+            throw new IllegalArgumentException(fieldName + "不是合法JSON");
+        }
+    }
+
+    private void requireJsonText(JsonNode node, String fieldName, String message) {
+        if (node == null || !StringUtils.hasText(node.path(fieldName).asText(null))) {
+            throw new IllegalArgumentException(message);
         }
     }
 

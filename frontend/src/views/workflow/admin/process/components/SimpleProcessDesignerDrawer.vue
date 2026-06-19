@@ -16,6 +16,7 @@ import {
   Form,
   FormItem,
   Input,
+  RadioGroup,
   Space,
   Tag,
   message,
@@ -39,16 +40,26 @@ interface SimpleNode {
   allowAddSign: boolean;
   allowReturn: boolean;
   allowTransfer: boolean;
+  approvalMode: ApprovalMode;
   assigneeJson: Record<string, unknown>;
   assigneeType: string;
   id: string;
   name: string;
+  rejectPolicy: string;
   type: 'approver';
 }
 
 interface SimpleFlowJson {
   nodes: Array<Record<string, unknown>>;
 }
+
+type ApprovalMode = 'single' | 'countersign' | 'orsign';
+
+const approvalModeOptions = [
+  { label: '单人审批', value: 'single' },
+  { label: '会签', value: 'countersign' },
+  { label: '或签', value: 'orsign' },
+];
 
 const emit = defineEmits<{
   success: [];
@@ -95,12 +106,18 @@ function normalizeNode(raw: Record<string, any>, index: number): SimpleNode {
     allowAddSign: raw.allowAddSign ?? true,
     allowReturn: raw.allowReturn ?? true,
     allowTransfer: raw.allowTransfer ?? true,
+    approvalMode: normalizeApprovalMode(raw.approvalMode),
     assigneeJson: raw.assigneeJson || {},
     assigneeType,
     id: raw.id || raw.nodeId || `approve_${index + 1}`,
     name: raw.name || raw.nodeName || `审批节点${index + 1}`,
+    rejectPolicy: raw.rejectPolicy || 'terminate',
     type: 'approver',
   };
+}
+
+function normalizeApprovalMode(value: unknown): ApprovalMode {
+  return value === 'countersign' || value === 'orsign' ? value : 'single';
 }
 
 function buildNodesFromProcess(process: WorkflowProcessModelInfo, configs: WorkflowProcessNodeConfigInfo[]) {
@@ -122,10 +139,12 @@ function buildNodesFromProcess(process: WorkflowProcessModelInfo, configs: Workf
           allowAddSign: item.allowAddSign === 1,
           allowReturn: item.allowReturn === 1,
           allowTransfer: item.allowTransfer === 1,
+          approvalMode: item.approvalMode,
           assigneeJson: parseJsonValue<Record<string, unknown>>(item.assigneeJson, {}),
           assigneeType: item.assigneeType,
           id: item.nodeId,
           name: item.nodeName,
+          rejectPolicy: item.rejectPolicy,
         },
         index,
       ),
@@ -140,10 +159,12 @@ function buildNodeJson() {
         allowAddSign: node.allowAddSign,
         allowReturn: node.allowReturn,
         allowTransfer: node.allowTransfer,
+        approvalMode: node.approvalMode,
         assigneeJson: node.assigneeJson || {},
         assigneeType: node.assigneeType,
         id: node.id,
         name: node.name,
+        rejectPolicy: node.rejectPolicy,
         type: 'approver',
       })),
       { id: 'end', name: '结束', type: 'end' },
@@ -198,10 +219,12 @@ function handleAddNode() {
     allowAddSign: true,
     allowReturn: true,
     allowTransfer: true,
+    approvalMode: 'single',
     assigneeJson: {},
     assigneeType: 'starter',
     id: `approve_${Date.now()}`,
     name: `审批节点${nextIndex}`,
+    rejectPolicy: 'terminate',
     type: 'approver',
   });
 }
@@ -278,12 +301,14 @@ async function saveNodeConfigs(processId: string) {
       allowAddSign: node.allowAddSign ? 1 : 0,
       allowReturn: node.allowReturn ? 1 : 0,
       allowTransfer: node.allowTransfer ? 1 : 0,
+      approvalMode: node.approvalMode || 'single',
       assigneeJson: JSON.stringify(node.assigneeJson || {}),
       assigneeType: node.assigneeType,
       nodeId: node.id,
       nodeName: node.name,
       nodeType: 'approver',
       processModelId: processId,
+      rejectPolicy: node.rejectPolicy || 'terminate',
       sortOrder: (index + 1) * 10,
     });
   }
@@ -440,6 +465,15 @@ defineExpose({
                 v-model:type="node.assigneeType"
                 :disabled="isPublished"
               />
+              <FormItem label="办理策略">
+                <RadioGroup
+                  v-model:value="node.approvalMode"
+                  :disabled="isPublished"
+                  :options="approvalModeOptions"
+                  button-style="solid"
+                  option-type="button"
+                />
+              </FormItem>
               <FormItem label="节点动作">
                 <Space wrap>
                   <Checkbox
