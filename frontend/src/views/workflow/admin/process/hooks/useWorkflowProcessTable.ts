@@ -12,8 +12,8 @@ import {
   copyWorkflowProcessAsDraft,
   deleteWorkflowProcess,
   pageLatestWorkflowProcesses,
+  pageLatestWorkflowForms,
   listWorkflowCategories,
-  listWorkflowForms,
   publishWorkflowProcess,
 } from '#/api/workflow';
 import { useTable } from '#/composables/Table';
@@ -35,8 +35,13 @@ export function useWorkflowProcessTable() {
   );
 
   async function loadFormMap() {
-    const forms = await listWorkflowForms();
-    formMap.value = buildFormMap(forms ?? []);
+    const formPage = await pageLatestWorkflowForms({
+      pageNum: 1,
+      pageSize: 500,
+      sortField: 'form_key',
+      sortOrder: 'asc',
+    });
+    formMap.value = buildFormMap(formPage.records ?? []);
   }
 
   async function loadCategoryOptions() {

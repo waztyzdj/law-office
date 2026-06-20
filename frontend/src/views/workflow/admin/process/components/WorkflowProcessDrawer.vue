@@ -16,7 +16,7 @@ import { cleanFormPayload, useVbenForm, z } from '#/adapter/form';
 import {
   getWorkflowProcessById,
   listWorkflowCategories,
-  listWorkflowForms,
+  pageLatestWorkflowForms,
   saveWorkflowProcess,
 } from '#/api/workflow';
 
@@ -263,11 +263,17 @@ function mapCategoryOptions(categories: WorkflowCategoryInfo[]) {
 }
 
 async function loadOptions() {
-  const [forms, categories] = await Promise.all([
-    listWorkflowForms({ queryParams: { status: 'published' } }),
+  const [formPage, categories] = await Promise.all([
+    pageLatestWorkflowForms({
+      pageNum: 1,
+      pageSize: 500,
+      queryParams: { status: 'published' },
+      sortField: 'form_key',
+      sortOrder: 'asc',
+    }),
     listWorkflowCategories({ queryParams: { status: 'enabled' } }),
   ]);
-  formOptions.value = mapFormOptions(forms ?? []);
+  formOptions.value = mapFormOptions(formPage.records ?? []);
   categoryOptions.value = mapCategoryOptions(categories ?? []);
   formApi.setState({ schema: buildFormSchema() });
 }

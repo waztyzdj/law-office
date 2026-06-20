@@ -224,12 +224,6 @@ const branchLogicOptions = [
   { label: '任一满足', value: 'or' },
 ];
 const branchIdPattern = /^[\w-]+$/;
-const approverNodeOptions = computed(() =>
-  nodes.value
-    .filter((node) => node.type === 'approver')
-    .map((node) => ({ label: node.name, value: node.id })),
-);
-
 function buildNodesFromProcess(process: WorkflowProcessModelInfo, configs: WorkflowProcessNodeConfigInfo[]) {
   const parsed = parseJsonValue<SimpleFlowJson>(process.nodeJson, { nodes: [] });
   const jsonNodes = (parsed.nodes || [])
@@ -354,9 +348,9 @@ ${flows}
 </definitions>`;
 }
 
-function handleAddNode() {
-  const nextIndex = nodes.value.length + 1;
-  nodes.value.push({
+function createApproverNode(): SimpleNode {
+  const nextIndex = nodes.value.filter((node) => node.type === 'approver').length + 1;
+  return {
     allowAddSign: true,
     allowReturn: true,
     allowTransfer: true,
@@ -364,27 +358,58 @@ function handleAddNode() {
     assigneeResolveMode: 'select',
     assigneeJson: {},
     assigneeType: 'starter',
-    id: `approve_${Date.now()}`,
+    id: `approve_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
     name: `审批节点${nextIndex}`,
     rejectPolicy: 'terminate',
     type: 'approver',
-  });
+  };
 }
 
-function handleAddGateway() {
+function createGatewayNode(insertIndex: number): SimpleNode {
   const nextIndex = nodes.value.filter((node) => node.type === 'gateway').length + 1;
-  const firstTarget = nodes.value.find((node) => node.type === 'approver')?.id || '';
-  nodes.value.push({
+  const firstTarget = getFirstApproverIdAfter(insertIndex) || '';
+  return {
     branchConfig: {
       branches: [
         createBranch(false, firstTarget),
         createBranch(true, firstTarget),
       ],
     },
-    id: `gateway_${Date.now()}`,
+    id: `gateway_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
     name: `条件分支${nextIndex}`,
     type: 'gateway',
-  });
+  };
+}
+
+function handleInsertNode(index: number, type: SimpleNode['type']) {
+  const node = type === 'gateway' ? createGatewayNode(index) : createApproverNode();
+  nodes.value.splice(index, 0, node);
+}
+
+function handleMoveNode(index: number, direction: -1 | 1) {
+  const targetIndex = index + direction;
+  if (targetIndex < 0 || targetIndex >= nodes.value.length) {
+    return;
+  }
+  const [node] = nodes.value.splice(index, 1);
+  if (node) {
+    nodes.value.splice(targetIndex, 0, node);
+  }
+}
+
+function getFirstApproverIdAfter(index: number) {
+  return nodes.value.slice(index).find((node) => node.type === 'approver')?.id;
+}
+
+function getBranchTargetOptions(gatewayIndex: number) {
+  return nodes.value
+    .slice(gatewayIndex + 1)
+    .filter((node) => node.type === 'approver')
+    .map((node) => ({ label: node.name, value: node.id }));
+}
+
+function canInsertGateway(insertIndex: number) {
+  return !!getFirstApproverIdAfter(insertIndex);
 }
 
 function createBranch(defaultBranch = false, targetNodeId = ''): BranchItem {
@@ -425,8 +450,8 @@ function handleRemoveNode(index: number) {
   nodes.value.splice(index, 1);
 }
 
-function handleAddBranch(node: SimpleNode) {
-  const firstTarget = nodes.value.find((item) => item.type === 'approver')?.id || '';
+function handleAddBranch(node: SimpleNode, nodeIndex: number) {
+  const firstTarget = getFirstApproverIdAfter(nodeIndex + 1) || '';
   node.branchConfig ||= { branches: [] };
   node.branchConfig.branches.splice(
     Math.max(0, node.branchConfig.branches.length - 1),
@@ -458,10 +483,7 @@ function validateNodes() {
   }
 
   const nodeIds = new Set<string>();
-  const approverIds = new Set(
-    nodes.value.filter((node) => node.type === 'approver').map((node) => node.id),
-  );
-  for (const node of nodes.value) {
+  for (const [index, node] of nodes.value.entries()) {
     node.name = node.name.trim();
     if (!node.name) {
       message.warning('请输入节点名称');
@@ -473,7 +495,7 @@ function validateNodes() {
     }
     nodeIds.add(node.id);
     if (node.type === 'gateway') {
-      if (!validateGatewayNode(node, approverIds)) {
+      if (!validateGatewayNode(node, index)) {
         return false;
       }
       continue;
@@ -486,8 +508,11 @@ function validateNodes() {
   return true;
 }
 
-function validateGatewayNode(node: SimpleNode, approverIds: Set<string>) {
+function validateGatewayNode(node: SimpleNode, nodeIndex: number) {
   const branches = node.branchConfig?.branches || [];
+  const availableTargetIds = new Set(
+    getBranchTargetOptions(nodeIndex).map((option) => option.value),
+  );
   if (branches.length < 2) {
     message.warning(`请为“${node.name}”至少配置一个条件分支和一个默认分支`);
     return false;
@@ -513,8 +538,8 @@ function validateGatewayNode(node: SimpleNode, approverIds: Set<string>) {
       return false;
     }
     branchIds.add(branch.branchId);
-    if (!branch.targetNodeId || !approverIds.has(branch.targetNodeId)) {
-      message.warning(`请选择“${branch.branchName || node.name}”的目标审批节点`);
+    if (!branch.targetNodeId || !availableTargetIds.has(branch.targetNodeId)) {
+      message.warning(`请选择“${branch.branchName || node.name}”后续的目标审批节点`);
       return false;
     }
     if (!branch.defaultBranch && branch.conditions.length === 0) {
@@ -657,7 +682,7 @@ async function loadProcess(record: WorkflowProcessModelInfo) {
   existingNodeConfigs.value = configs ?? [];
   nodes.value = buildNodesFromProcess(detail, existingNodeConfigs.value);
   if (nodes.value.length === 0) {
-    handleAddNode();
+    handleInsertNode(0, 'approver');
   }
 }
 
@@ -701,21 +726,6 @@ defineExpose({
             {{ currentProcess?.processKey }} · v{{ currentProcess?.version ?? 1 }}
           </span>
         </Space>
-        <Space>
-          <Button
-            :disabled="isPublished"
-            @click="handleAddGateway"
-          >
-            添加条件分支
-          </Button>
-          <Button
-            :disabled="isPublished"
-            type="primary"
-            @click="handleAddNode"
-          >
-            添加审批节点
-          </Button>
-        </Space>
       </div>
 
       <div
@@ -727,7 +737,28 @@ defineExpose({
 
       <div class="flow-canvas">
         <div class="terminal-node">开始</div>
-        <div class="flow-line"></div>
+
+        <div class="insert-slot">
+          <div class="flow-line"></div>
+          <Space>
+            <Button
+              :disabled="isPublished"
+              size="small"
+              type="primary"
+              @click="handleInsertNode(0, 'approver')"
+            >
+              插入审批
+            </Button>
+            <Button
+              :disabled="isPublished || !canInsertGateway(0)"
+              size="small"
+              @click="handleInsertNode(0, 'gateway')"
+            >
+              插入条件
+            </Button>
+          </Space>
+          <div class="flow-line"></div>
+        </div>
 
         <Empty
           v-if="isEmpty"
@@ -758,6 +789,22 @@ defineExpose({
                 @click="handleRemoveNode(index)"
               >
                 删除
+              </Button>
+              <Button
+                :disabled="isPublished || index === 0"
+                size="small"
+                type="link"
+                @click="handleMoveNode(index, -1)"
+              >
+                上移
+              </Button>
+              <Button
+                :disabled="isPublished || index === nodes.length - 1"
+                size="small"
+                type="link"
+                @click="handleMoveNode(index, 1)"
+              >
+                下移
               </Button>
             </div>
 
@@ -865,7 +912,7 @@ defineExpose({
                         <Select
                           v-model:value="branch.targetNodeId"
                           :disabled="isPublished"
-                          :options="approverNodeOptions"
+                          :options="getBranchTargetOptions(index)"
                           placeholder="请选择"
                         />
                       </FormItem>
@@ -925,6 +972,7 @@ defineExpose({
                         />
                         <Button
                           :disabled="isPublished || branch.conditions.length <= 1"
+                          class="condition-remove"
                           danger
                           size="small"
                           type="link"
@@ -944,7 +992,7 @@ defineExpose({
                   </div>
                   <Button
                     :disabled="isPublished"
-                    @click="handleAddBranch(node)"
+                    @click="handleAddBranch(node, index)"
                   >
                     添加分支
                   </Button>
@@ -952,7 +1000,27 @@ defineExpose({
               </template>
             </Form>
           </div>
-          <div class="flow-line"></div>
+          <div class="insert-slot">
+            <div class="flow-line"></div>
+            <Space>
+              <Button
+                :disabled="isPublished"
+                size="small"
+                type="primary"
+                @click="handleInsertNode(index + 1, 'approver')"
+              >
+                插入审批
+              </Button>
+              <Button
+                :disabled="isPublished || !canInsertGateway(index + 1)"
+                size="small"
+                @click="handleInsertNode(index + 1, 'gateway')"
+              >
+                插入条件
+              </Button>
+            </Space>
+            <div class="flow-line"></div>
+          </div>
         </template>
 
         <div class="terminal-node">结束</div>
@@ -1021,6 +1089,13 @@ defineExpose({
   width: 2px;
 }
 
+.insert-slot {
+  align-items: center;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
 .node-card {
   background: #fff;
   border: 1px solid #d9e2ec;
@@ -1035,10 +1110,12 @@ defineExpose({
   display: flex;
   gap: 8px;
   margin-bottom: 12px;
+  flex-wrap: wrap;
 }
 
 .node-name-input {
   flex: 1;
+  min-width: 180px;
 }
 
 .branch-list {
@@ -1078,13 +1155,19 @@ defineExpose({
 }
 
 .condition-row {
-  align-items: center;
-  display: flex;
+  align-items: start;
+  display: grid;
   gap: 8px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
 .condition-control {
-  min-width: 112px;
+  min-width: 0;
+  width: 100%;
+}
+
+.condition-remove {
+  justify-self: start;
 }
 
 .w-full {
