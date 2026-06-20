@@ -22,7 +22,9 @@ import {
   Form,
   FormItem,
   Input,
+  InputNumber,
   RadioGroup,
+  Select,
   Space,
   Tag,
   message,
@@ -46,12 +48,20 @@ interface SaveXmlResult {
   xml?: string;
 }
 
-interface BpmnElement {
-  businessObject?: {
-    $type?: string;
+interface BpmnBusinessObject {
+  $type?: string;
+  conditionExpression?: unknown;
+  default?: BpmnBusinessObject;
+  id?: string;
+  name?: string;
+  outgoing?: BpmnBusinessObject[];
+  targetRef?: {
     id?: string;
-    name?: string;
   };
+}
+
+interface BpmnElement {
+  businessObject?: BpmnBusinessObject;
   id?: string;
   parent?: BpmnElement;
   outgoing?: BpmnElement[];
@@ -64,6 +74,7 @@ interface BpmnElement {
 interface BpmnNode {
   id: string;
   name: string;
+  type: 'approver' | 'gateway';
 }
 
 interface NodeConfigDraft {
@@ -74,8 +85,31 @@ interface NodeConfigDraft {
   assigneeResolveMode: AssigneeResolveMode;
   assigneeJson: Record<string, unknown>;
   assigneeType: string;
+  branchConfig?: BranchConfig;
   id?: string;
   rejectPolicy: string;
+}
+
+interface BranchCondition {
+  fieldKey?: string;
+  operator: string;
+  sourceType: string;
+  value?: string;
+  valueType: string;
+}
+
+interface BranchItem {
+  branchId: string;
+  branchName: string;
+  conditions: BranchCondition[];
+  defaultBranch: boolean;
+  logic: 'and' | 'or';
+  priority: number;
+  targetNodeId: string;
+}
+
+interface BranchConfig {
+  branches: BranchItem[];
 }
 
 interface BpmnElementRegistry {
@@ -111,6 +145,17 @@ interface BpmnContextPad {
     priority: number,
     provider: { getContextPadEntries: (element: BpmnElement) => BpmnToolEntries },
   ) => void;
+}
+
+interface BpmnModeling {
+  updateProperties: (
+    element: BpmnElement,
+    properties: Record<string, unknown>,
+  ) => void;
+}
+
+interface BpmnModdle {
+  create: (type: string, properties: Record<string, unknown>) => unknown;
 }
 
 type BpmnToolTarget = BpmnElement | BpmnElement[] | undefined;
@@ -345,6 +390,11 @@ const activeNode = computed(() =>
 const activeNodeConfig = computed(() =>
   activeNodeId.value ? nodeConfigs.value[activeNodeId.value] : undefined,
 );
+const approverNodeOptions = computed(() =>
+  bpmnNodes.value
+    .filter((node) => node.type === 'approver')
+    .map((node) => ({ label: node.name, value: node.id })),
+);
 
 const [Drawer, drawerApi] = useVbenDrawer({
   class: 'w-full sm:w-[92vw]! sm:max-w-none!',
@@ -449,6 +499,7 @@ function buildNodeConfigDraft(
       config?.assigneeResolveMode,
       config?.approvalMode,
     ),
+    branchConfig: parseJsonValue<BranchConfig | undefined>(config?.branchJson, undefined),
     assigneeJson: parseJsonValue<Record<string, unknown>>(config?.assigneeJson, {}),
     assigneeType,
     id: config?.id,
@@ -486,10 +537,120 @@ function handleApprovalModeChange(config: NodeConfigDraft) {
   config.assigneeResolveMode = defaultAssigneeResolveMode(config.approvalMode);
 }
 
+function createBranch(defaultBranch = false, targetNodeId = ''): BranchItem {
+  return {
+    branchId: defaultBranch
+      ? 'default'
+      : `branch_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+    branchName: defaultBranch ? '默认分支' : '条件分支',
+    conditions: defaultBranch ? [] : [createCondition()],
+    defaultBranch,
+    logic: 'and',
+    priority: defaultBranch ? 999 : 10,
+    targetNodeId,
+  };
+}
+
+function createCondition(): BranchCondition {
+  return {
+    fieldKey: '',
+    operator: 'eq',
+    sourceType: 'form_field',
+    value: '',
+    valueType: 'text',
+  };
+}
+
+function ensureBranchConfig(config: NodeConfigDraft) {
+  const firstTarget = bpmnNodes.value.find((node) => node.type === 'approver')?.id || '';
+  config.branchConfig ||= {
+    branches: [
+      createBranch(false, firstTarget),
+      createBranch(true, firstTarget),
+    ],
+  };
+  return config.branchConfig;
+}
+
+function handleAddBranch(config: NodeConfigDraft) {
+  const branchConfig = ensureBranchConfig(config);
+  const firstTarget = bpmnNodes.value.find((node) => node.type === 'approver')?.id || '';
+  branchConfig.branches.splice(
+    Math.max(0, branchConfig.branches.length - 1),
+    0,
+    createBranch(false, firstTarget),
+  );
+}
+
+function handleRemoveBranch(config: NodeConfigDraft, index: number) {
+  config.branchConfig?.branches.splice(index, 1);
+}
+
+function handleAddCondition(branch: BranchItem) {
+  branch.conditions.push(createCondition());
+}
+
+function handleRemoveCondition(branch: BranchItem, index: number) {
+  branch.conditions.splice(index, 1);
+}
+
+function requiresConditionValue(operator: string) {
+  return !['empty', 'not_empty', 'is_true', 'is_false'].includes(operator);
+}
+
+function listGatewayOutgoingTargets(gatewayId: string) {
+  const elementRegistry = modeler.value?.get('elementRegistry') as
+    | BpmnElementRegistry
+    | undefined;
+  const gateway = elementRegistry?.get(gatewayId);
+  return (gateway?.outgoing || [])
+    .map((flow) => flow.businessObject?.targetRef?.id)
+    .filter(Boolean) as string[];
+}
+
 const assigneeResolveModeOptions = [
   { label: '发送全部', value: 'all' },
   { label: '上一步选择', value: 'select' },
 ];
+const branchSourceOptions = [
+  { label: '表单字段', value: 'form_field' },
+  { label: '发起人', value: 'starter' },
+  { label: '发起人部门', value: 'starter_depart' },
+  { label: '发起人角色', value: 'starter_role' },
+  { label: '流程实例', value: 'instance' },
+];
+const branchValueTypeOptions = [
+  { label: '文本', value: 'text' },
+  { label: '数值', value: 'number' },
+  { label: '日期', value: 'date' },
+  { label: '单选', value: 'single_select' },
+  { label: '多选', value: 'multi_select' },
+  { label: '布尔', value: 'boolean' },
+];
+const branchOperatorOptions = [
+  { label: '等于', value: 'eq' },
+  { label: '不等于', value: 'ne' },
+  { label: '包含', value: 'contains' },
+  { label: '不包含', value: 'not_contains' },
+  { label: '为空', value: 'empty' },
+  { label: '不为空', value: 'not_empty' },
+  { label: '大于', value: 'gt' },
+  { label: '大于等于', value: 'ge' },
+  { label: '小于', value: 'lt' },
+  { label: '小于等于', value: 'le' },
+  { label: '区间', value: 'between' },
+  { label: '属于', value: 'in' },
+  { label: '不属于', value: 'not_in' },
+  { label: '包含任一', value: 'contains_any' },
+  { label: '包含全部', value: 'contains_all' },
+  { label: '为真', value: 'is_true' },
+  { label: '为假', value: 'is_false' },
+];
+const branchLogicOptions = [
+  { label: '全部满足', value: 'and' },
+  { label: '任一满足', value: 'or' },
+];
+const branchIdPattern = /^[\w-]+$/;
 
 function createModeler() {
   if (!canvasRef.value || modeler.value) {
@@ -577,6 +738,37 @@ function extractBpmnUserTasks() {
       return {
         id,
         name: element.businessObject?.name || id,
+        type: 'approver' as const,
+      };
+    })
+    .filter((node) => {
+      if (!node.id || visited.has(node.id)) {
+        return false;
+      }
+      visited.add(node.id);
+      return true;
+    });
+}
+
+function extractBpmnExclusiveGateways() {
+  const elementRegistry = modeler.value?.get('elementRegistry') as
+    | BpmnElementRegistry
+    | undefined;
+  const elements = elementRegistry?.getAll() || [];
+  const visited = new Set<string>();
+  return elements
+    .filter(
+      (element) =>
+        element.type === 'bpmn:ExclusiveGateway'
+        || element.businessObject?.$type === 'bpmn:ExclusiveGateway',
+    )
+    .sort((a, b) => (a.y ?? 0) - (b.y ?? 0) || (a.x ?? 0) - (b.x ?? 0))
+    .map((element) => {
+      const id = element.businessObject?.id || element.id || '';
+      return {
+        id,
+        name: element.businessObject?.name || id,
+        type: 'gateway' as const,
       };
     })
     .filter((node) => {
@@ -589,7 +781,7 @@ function extractBpmnUserTasks() {
 }
 
 function syncBpmnUserTasks() {
-  const nodes = extractBpmnUserTasks();
+  const nodes = [...extractBpmnUserTasks(), ...extractBpmnExclusiveGateways()];
   bpmnNodes.value = nodes;
 
   const activeIds = new Set(nodes.map((node) => node.id));
@@ -620,12 +812,14 @@ function validateNodeConfigs() {
     return false;
   }
   syncBpmnUserTasks();
-  if (bpmnNodes.value.length === 0) {
+  const approverNodes = bpmnNodes.value.filter((node) => node.type === 'approver');
+  if (approverNodes.length === 0) {
     message.warning('BPMN 流程至少需要一个用户任务节点');
     return false;
   }
 
   const nodeIds = new Set<string>();
+  const approverIds = new Set(approverNodes.map((node) => node.id));
   for (const node of bpmnNodes.value) {
     if (!node.name.trim()) {
       message.warning(`用户任务 ${node.id} 缺少节点名称`);
@@ -641,12 +835,123 @@ function validateNodeConfigs() {
       message.warning(`请配置节点：${node.name}`);
       return false;
     }
+    if (node.type === 'gateway') {
+      if (!validateGatewayConfig(node, config, approverIds)) {
+        return false;
+      }
+      continue;
+    }
     if (needsAssigneeConfig(config) && !hasAssigneeConfig(config.assigneeJson)) {
       message.warning(`请选择“${node.name}”的审批人配置`);
       return false;
     }
   }
   return true;
+}
+
+function validateGatewayConfig(node: BpmnNode, config: NodeConfigDraft, approverIds: Set<string>) {
+  const branchConfig = ensureBranchConfig(config);
+  const branches = branchConfig.branches;
+  if (branches.length < 2) {
+    message.warning(`请为“${node.name}”至少配置一个条件分支和一个默认分支`);
+    return false;
+  }
+  if (branches.filter((branch) => branch.defaultBranch).length !== 1) {
+    message.warning(`请为“${node.name}”配置默认分支`);
+    return false;
+  }
+  const branchIds = new Set<string>();
+  const outgoingTargets = new Set(listGatewayOutgoingTargets(node.id));
+  for (const branch of branches) {
+    branch.branchId = branch.branchId.trim();
+    branch.branchName = branch.branchName.trim();
+    if (!branch.branchId || !branch.branchName) {
+      message.warning(`请完善“${node.name}”的分支名称和编码`);
+      return false;
+    }
+    if (!branchIdPattern.test(branch.branchId)) {
+      message.warning(`“${branch.branchName}”的分支编码只能包含字母、数字、下划线和短横线`);
+      return false;
+    }
+    if (branchIds.has(branch.branchId)) {
+      message.warning(`“${node.name}”的分支编码不能重复`);
+      return false;
+    }
+    branchIds.add(branch.branchId);
+    if (!branch.targetNodeId || !approverIds.has(branch.targetNodeId)) {
+      message.warning(`请选择“${branch.branchName || node.name}”的目标审批节点`);
+      return false;
+    }
+    if (!outgoingTargets.has(branch.targetNodeId)) {
+      message.warning(`“${branch.branchName}”的目标节点必须是网关已连接的出线节点`);
+      return false;
+    }
+    if (!branch.defaultBranch && branch.conditions.length === 0) {
+      message.warning(`请为“${branch.branchName}”配置条件`);
+      return false;
+    }
+    for (const condition of branch.conditions) {
+      if (condition.sourceType === 'form_field' && !condition.fieldKey?.trim()) {
+        message.warning(`请填写“${branch.branchName}”的表单字段`);
+        return false;
+      }
+      if (requiresConditionValue(condition.operator) && !String(condition.value ?? '').trim()) {
+        message.warning(`请填写“${branch.branchName}”的比较值`);
+        return false;
+      }
+    }
+  }
+  return true;
+}
+
+/**
+ * BPMN 设计器以图上的出线作为流程拓扑，侧栏配置只同步每条出线的安全条件表达式。
+ */
+function syncGatewayConditionExpressions() {
+  const elementRegistry = modeler.value?.get('elementRegistry') as
+    | BpmnElementRegistry
+    | undefined;
+  const modeling = modeler.value?.get('modeling') as BpmnModeling | undefined;
+  const moddle = modeler.value?.get('moddle') as BpmnModdle | undefined;
+  if (!elementRegistry || !modeling || !moddle) {
+    return;
+  }
+
+  for (const node of bpmnNodes.value.filter((item) => item.type === 'gateway')) {
+    const gateway = elementRegistry.get(node.id);
+    const config = nodeConfigs.value[node.id];
+    if (!gateway || !config?.branchConfig) {
+      continue;
+    }
+    const defaultBranch = config.branchConfig.branches.find((branch) => branch.defaultBranch);
+    let defaultFlow: BpmnElement | undefined;
+
+    for (const flow of gateway.outgoing || []) {
+      const targetNodeId = flow.businessObject?.targetRef?.id;
+      const branch = config.branchConfig.branches.find(
+        (item) => item.targetNodeId === targetNodeId,
+      );
+      if (!branch) {
+        continue;
+      }
+      if (branch.defaultBranch) {
+        defaultFlow = flow;
+        modeling.updateProperties(flow, { conditionExpression: undefined });
+        continue;
+      }
+      const conditionExpression = moddle.create('bpmn:FormalExpression', {
+        body: `\${branch == '${branch.branchId}'}`,
+      });
+      modeling.updateProperties(flow, { conditionExpression });
+    }
+
+    const fallbackDefaultFlow = (gateway.outgoing || []).find(
+      (flow) => flow.businessObject?.targetRef?.id === defaultBranch?.targetNodeId,
+    );
+    modeling.updateProperties(gateway, {
+      default: defaultFlow?.businessObject || fallbackDefaultFlow?.businessObject,
+    });
+  }
 }
 
 function needsAssigneeConfig(config: NodeConfigDraft) {
@@ -669,7 +974,7 @@ async function deleteRemovedNodeConfigs() {
   const removedConfigs = existingNodeConfigs.value.filter(
     (config) =>
       config.id
-      && config.nodeType === 'approver'
+      && (config.nodeType === 'approver' || config.nodeType === 'gateway')
       && config.nodeId
       && !activeNodeIds.has(config.nodeId),
   );
@@ -683,6 +988,19 @@ async function saveNodeConfigs(processId: string) {
   for (const [index, node] of bpmnNodes.value.entries()) {
     const config = nodeConfigs.value[node.id];
     const current = existingNodeConfigs.value.find((item) => item.nodeId === node.id);
+    if (node.type === 'gateway') {
+      const gatewayConfig = config || buildNodeConfigDraft(current);
+      await saveWorkflowProcessNode({
+        id: gatewayConfig.id || current?.id,
+        branchJson: JSON.stringify(ensureBranchConfig(gatewayConfig)),
+        nodeId: node.id,
+        nodeName: node.name,
+        nodeType: 'gateway',
+        processModelId: processId,
+        sortOrder: (index + 1) * 10,
+      });
+      continue;
+    }
     await saveWorkflowProcessNode({
       id: config?.id || current?.id,
       allowAddSign: config?.allowAddSign ? 1 : 0,
@@ -720,6 +1038,7 @@ async function handleSubmit() {
 
   try {
     drawerApi.lock();
+    syncGatewayConditionExpressions();
     const { xml } = (await modeler.value.saveXML({
       format: true,
     })) as SaveXmlResult;
@@ -867,7 +1186,9 @@ defineExpose({
                 @click="activeNodeId = node.id"
               >
                 <span class="node-list-name">{{ node.name }}</span>
-                <span class="node-list-id">{{ node.id }}</span>
+                <span class="node-list-id">
+                  {{ node.type === 'gateway' ? '条件分支' : '审批节点' }} · {{ node.id }}
+                </span>
               </button>
             </div>
 
@@ -888,55 +1209,188 @@ defineExpose({
                   disabled
                 />
               </FormItem>
-              <WorkflowAssigneeSelector
-                v-model="activeNodeConfig.assigneeJson"
-                v-model:type="activeNodeConfig.assigneeType"
-                :disabled="isPublished"
-              />
-              <FormItem label="办理策略">
-                <RadioGroup
-                  v-model:value="activeNodeConfig.approvalMode"
+              <template v-if="activeNode.type === 'approver'">
+                <WorkflowAssigneeSelector
+                  v-model="activeNodeConfig.assigneeJson"
+                  v-model:type="activeNodeConfig.assigneeType"
                   :disabled="isPublished"
-                  :options="approvalModeOptions"
-                  button-style="solid"
-                  option-type="button"
-                  @change="handleApprovalModeChange(activeNodeConfig)"
                 />
-              </FormItem>
-              <FormItem
-                v-if="activeNodeConfig.approvalMode !== 'single'"
-                label="执行人确定方式"
-              >
-                <RadioGroup
-                  v-model:value="activeNodeConfig.assigneeResolveMode"
-                  :disabled="isPublished"
-                  :options="assigneeResolveModeOptions"
-                  button-style="solid"
-                  option-type="button"
-                />
-              </FormItem>
-              <FormItem label="节点动作">
-                <Space wrap>
-                  <Checkbox
-                    v-model:checked="activeNodeConfig.allowTransfer"
+                <FormItem label="办理策略">
+                  <RadioGroup
+                    v-model:value="activeNodeConfig.approvalMode"
                     :disabled="isPublished"
-                  >
-                    转办
-                  </Checkbox>
-                  <Checkbox
-                    v-model:checked="activeNodeConfig.allowReturn"
+                    :options="approvalModeOptions"
+                    button-style="solid"
+                    option-type="button"
+                    @change="handleApprovalModeChange(activeNodeConfig)"
+                  />
+                </FormItem>
+                <FormItem
+                  v-if="activeNodeConfig.approvalMode !== 'single'"
+                  label="执行人确定方式"
+                >
+                  <RadioGroup
+                    v-model:value="activeNodeConfig.assigneeResolveMode"
                     :disabled="isPublished"
+                    :options="assigneeResolveModeOptions"
+                    button-style="solid"
+                    option-type="button"
+                  />
+                </FormItem>
+                <FormItem label="节点动作">
+                  <Space wrap>
+                    <Checkbox
+                      v-model:checked="activeNodeConfig.allowTransfer"
+                      :disabled="isPublished"
+                    >
+                      转办
+                    </Checkbox>
+                    <Checkbox
+                      v-model:checked="activeNodeConfig.allowReturn"
+                      :disabled="isPublished"
+                    >
+                      退回
+                    </Checkbox>
+                    <Checkbox
+                      v-model:checked="activeNodeConfig.allowAddSign"
+                      :disabled="isPublished"
+                    >
+                      加签
+                    </Checkbox>
+                  </Space>
+                </FormItem>
+              </template>
+              <template v-else>
+                <div class="branch-list">
+                  <div
+                    v-for="(branch, branchIndex) in ensureBranchConfig(activeNodeConfig).branches"
+                    :key="`${activeNode.id}_${branchIndex}`"
+                    class="branch-card"
                   >
-                    退回
-                  </Checkbox>
-                  <Checkbox
-                    v-model:checked="activeNodeConfig.allowAddSign"
+                    <div class="branch-card-header">
+                      <Tag :color="branch.defaultBranch ? 'default' : 'purple'">
+                        {{ branch.defaultBranch ? '默认' : '条件' }}
+                      </Tag>
+                      <Input
+                        v-model:value="branch.branchName"
+                        :disabled="isPublished"
+                        class="branch-name-input"
+                        placeholder="分支名称"
+                      />
+                      <Button
+                        v-if="!branch.defaultBranch"
+                        :disabled="isPublished"
+                        danger
+                        size="small"
+                        type="link"
+                        @click="handleRemoveBranch(activeNodeConfig, branchIndex)"
+                      >
+                        删除
+                      </Button>
+                    </div>
+                    <div class="branch-grid">
+                      <FormItem label="分支编码">
+                        <Input
+                          v-model:value="branch.branchId"
+                          :disabled="isPublished || branch.defaultBranch"
+                        />
+                      </FormItem>
+                      <FormItem label="优先级">
+                        <InputNumber
+                          v-model:value="branch.priority"
+                          :disabled="isPublished"
+                          class="w-full"
+                          :min="1"
+                        />
+                      </FormItem>
+                      <FormItem label="目标审批节点">
+                        <Select
+                          v-model:value="branch.targetNodeId"
+                          :disabled="isPublished"
+                          :options="approverNodeOptions"
+                        />
+                      </FormItem>
+                      <FormItem
+                        v-if="!branch.defaultBranch"
+                        label="条件关系"
+                      >
+                        <RadioGroup
+                          v-model:value="branch.logic"
+                          :disabled="isPublished"
+                          :options="branchLogicOptions"
+                          option-type="button"
+                          button-style="solid"
+                        />
+                      </FormItem>
+                    </div>
+                    <div
+                      v-if="!branch.defaultBranch"
+                      class="condition-list"
+                    >
+                      <div
+                        v-for="(condition, conditionIndex) in branch.conditions"
+                        :key="conditionIndex"
+                        class="condition-row"
+                      >
+                        <Select
+                          v-model:value="condition.sourceType"
+                          :disabled="isPublished"
+                          :options="branchSourceOptions"
+                          class="condition-control"
+                        />
+                        <Input
+                          v-if="condition.sourceType === 'form_field'"
+                          v-model:value="condition.fieldKey"
+                          :disabled="isPublished"
+                          class="condition-control"
+                          placeholder="字段 key"
+                        />
+                        <Select
+                          v-model:value="condition.valueType"
+                          :disabled="isPublished"
+                          :options="branchValueTypeOptions"
+                          class="condition-control"
+                        />
+                        <Select
+                          v-model:value="condition.operator"
+                          :disabled="isPublished"
+                          :options="branchOperatorOptions"
+                          class="condition-control"
+                        />
+                        <Input
+                          v-if="requiresConditionValue(condition.operator)"
+                          v-model:value="condition.value"
+                          :disabled="isPublished"
+                          class="condition-control"
+                          placeholder="比较值"
+                        />
+                        <Button
+                          :disabled="isPublished || branch.conditions.length <= 1"
+                          danger
+                          size="small"
+                          type="link"
+                          @click="handleRemoveCondition(branch, conditionIndex)"
+                        >
+                          删除
+                        </Button>
+                      </div>
+                      <Button
+                        :disabled="isPublished"
+                        size="small"
+                        @click="handleAddCondition(branch)"
+                      >
+                        添加条件
+                      </Button>
+                    </div>
+                  </div>
+                  <Button
                     :disabled="isPublished"
+                    @click="handleAddBranch(activeNodeConfig)"
                   >
-                    加签
-                  </Checkbox>
-                </Space>
-              </FormItem>
+                    添加分支
+                  </Button>
+                </div>
+              </template>
             </Form>
           </template>
         </div>
@@ -1059,6 +1513,53 @@ defineExpose({
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.branch-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.branch-card {
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+  padding: 12px;
+}
+
+.branch-card-header {
+  align-items: center;
+  display: flex;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.branch-name-input {
+  flex: 1;
+}
+
+.branch-grid {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: 1fr;
+}
+
+.condition-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.condition-row {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.condition-control,
+.w-full {
+  width: 100%;
 }
 
 @media (max-width: 900px) {

@@ -42,8 +42,10 @@ import javax.xml.XMLConstants;
 import javax.xml.parsers.DocumentBuilderFactory;
 import java.io.StringReader;
 import java.time.LocalDateTime;
+import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 @Service
@@ -433,13 +435,12 @@ public class ProcessModelServiceImpl extends AbstractWorkflowConfigServiceImpl<P
             throw new IllegalArgumentException("BPMN流程至少需要一个用户任务节点");
         }
 
-        Set<String> configuredNodeIds = processNodeConfigMapper.selectList(new QueryWrapper<ProcessNodeConfig>()
-                        .select("node_id")
+        List<ProcessNodeConfig> configuredNodes = processNodeConfigMapper.selectList(new QueryWrapper<ProcessNodeConfig>()
                         .eq("tenant_id", model.getTenantId())
                         .eq("process_model_id", model.getId())
-                        .eq("node_type", WorkflowConstants.NodeType.APPROVER)
-                        .eq("delete_flag", 0))
-                .stream()
+                        .eq("delete_flag", 0));
+        Set<String> configuredNodeIds = configuredNodes.stream()
+                .filter(config -> WorkflowConstants.NodeType.APPROVER.equals(config.getNodeType()))
                 .map(ProcessNodeConfig::getNodeId)
                 .filter(StringUtils::hasText)
                 .collect(java.util.stream.Collectors.toSet());
@@ -448,34 +449,122 @@ public class ProcessModelServiceImpl extends AbstractWorkflowConfigServiceImpl<P
                 throw new IllegalArgumentException("BPMN用户任务缺少节点配置: " + userTaskId);
             }
         }
+
+        Map<String, Set<String>> gatewayOutgoingTargets = parseBpmnExclusiveGatewayOutgoingTargets(model.getBpmnXml());
+        Map<String, ProcessNodeConfig> configuredGateways = configuredNodes.stream()
+                .filter(config -> WorkflowConstants.NodeType.GATEWAY.equals(config.getNodeType()))
+                .filter(config -> StringUtils.hasText(config.getNodeId()))
+                .collect(java.util.stream.Collectors.toMap(
+                        ProcessNodeConfig::getNodeId,
+                        config -> config,
+                        (left, right) -> left
+                ));
+        for (Map.Entry<String, Set<String>> entry : gatewayOutgoingTargets.entrySet()) {
+            String gatewayId = entry.getKey();
+            ProcessNodeConfig gatewayConfig = configuredGateways.get(gatewayId);
+            if (gatewayConfig == null) {
+                throw new IllegalArgumentException("BPMN排他网关缺少条件分支配置: " + gatewayId);
+            }
+            validateGatewayBpmnTargets(gatewayConfig, entry.getValue());
+        }
     }
 
     /**
      * 使用 JDK XML 解析器提取 BPMN userTask，禁用外部实体以避免解析 XML 时产生外部资源访问。
      */
     private Set<String> parseBpmnUserTaskIds(String bpmnXml) {
+        return parseBpmnElementIds(bpmnXml, "userTask", "BPMN用户任务");
+    }
+
+    /**
+     * 排他网关的图形出线必须和结构化分支配置一致，避免 BPMN XML 里出现未受控的路由路径。
+     */
+    private Map<String, Set<String>> parseBpmnExclusiveGatewayOutgoingTargets(String bpmnXml) {
+        Map<String, Set<String>> gatewayTargets = new HashMap<>();
+        try {
+            Document document = parseBpmnDocument(bpmnXml);
+            NodeList gateways = document.getElementsByTagNameNS("*", "exclusiveGateway");
+            for (int i = 0; i < gateways.getLength(); i++) {
+                Element gateway = (Element) gateways.item(i);
+                String gatewayId = gateway.getAttribute("id");
+                if (!StringUtils.hasText(gatewayId)) {
+                    throw new IllegalArgumentException("BPMN排他网关节点ID不能为空");
+                }
+                gatewayTargets.put(gatewayId, new LinkedHashSet<>());
+            }
+
+            NodeList sequenceFlows = document.getElementsByTagNameNS("*", "sequenceFlow");
+            for (int i = 0; i < sequenceFlows.getLength(); i++) {
+                Element flow = (Element) sequenceFlows.item(i);
+                String sourceRef = flow.getAttribute("sourceRef");
+                if (!gatewayTargets.containsKey(sourceRef)) {
+                    continue;
+                }
+                String targetRef = flow.getAttribute("targetRef");
+                if (!StringUtils.hasText(targetRef)) {
+                    throw new IllegalArgumentException("BPMN排他网关出线目标节点不能为空: " + sourceRef);
+                }
+                gatewayTargets.get(sourceRef).add(targetRef);
+            }
+            return gatewayTargets;
+        } catch (IllegalArgumentException e) {
+            throw e;
+        } catch (Exception e) {
+            throw new IllegalArgumentException("BPMN XML解析失败");
+        }
+    }
+
+    private void validateGatewayBpmnTargets(ProcessNodeConfig gatewayConfig, Set<String> bpmnTargets) {
+        Set<String> configuredTargets = parseGatewayBranchTargets(gatewayConfig);
+        if (bpmnTargets.isEmpty()) {
+            throw new IllegalArgumentException("BPMN排他网关必须至少配置一条出线: " + gatewayConfig.getNodeId());
+        }
+        for (String targetNodeId : bpmnTargets) {
+            if (!configuredTargets.contains(targetNodeId)) {
+                throw new IllegalArgumentException("BPMN排他网关存在未配置的出线目标: " + targetNodeId);
+            }
+        }
+        for (String targetNodeId : configuredTargets) {
+            if (!bpmnTargets.contains(targetNodeId)) {
+                throw new IllegalArgumentException("条件分支目标节点未连接到BPMN排他网关出线: " + targetNodeId);
+            }
+        }
+    }
+
+    private Set<String> parseGatewayBranchTargets(ProcessNodeConfig gatewayConfig) {
+        try {
+            JsonNode branches = OBJECT_MAPPER.readTree(gatewayConfig.getBranchJson()).get("branches");
+            Set<String> targets = new LinkedHashSet<>();
+            if (branches != null && branches.isArray()) {
+                for (JsonNode branch : branches) {
+                    String targetNodeId = branch.path("targetNodeId").asText(null);
+                    if (StringUtils.hasText(targetNodeId)) {
+                        targets.add(targetNodeId);
+                    }
+                }
+            }
+            return targets;
+        } catch (Exception e) {
+            throw new IllegalArgumentException("条件分支配置JSON不是合法JSON: " + gatewayConfig.getNodeName());
+        }
+    }
+
+    /**
+     * 使用 JDK XML 解析器提取指定 BPMN 元素，禁用外部实体以避免解析 XML 时产生外部资源访问。
+     */
+    private Set<String> parseBpmnElementIds(String bpmnXml, String elementName, String displayName) {
         Set<String> userTaskIds = new LinkedHashSet<>();
         try {
-            DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
-            factory.setNamespaceAware(true);
-            factory.setFeature(XMLConstants.FEATURE_SECURE_PROCESSING, true);
-            factory.setFeature("http://apache.org/xml/features/disallow-doctype-decl", true);
-            factory.setFeature("http://xml.org/sax/features/external-general-entities", false);
-            factory.setFeature("http://xml.org/sax/features/external-parameter-entities", false);
-            factory.setXIncludeAware(false);
-            factory.setExpandEntityReferences(false);
-
-            Document document = factory.newDocumentBuilder()
-                    .parse(new InputSource(new StringReader(bpmnXml)));
-            NodeList userTasks = document.getElementsByTagNameNS("*", "userTask");
+            Document document = parseBpmnDocument(bpmnXml);
+            NodeList userTasks = document.getElementsByTagNameNS("*", elementName);
             for (int i = 0; i < userTasks.getLength(); i++) {
                 Element element = (Element) userTasks.item(i);
                 String userTaskId = element.getAttribute("id");
                 if (!StringUtils.hasText(userTaskId)) {
-                    throw new IllegalArgumentException("BPMN用户任务节点ID不能为空");
+                    throw new IllegalArgumentException(displayName + "节点ID不能为空");
                 }
                 if (!userTaskIds.add(userTaskId)) {
-                    throw new IllegalArgumentException("BPMN用户任务节点ID重复: " + userTaskId);
+                    throw new IllegalArgumentException(displayName + "节点ID重复: " + userTaskId);
                 }
             }
             return userTaskIds;
@@ -484,6 +573,19 @@ public class ProcessModelServiceImpl extends AbstractWorkflowConfigServiceImpl<P
         } catch (Exception e) {
             throw new IllegalArgumentException("BPMN XML解析失败");
         }
+    }
+
+    private Document parseBpmnDocument(String bpmnXml) throws Exception {
+        DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
+        factory.setNamespaceAware(true);
+        factory.setFeature(XMLConstants.FEATURE_SECURE_PROCESSING, true);
+        factory.setFeature("http://apache.org/xml/features/disallow-doctype-decl", true);
+        factory.setFeature("http://xml.org/sax/features/external-general-entities", false);
+        factory.setFeature("http://xml.org/sax/features/external-parameter-entities", false);
+        factory.setXIncludeAware(false);
+        factory.setExpandEntityReferences(false);
+        return factory.newDocumentBuilder()
+                .parse(new InputSource(new StringReader(bpmnXml)));
     }
 
     private Integer resolveNextVersion(String tenantId, String processKey) {

@@ -81,7 +81,6 @@
 
 ```json
 {
-  "defaultTargetNodeId": "approve_default",
   "branches": [
     {
       "branchId": "branch_amount_high",
@@ -102,6 +101,13 @@
   ]
 }
 ```
+
+实现约束：
+
+- 定义侧统一保存到 `wf_process_node_config.node_type=gateway` 的 `branch_json`。
+- `branches` 至少包含一个普通条件分支和一个 `defaultBranch=true` 的默认分支。
+- 普通条件分支必须配置 `conditions`；默认分支不配置条件。
+- BPMN XML 中排他网关出线的条件表达式只允许 `${branch == '分支ID'}` 这种系统分支变量格式；实际命中计算以后端 `branch_json` 为准，不允许前端提交任意 Flowable/JUEL 表达式。
 
 `cc_json` 建议结构：
 

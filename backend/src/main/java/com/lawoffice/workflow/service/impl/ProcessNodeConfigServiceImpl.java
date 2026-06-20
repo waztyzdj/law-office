@@ -16,9 +16,48 @@ import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
 import java.util.List;
+import java.util.Set;
+import java.util.regex.Pattern;
 
 @Service
 public class ProcessNodeConfigServiceImpl extends AbstractWorkflowConfigServiceImpl<ProcessNodeConfigMapper, ProcessNodeConfig, ProcessNodeConfigVO> implements IProcessNodeConfigService {
+
+    private static final Set<String> BRANCH_SOURCE_TYPES = Set.of(
+            "form_field",
+            "starter",
+            "starter_depart",
+            "starter_role",
+            "instance"
+    );
+    private static final Set<String> BRANCH_VALUE_TYPES = Set.of(
+            "text",
+            "number",
+            "date",
+            "single_select",
+            "multi_select",
+            "boolean"
+    );
+    private static final Set<String> BRANCH_OPERATORS = Set.of(
+            "eq",
+            "ne",
+            "contains",
+            "not_contains",
+            "empty",
+            "not_empty",
+            "gt",
+            "ge",
+            "lt",
+            "le",
+            "between",
+            "in",
+            "not_in",
+            "contains_any",
+            "contains_all",
+            "is_true",
+            "is_false"
+    );
+    private static final Set<String> BRANCH_LOGICS = Set.of("and", "or");
+    private static final Pattern BRANCH_ID_PATTERN = Pattern.compile("^[A-Za-z0-9_-]+$");
 
     private final ProcessModelMapper processModelMapper;
 
@@ -216,15 +255,82 @@ public class ProcessNodeConfigServiceImpl extends AbstractWorkflowConfigServiceI
         if (branches == null || !branches.isArray() || branches.isEmpty()) {
             throw new IllegalArgumentException("条件分支配置必须包含branches数组");
         }
+        Set<String> branchIds = new java.util.HashSet<>();
         boolean hasDefaultBranch = false;
         for (JsonNode branch : branches) {
             requireJsonText(branch, "branchId", "条件分支ID不能为空");
+            String branchId = branch.path("branchId").asText();
+            if (!BRANCH_ID_PATTERN.matcher(branchId).matches()) {
+                throw new IllegalArgumentException("条件分支ID只能包含字母、数字、下划线和短横线");
+            }
+            if (!branchIds.add(branchId)) {
+                throw new IllegalArgumentException("条件分支ID不能重复");
+            }
             requireJsonText(branch, "targetNodeId", "条件分支目标节点不能为空");
-            hasDefaultBranch = hasDefaultBranch || branch.path("defaultBranch").asBoolean(false);
+            boolean defaultBranch = branch.path("defaultBranch").asBoolean(false);
+            if (defaultBranch && hasDefaultBranch) {
+                throw new IllegalArgumentException("条件分支只能配置一个默认分支");
+            }
+            hasDefaultBranch = hasDefaultBranch || defaultBranch;
+            if (!defaultBranch) {
+                validateBranchConditions(branch);
+            }
         }
         if (!hasDefaultBranch) {
             throw new IllegalArgumentException("条件分支必须配置默认分支");
         }
+    }
+
+    /**
+     * 定义侧只允许结构化条件，不允许保存脚本或表达式，运行时据此安全计算命中分支。
+     */
+    private void validateBranchConditions(JsonNode branch) {
+        String logic = branch.path("logic").asText("and");
+        if (!BRANCH_LOGICS.contains(logic)) {
+            throw new IllegalArgumentException("条件分支logic只允许and或or");
+        }
+        JsonNode conditions = branch.get("conditions");
+        if (conditions == null || !conditions.isArray() || conditions.isEmpty()) {
+            throw new IllegalArgumentException("非默认条件分支必须配置conditions数组");
+        }
+        for (JsonNode condition : conditions) {
+            String sourceType = condition.path("sourceType").asText(null);
+            String valueType = condition.path("valueType").asText(null);
+            String operator = condition.path("operator").asText(null);
+            if (!BRANCH_SOURCE_TYPES.contains(sourceType)) {
+                throw new IllegalArgumentException("条件来源类型不合法");
+            }
+            if (!BRANCH_VALUE_TYPES.contains(valueType)) {
+                throw new IllegalArgumentException("条件值类型不合法");
+            }
+            if (!BRANCH_OPERATORS.contains(operator)) {
+                throw new IllegalArgumentException("条件操作符不合法");
+            }
+            if ("form_field".equals(sourceType)) {
+                requireJsonText(condition, "fieldKey", "表单字段条件必须配置fieldKey");
+            }
+            if (requiresCompareValue(operator) && !hasConditionValue(condition)) {
+                throw new IllegalArgumentException("条件操作符必须配置比较值");
+            }
+        }
+    }
+
+    private boolean hasConditionValue(JsonNode condition) {
+        JsonNode value = condition.get("value");
+        if (value == null || value.isNull()) {
+            return false;
+        }
+        if (value.isTextual()) {
+            return StringUtils.hasText(value.asText());
+        }
+        if (value.isArray()) {
+            return !value.isEmpty();
+        }
+        return true;
+    }
+
+    private boolean requiresCompareValue(String operator) {
+        return !Set.of("empty", "not_empty", "is_true", "is_false").contains(operator);
     }
 
     private void validateConfiguredAssigneeJson(ProcessNodeConfig config) {

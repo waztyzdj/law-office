@@ -24,6 +24,7 @@ import javax.xml.XMLConstants;
 import javax.xml.parsers.DocumentBuilderFactory;
 import java.io.StringReader;
 import java.util.Set;
+import java.util.regex.Pattern;
 
 @Service
 public class BpmnSecurityServiceImpl implements IBpmnSecurityService {
@@ -36,6 +37,7 @@ public class BpmnSecurityServiceImpl implements IBpmnSecurityService {
             "endEvent",
             "userTask",
             "sequenceFlow",
+            "conditionExpression",
             "exclusiveGateway",
             "parallelGateway",
             "incoming",
@@ -61,7 +63,6 @@ public class BpmnSecurityServiceImpl implements IBpmnSecurityService {
             "boundaryEvent",
             "eventBasedGateway",
             "complexGateway",
-            "conditionExpression",
             "extensionElements",
             "executionListener",
             "taskListener"
@@ -76,6 +77,9 @@ public class BpmnSecurityServiceImpl implements IBpmnSecurityService {
     private static final Set<String> FORBIDDEN_ATTRIBUTE_NAMESPACES = Set.of(
             "http://flowable.org/bpmn",
             "http://activiti.org/bpmn"
+    );
+    private static final Pattern SAFE_BRANCH_EXPRESSION = Pattern.compile(
+            "^\\$\\{branch == '[A-Za-z0-9_-]+'}$"
     );
 
     private final ProcessModelMapper processModelMapper;
@@ -162,6 +166,19 @@ public class BpmnSecurityServiceImpl implements IBpmnSecurityService {
         }
         if (!ALLOWED_ELEMENT_NAMES.contains(elementName)) {
             throw new IllegalArgumentException("BPMN元素不在二期白名单内: " + elementName);
+        }
+        if ("conditionExpression".equals(elementName)) {
+            validateConditionExpression(element);
+        }
+    }
+
+    /**
+     * 条件分支只允许使用系统约定的分支变量表达式，避免用户注入任意 JUEL/脚本逻辑。
+     */
+    private void validateConditionExpression(Element element) {
+        String expression = element.getTextContent();
+        if (!StringUtils.hasText(expression) || !SAFE_BRANCH_EXPRESSION.matcher(expression.trim()).matches()) {
+            throw new IllegalArgumentException("BPMN条件表达式只能使用系统分支变量格式");
         }
     }
 

@@ -70,6 +70,7 @@ export interface WorkflowProcessNodeConfigInfo {
   assigneeResolveMode?: string;
   assigneeJson?: string;
   assigneeType?: string;
+  branchJson?: string;
   nodeId?: string;
   nodeName?: string;
   nodeType?: string;
