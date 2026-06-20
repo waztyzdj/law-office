@@ -35,6 +35,9 @@ class BpmnSecurityServiceImplTest {
                             <bpmndi:BPMNEdge id="edge_flow1" bpmnElement="flow1">
                                 <di:waypoint x="136" y="118" />
                                 <di:waypoint x="200" y="118" />
+                                <bpmndi:BPMNLabel>
+                                    <dc:Bounds x="150" y="96" width="42" height="14" />
+                                </bpmndi:BPMNLabel>
                             </bpmndi:BPMNEdge>
                         </bpmndi:BPMNPlane>
                     </bpmndi:BPMNDiagram>

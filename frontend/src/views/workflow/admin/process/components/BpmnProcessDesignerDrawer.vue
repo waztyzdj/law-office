@@ -71,6 +71,7 @@ interface NodeConfigDraft {
   allowReturn: boolean;
   allowTransfer: boolean;
   approvalMode: ApprovalMode;
+  assigneeResolveMode: AssigneeResolveMode;
   assigneeJson: Record<string, unknown>;
   assigneeType: string;
   id?: string;
@@ -128,6 +129,7 @@ interface BpmnToolEntry {
 
 type BpmnToolEntries = Record<string, BpmnToolEntry>;
 type ApprovalMode = 'single' | 'countersign' | 'orsign';
+type AssigneeResolveMode = 'all' | 'select';
 
 const approvalModeOptions = [
   { label: '单人审批', value: 'single' },
@@ -443,6 +445,10 @@ function buildNodeConfigDraft(
     allowTransfer:
       config?.allowTransfer === undefined ? true : config.allowTransfer === 1,
     approvalMode: normalizeApprovalMode(config?.approvalMode),
+    assigneeResolveMode: normalizeAssigneeResolveMode(
+      config?.assigneeResolveMode,
+      config?.approvalMode,
+    ),
     assigneeJson: parseJsonValue<Record<string, unknown>>(config?.assigneeJson, {}),
     assigneeType,
     id: config?.id,
@@ -453,6 +459,37 @@ function buildNodeConfigDraft(
 function normalizeApprovalMode(value: unknown): ApprovalMode {
   return value === 'countersign' || value === 'orsign' ? value : 'single';
 }
+
+function defaultAssigneeResolveMode(approvalMode: unknown): AssigneeResolveMode {
+  return normalizeApprovalMode(approvalMode) === 'orsign' ? 'all' : 'select';
+}
+
+function resolveAssigneeResolveMode(
+  value: unknown,
+  approvalMode: unknown,
+): AssigneeResolveMode {
+  return normalizeApprovalMode(approvalMode) === 'single'
+    ? 'select'
+    : normalizeAssigneeResolveMode(value, approvalMode);
+}
+
+function normalizeAssigneeResolveMode(
+  value: unknown,
+  approvalMode: unknown,
+): AssigneeResolveMode {
+  return value === 'all' || value === 'select'
+    ? value
+    : defaultAssigneeResolveMode(approvalMode);
+}
+
+function handleApprovalModeChange(config: NodeConfigDraft) {
+  config.assigneeResolveMode = defaultAssigneeResolveMode(config.approvalMode);
+}
+
+const assigneeResolveModeOptions = [
+  { label: '发送全部', value: 'all' },
+  { label: '上一步选择', value: 'select' },
+];
 
 function createModeler() {
   if (!canvasRef.value || modeler.value) {
@@ -652,6 +689,10 @@ async function saveNodeConfigs(processId: string) {
       allowReturn: config?.allowReturn ? 1 : 0,
       allowTransfer: config?.allowTransfer ? 1 : 0,
       approvalMode: config?.approvalMode || 'single',
+      assigneeResolveMode: resolveAssigneeResolveMode(
+        config?.assigneeResolveMode,
+        config?.approvalMode,
+      ),
       assigneeJson: JSON.stringify(config?.assigneeJson || {}),
       assigneeType: config?.assigneeType || 'starter',
       nodeId: node.id,
@@ -857,6 +898,19 @@ defineExpose({
                   v-model:value="activeNodeConfig.approvalMode"
                   :disabled="isPublished"
                   :options="approvalModeOptions"
+                  button-style="solid"
+                  option-type="button"
+                  @change="handleApprovalModeChange(activeNodeConfig)"
+                />
+              </FormItem>
+              <FormItem
+                v-if="activeNodeConfig.approvalMode !== 'single'"
+                label="执行人确定方式"
+              >
+                <RadioGroup
+                  v-model:value="activeNodeConfig.assigneeResolveMode"
+                  :disabled="isPublished"
+                  :options="assigneeResolveModeOptions"
                   button-style="solid"
                   option-type="button"
                 />

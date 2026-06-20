@@ -17,6 +17,7 @@ import com.lawoffice.workflow.mapper.FormInstanceMapper;
 import com.lawoffice.workflow.mapper.ProcessInstanceMapper;
 import com.lawoffice.workflow.mapper.ProcessModelMapper;
 import com.lawoffice.workflow.mapper.TaskCandidateMapper;
+import com.lawoffice.workflow.mapper.TaskMapper;
 import com.lawoffice.workflow.service.IAssigneeResolveService;
 import com.lawoffice.workflow.service.IProcessNodeConfigService;
 import com.lawoffice.workflow.service.IRuntimeViewAssemblerService;
@@ -50,6 +51,7 @@ public class RuntimeViewAssemblerServiceImpl implements IRuntimeViewAssemblerSer
     private final FormInstanceMapper formInstanceMapper;
     private final ProcessInstanceMapper processInstanceMapper;
     private final TaskCandidateMapper taskCandidateMapper;
+    private final TaskMapper taskMapper;
     private final IAssigneeResolveService assigneeResolveService;
     private final IProcessNodeConfigService processNodeConfigService;
 
@@ -58,6 +60,7 @@ public class RuntimeViewAssemblerServiceImpl implements IRuntimeViewAssemblerSer
             FormInstanceMapper formInstanceMapper,
             ProcessInstanceMapper processInstanceMapper,
             TaskCandidateMapper taskCandidateMapper,
+            TaskMapper taskMapper,
             IAssigneeResolveService assigneeResolveService,
             IProcessNodeConfigService processNodeConfigService) {
         this.processModelMapper = processModelMapper;
@@ -65,6 +68,7 @@ public class RuntimeViewAssemblerServiceImpl implements IRuntimeViewAssemblerSer
         this.formInstanceMapper = formInstanceMapper;
         this.processInstanceMapper = processInstanceMapper;
         this.taskCandidateMapper = taskCandidateMapper;
+        this.taskMapper = taskMapper;
         this.assigneeResolveService = assigneeResolveService;
         this.processNodeConfigService = processNodeConfigService;
     }
@@ -214,6 +218,10 @@ public class RuntimeViewAssemblerServiceImpl implements IRuntimeViewAssemblerSer
         vo.setNodeId(task.getNodeId());
         vo.setTaskName(task.getTaskName());
         vo.setTaskType(task.getTaskType());
+        vo.setApprovalMode(task.getApprovalMode());
+        vo.setTaskGroupId(task.getTaskGroupId());
+        vo.setGroupTotal(task.getGroupTotal());
+        vo.setGroupCompleted(task.getGroupCompleted());
         vo.setParentTaskId(task.getParentTaskId());
         vo.setFormInstanceId(formInstance.getId());
         vo.setFormDefinitionId(formInstance.getFormDefinitionId());
@@ -231,8 +239,10 @@ public class RuntimeViewAssemblerServiceImpl implements IRuntimeViewAssemblerSer
         returnNodes.addAll(returnableNodes.stream().map(this::buildTaskReturnNode).toList());
         vo.setReturnNodes(returnNodes);
         vo.setFieldPermissions(permissions.stream().map(this::buildRuntimeFieldPermission).toList());
-        vo.setAssigneeSelectNodes(assigneeResolveService.buildRequiredAssigneeSelectNodes(
-                processInstance.getProcessModelId(), processInstance, task.getTenantId(), task.getNodeId()));
+        vo.setAssigneeSelectNodes(shouldSelectNextAssigneeOnApprove(task, task.getTenantId())
+                ? assigneeResolveService.buildRequiredAssigneeSelectNodes(
+                        processInstance.getProcessModelId(), processInstance, task.getTenantId(), task.getNodeId())
+                : List.of());
         return vo;
     }
 
@@ -373,6 +383,10 @@ public class RuntimeViewAssemblerServiceImpl implements IRuntimeViewAssemblerSer
         vo.setNodeId(task.getNodeId());
         vo.setTaskName(task.getTaskName());
         vo.setTaskType(task.getTaskType());
+        vo.setApprovalMode(task.getApprovalMode());
+        vo.setTaskGroupId(task.getTaskGroupId());
+        vo.setGroupTotal(task.getGroupTotal());
+        vo.setGroupCompleted(task.getGroupCompleted());
         vo.setAssigneeUserId(task.getAssigneeUserId());
         vo.setAssigneeUsername(task.getAssigneeUsername());
         vo.setAssigneeRealname(task.getAssigneeRealname());
@@ -440,6 +454,33 @@ public class RuntimeViewAssemblerServiceImpl implements IRuntimeViewAssemblerSer
         vo.setAllowAddSign(!addSignTask && isEnabled(nodeConfig.getAllowAddSign()));
         vo.setAllowReturn(!addSignTask && isEnabled(nodeConfig.getAllowReturn()));
         return vo;
+    }
+
+    /**
+     * 会签只有最后一个完成的人会真正推进流程，因此只有最后一个人的任务表单才需要返回下一节点执行人选择项。
+     */
+    private boolean shouldSelectNextAssigneeOnApprove(Task task, String tenantId) {
+        if (!WorkflowConstants.ApprovalMode.COUNTERSIGN.equals(task.getApprovalMode())
+                && !WorkflowConstants.TaskType.COUNTERSIGN.equals(task.getTaskType())) {
+            return true;
+        }
+        return countDoneGroupTasks(task, tenantId) + 1 >= resolveGroupTotal(task);
+    }
+
+    private int countDoneGroupTasks(Task task, String tenantId) {
+        if (!StringUtils.hasText(task.getTaskGroupId())) {
+            return WorkflowConstants.Status.DONE.equals(task.getStatus()) ? 1 : 0;
+        }
+        Long count = taskMapper.selectCount(new QueryWrapper<Task>()
+                .eq("tenant_id", tenantId)
+                .eq("task_group_id", task.getTaskGroupId())
+                .eq("status", WorkflowConstants.Status.DONE)
+                .eq("delete_flag", 0));
+        return count == null ? 0 : count.intValue();
+    }
+
+    private int resolveGroupTotal(Task task) {
+        return task.getGroupTotal() == null || task.getGroupTotal() <= 0 ? 1 : task.getGroupTotal();
     }
 
     private TaskReturnNodeVO buildTaskReturnNode(ProcessNodeConfig nodeConfig) {

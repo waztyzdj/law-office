@@ -3,7 +3,10 @@ import type { ProcessProgressNode } from './runtimeTypes';
 
 import { Empty, Tabs, Tag, Timeline } from 'ant-design-vue';
 
-import { getWorkflowActionMeta } from '../../components/status';
+import {
+  getApprovalModeMeta,
+  getWorkflowActionMeta,
+} from '../../components/status';
 
 interface Props {
   activeKey: string;
@@ -64,6 +67,12 @@ function getProgressNodeColor(node: ProcessProgressNode) {
                   当前
                 </Tag>
                 <Tag
+                  v-if="node.status === 'current' && node.approvalMode"
+                  :color="getApprovalModeMeta(node.approvalMode).color"
+                >
+                  {{ getApprovalModeMeta(node.approvalMode).label }}
+                </Tag>
+                <Tag
                   v-else-if="node.action"
                   :color="getWorkflowActionMeta(node.action).color"
                 >
@@ -75,6 +84,7 @@ function getProgressNodeColor(node: ProcessProgressNode) {
                 class="progress-node-meta"
               >
                 <span>处理人：{{ node.actor || '-' }}</span>
+                <span v-if="node.groupProgress">进度：{{ node.groupProgress }}</span>
                 <span>时间：{{ node.time || '-' }}</span>
               </div>
               <div

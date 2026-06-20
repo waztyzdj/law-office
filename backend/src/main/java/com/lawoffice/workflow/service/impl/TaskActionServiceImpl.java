@@ -142,8 +142,10 @@ public class TaskActionServiceImpl implements ITaskActionService {
                 completeAddSignTask(task, processInstance, formInstance, req, tenantId, context);
             } else {
                 ensureNoActiveAddSignChild(task);
-                assigneeResolveService.saveNextAssigneeSnapshot(processInstance, task.getNodeId(),
-                        req == null ? null : req.getSelectedAssignees(), tenantId, context);
+                if (willAdvanceAfterApprove(task, tenantId)) {
+                    assigneeResolveService.saveNextAssigneeSnapshot(processInstance, task.getNodeId(),
+                            req == null ? null : req.getSelectedAssignees(), tenantId, context);
+                }
                 completeApprove(task, processInstance, formInstance, req, tenantId, context);
             }
         } else if (WorkflowConstants.Action.REJECT.equals(action)) {
@@ -226,6 +228,23 @@ public class TaskActionServiceImpl implements ITaskActionService {
         User targetUser = requireTargetUser(req, tenantId);
 
         autoClaimIfNeeded(task, candidate, context);
+        if (isOrsignTask(task)) {
+            return handleOrsignTransfer(task, req, context, tenantId, processInstance, targetUser);
+        }
+        Task existingTargetTask = findTodoCurrentStepTaskByAssignee(task, targetUser.getId(), tenantId);
+        if (existingTargetTask != null) {
+            if (!existingTargetTask.getId().equals(task.getId())) {
+                markTaskTransferred(task, context);
+                shrinkGroupTotalAfterMergedTransfer(task, tenantId, context);
+                instanceStateService.cancelActiveCandidates(task, context);
+                instanceStateService.refreshCurrentTaskSummary(processInstance, tenantId);
+                EntityFillUtils.fillAuditFields(processInstance, context, false);
+                processInstanceMapper.updateById(processInstance);
+                instanceStateService.createTaskRecord(task, processInstance, requireFormInstance(processInstance.getFormInstanceId(), tenantId),
+                        req, WorkflowConstants.Action.TRANSFER, tenantId, context, null, targetUser);
+            }
+            return buildTaskActionResult(existingTargetTask, processInstance);
+        }
         fillOwnerFromCurrentAssignee(task);
         task.setAssigneeUserId(targetUser.getId());
         task.setAssigneeUsername(targetUser.getUsername());
@@ -235,13 +254,43 @@ public class TaskActionServiceImpl implements ITaskActionService {
         EntityFillUtils.fillAuditFields(task, context, false);
         taskMapper.updateById(task);
         instanceStateService.cancelActiveCandidates(task, context);
-        flowableService.setTaskAssignee(task.getFlowableTaskId(), targetUser.getId());
+        flowableService.setTaskAssignee(resolveFlowableAnchorTask(task, tenantId).getFlowableTaskId(), targetUser.getId());
         instanceStateService.refreshCurrentTaskSummary(processInstance, tenantId);
         EntityFillUtils.fillAuditFields(processInstance, context, false);
         processInstanceMapper.updateById(processInstance);
         instanceStateService.createTaskRecord(task, processInstance, requireFormInstance(processInstance.getFormInstanceId(), tenantId),
                 req, WorkflowConstants.Action.TRANSFER, tenantId, context, null, targetUser);
         return buildTaskActionResult(task, processInstance);
+    }
+
+    private TaskActionVO handleOrsignTransfer(Task task, TaskActionReq req, RequestContext context,
+            String tenantId, ProcessInstance processInstance, User targetUser) {
+        Task existingTargetTask = findTodoGroupTaskByAssignee(task, targetUser.getId(), tenantId);
+        if (existingTargetTask != null) {
+            if (!existingTargetTask.getId().equals(task.getId())) {
+                markTaskTransferred(task, context);
+                shrinkGroupTotalAfterMergedTransfer(task, tenantId, context);
+                instanceStateService.cancelActiveCandidates(task, context);
+                instanceStateService.refreshCurrentTaskSummary(processInstance, tenantId);
+                EntityFillUtils.fillAuditFields(processInstance, context, false);
+                processInstanceMapper.updateById(processInstance);
+                instanceStateService.createTaskRecord(task, processInstance, requireFormInstance(processInstance.getFormInstanceId(), tenantId),
+                        req, WorkflowConstants.Action.TRANSFER, tenantId, context, null, targetUser);
+            }
+            return buildTaskActionResult(existingTargetTask, processInstance);
+        }
+
+        Task anchorTask = resolveFlowableAnchorTask(task, tenantId);
+        Task targetTask = createGroupTransferTask(task, targetUser, context);
+        markTaskTransferred(task, context);
+        instanceStateService.cancelActiveCandidates(task, context);
+        flowableService.addCandidateUsers(anchorTask.getFlowableTaskId(), List.of(targetUser.getId()));
+        instanceStateService.refreshCurrentTaskSummary(processInstance, tenantId);
+        EntityFillUtils.fillAuditFields(processInstance, context, false);
+        processInstanceMapper.updateById(processInstance);
+        instanceStateService.createTaskRecord(task, processInstance, requireFormInstance(processInstance.getFormInstanceId(), tenantId),
+                req, WorkflowConstants.Action.TRANSFER, tenantId, context, null, targetUser);
+        return buildTaskActionResult(targetTask, processInstance);
     }
 
     private TaskActionVO handleReturn(String taskId, TaskActionReq req, RequestContext context) {
@@ -270,6 +319,7 @@ public class TaskActionServiceImpl implements ITaskActionService {
         EntityFillUtils.fillAuditFields(task, context, false);
         taskMapper.updateById(task);
         instanceStateService.cancelActiveCandidates(task, context);
+        cancelSiblingGroupTodoTasks(task, tenantId, context);
         if (WorkflowConstants.VirtualNode.START_DRAFT.equals(targetNodeConfig.getNodeId())) {
             returnToStartDraft(processInstance, formInstance, tenantId, context);
         } else {
@@ -295,6 +345,13 @@ public class TaskActionServiceImpl implements ITaskActionService {
         User targetUser = requireTargetUser(req, tenantId);
 
         autoClaimIfNeeded(task, candidate, context);
+        Task existingTargetTask = findTodoCurrentStepTaskByAssignee(task, targetUser.getId(), tenantId);
+        if (existingTargetTask != null) {
+            instanceStateService.createTaskRecord(task, processInstance, requireFormInstance(processInstance.getFormInstanceId(), tenantId),
+                    req, WorkflowConstants.Action.ADD_SIGN, tenantId, context, null, targetUser);
+            return buildTaskActionResult(existingTargetTask, processInstance);
+        }
+
         task.setStatus(WorkflowConstants.Status.TRANSFERRED);
         EntityFillUtils.fillAuditFields(task, context, false);
         taskMapper.updateById(task);
@@ -311,8 +368,64 @@ public class TaskActionServiceImpl implements ITaskActionService {
 
     private void completeApprove(Task task, ProcessInstance processInstance, FormInstance formInstance,
             TaskActionReq req, String tenantId, RequestContext context) {
-        flowableService.completeTask(task.getFlowableTaskId(), buildTaskVariables(task, req, context, WorkflowConstants.Action.APPROVE));
+        if (isCountersignTask(task)) {
+            completeCountersignApprove(task, processInstance, formInstance, req, tenantId, context);
+            return;
+        }
+        if (isOrsignTask(task)) {
+            completeOrsignApprove(task, processInstance, formInstance, req, tenantId, context);
+            return;
+        }
+        completeFlowableTask(task, req, context);
         instanceStateService.markTaskDone(task, context);
+        assigneeResolveService.syncCurrentTasks(processInstance, tenantId, context);
+        if (!flowableService.isProcessInstanceActive(processInstance.getFlowableProcessInstanceId())) {
+            processInstance.setStatus(WorkflowConstants.Status.APPROVED);
+            processInstance.setEndTime(LocalDateTime.now());
+            processInstance.setCurrentTaskNames(null);
+            processInstance.setCurrentAssigneeNames(null);
+            instanceStateService.archiveFormInstance(formInstance, context);
+        }
+        EntityFillUtils.fillAuditFields(processInstance, context, false);
+        processInstanceMapper.updateById(processInstance);
+    }
+
+    /**
+     * 会签通过只在最后一个同组任务完成时推进 Flowable，避免第一个办理人通过后流程提前进入下一节点。
+     */
+    private void completeCountersignApprove(Task task, ProcessInstance processInstance, FormInstance formInstance,
+            TaskActionReq req, String tenantId, RequestContext context) {
+        instanceStateService.markTaskDone(task, context);
+        int completedCount = countGroupTasks(task, tenantId, WorkflowConstants.Status.DONE);
+        updateGroupCompleted(task, completedCount, tenantId, context);
+        if (completedCount < resolveGroupTotal(task)) {
+            instanceStateService.refreshCurrentTaskSummary(processInstance, tenantId);
+            EntityFillUtils.fillAuditFields(processInstance, context, false);
+            processInstanceMapper.updateById(processInstance);
+            return;
+        }
+        completeFlowableTask(resolveFlowableAnchorTask(task, tenantId), req, context);
+        assigneeResolveService.syncCurrentTasks(processInstance, tenantId, context);
+        if (!flowableService.isProcessInstanceActive(processInstance.getFlowableProcessInstanceId())) {
+            processInstance.setStatus(WorkflowConstants.Status.APPROVED);
+            processInstance.setEndTime(LocalDateTime.now());
+            processInstance.setCurrentTaskNames(null);
+            processInstance.setCurrentAssigneeNames(null);
+            instanceStateService.archiveFormInstance(formInstance, context);
+        }
+        EntityFillUtils.fillAuditFields(processInstance, context, false);
+        processInstanceMapper.updateById(processInstance);
+    }
+
+    /**
+     * 或签任一人通过即可推进 Flowable，其它同组待办立即取消，防止旧待办继续提交造成重复流转。
+     */
+    private void completeOrsignApprove(Task task, ProcessInstance processInstance, FormInstance formInstance,
+            TaskActionReq req, String tenantId, RequestContext context) {
+        instanceStateService.markTaskDone(task, context);
+        cancelSiblingGroupTodoTasks(task, tenantId, context);
+        updateGroupCompleted(task, countGroupTasks(task, tenantId, WorkflowConstants.Status.DONE), tenantId, context);
+        completeFlowableTask(resolveFlowableAnchorTask(task, tenantId), req, context);
         assigneeResolveService.syncCurrentTasks(processInstance, tenantId, context);
         if (!flowableService.isProcessInstanceActive(processInstance.getFlowableProcessInstanceId())) {
             processInstance.setStatus(WorkflowConstants.Status.APPROVED);
@@ -341,7 +454,6 @@ public class TaskActionServiceImpl implements ITaskActionService {
 
     private void completeAddSignTask(Task task, ProcessInstance processInstance, FormInstance formInstance,
             TaskActionReq req, String tenantId, RequestContext context) {
-        instanceStateService.markTaskDone(task, context);
         Task parentTask = taskMapper.selectOne(new QueryWrapper<Task>()
                 .eq("id", task.getParentTaskId())
                 .eq("tenant_id", tenantId)
@@ -349,6 +461,10 @@ public class TaskActionServiceImpl implements ITaskActionService {
         if (parentTask == null) {
             throw new IllegalArgumentException("加签父任务不存在");
         }
+        if (!WorkflowConstants.Status.TRANSFERRED.equals(parentTask.getStatus())) {
+            throw new IllegalArgumentException("加签任务所属审批环节已结束，不能继续办理");
+        }
+        instanceStateService.markTaskDone(task, context);
         parentTask.setStatus(WorkflowConstants.Status.TODO);
         EntityFillUtils.fillAuditFields(parentTask, context, false);
         taskMapper.updateById(parentTask);
@@ -361,6 +477,16 @@ public class TaskActionServiceImpl implements ITaskActionService {
         if (!Integer.valueOf(1).equals(allowFlag)) {
             throw new IllegalArgumentException(message);
         }
+    }
+
+    /**
+     * 判断本次通过是否会真正推进流程。会签未完成前不推进下一节点，也不应强制当前办理人选择下一节点审批人。
+     */
+    private boolean willAdvanceAfterApprove(Task task, String tenantId) {
+        if (!isCountersignTask(task)) {
+            return true;
+        }
+        return countGroupTasks(task, tenantId, WorkflowConstants.Status.DONE) + 1 >= resolveGroupTotal(task);
     }
 
     private void ensureNotAddSignTask(Task task, String message) {
@@ -387,6 +513,13 @@ public class TaskActionServiceImpl implements ITaskActionService {
         task.setOwnerRealname(task.getAssigneeRealname());
     }
 
+    private void markTaskTransferred(Task task, RequestContext context) {
+        task.setStatus(WorkflowConstants.Status.TRANSFERRED);
+        task.setCompleteTime(LocalDateTime.now());
+        EntityFillUtils.fillAuditFields(task, context, false);
+        taskMapper.updateById(task);
+    }
+
     private void ensureNoActiveAddSignChild(Task task) {
         if (taskMapper.selectCount(new QueryWrapper<Task>()
                 .eq("tenant_id", task.getTenantId())
@@ -396,6 +529,226 @@ public class TaskActionServiceImpl implements ITaskActionService {
                 .eq("delete_flag", 0)) > 0) {
             throw new IllegalArgumentException("当前任务存在未完成的加签任务");
         }
+    }
+
+    private boolean isCountersignTask(Task task) {
+        return WorkflowConstants.ApprovalMode.COUNTERSIGN.equals(task.getApprovalMode())
+                || WorkflowConstants.TaskType.COUNTERSIGN.equals(task.getTaskType());
+    }
+
+    private boolean isOrsignTask(Task task) {
+        return WorkflowConstants.ApprovalMode.ORSIGN.equals(task.getApprovalMode())
+                || WorkflowConstants.TaskType.ORSIGN.equals(task.getTaskType());
+    }
+
+    private int resolveGroupTotal(Task task) {
+        return task.getGroupTotal() == null || task.getGroupTotal() <= 0 ? 1 : task.getGroupTotal();
+    }
+
+    private int countGroupTasks(Task task, String tenantId, String status) {
+        if (!StringUtils.hasText(task.getTaskGroupId())) {
+            return WorkflowConstants.Status.DONE.equals(status) && WorkflowConstants.Status.DONE.equals(task.getStatus()) ? 1 : 0;
+        }
+        Long count = taskMapper.selectCount(new QueryWrapper<Task>()
+                .eq("tenant_id", tenantId)
+                .eq("task_group_id", task.getTaskGroupId())
+                .eq("status", status)
+                .eq("delete_flag", 0));
+        return count == null ? 0 : count.intValue();
+    }
+
+    /**
+     * 或签同组内一个人只保留一条待办。转办/加签选择到已经在本环节待办中的用户时，
+     * 复用既有待办，避免同一用户在同一个审批节点看到重复任务。
+     */
+    private Task findTodoGroupTaskByAssignee(Task task, String targetUserId, String tenantId) {
+        if (!StringUtils.hasText(task.getTaskGroupId())) {
+            return null;
+        }
+        return taskMapper.selectOne(new QueryWrapper<Task>()
+                .eq("tenant_id", tenantId)
+                .eq("task_group_id", task.getTaskGroupId())
+                .eq("assignee_user_id", targetUserId)
+                .eq("status", WorkflowConstants.Status.TODO)
+                .eq("delete_flag", 0)
+                .last("limit 1"));
+    }
+
+    /**
+     * 加签去重不能跨节点、跨流程实例判断；只复用当前流程实例当前节点中目标人已有的待办。
+     * 会签/或签优先按 taskGroupId 限定，普通任务按流程实例 + 节点限定。
+     */
+    private Task findTodoCurrentStepTaskByAssignee(Task task, String targetUserId, String tenantId) {
+        if (StringUtils.hasText(task.getTaskGroupId())) {
+            return findTodoGroupTaskByAssignee(task, targetUserId, tenantId);
+        }
+        return taskMapper.selectOne(new QueryWrapper<Task>()
+                .eq("tenant_id", tenantId)
+                .eq("process_instance_id", task.getProcessInstanceId())
+                .eq("node_id", task.getNodeId())
+                .eq("assignee_user_id", targetUserId)
+                .eq("status", WorkflowConstants.Status.TODO)
+                .eq("delete_flag", 0)
+                .last("limit 1"));
+    }
+
+    /**
+     * 同组业务任务共享一个真实 Flowable 用户任务，非锚点任务完成时需要找到保存真实 taskId 的组内任务。
+     */
+    private Task resolveFlowableAnchorTask(Task task, String tenantId) {
+        if (!StringUtils.hasText(task.getTaskGroupId())) {
+            return task;
+        }
+        Task anchor = taskMapper.selectOne(new QueryWrapper<Task>()
+                .eq("tenant_id", tenantId)
+                .eq("task_group_id", task.getTaskGroupId())
+                .notLikeRight("flowable_task_id", "group:")
+                .eq("delete_flag", 0)
+                .last("limit 1"));
+        if (anchor == null) {
+            throw new IllegalArgumentException("会签/或签任务缺少Flowable锚点任务");
+        }
+        return anchor;
+    }
+
+    private void completeFlowableTask(Task task, TaskActionReq req, RequestContext context) {
+        flowableService.completeTask(task.getFlowableTaskId(), buildTaskVariables(task, req, context, WorkflowConstants.Action.APPROVE));
+    }
+
+    /**
+     * 取消同组其它待办并释放候选人，或签通过、会签/或签退回等场景都不能让旧任务继续办理。
+     */
+    private void cancelSiblingGroupTodoTasks(Task task, String tenantId, RequestContext context) {
+        if (!StringUtils.hasText(task.getTaskGroupId())) {
+            return;
+        }
+        List<String> canceledTaskIds = taskMapper.selectList(new QueryWrapper<Task>()
+                        .select("id")
+                        .eq("tenant_id", tenantId)
+                        .eq("task_group_id", task.getTaskGroupId())
+                        .in("status", List.of(WorkflowConstants.Status.TODO, WorkflowConstants.Status.TRANSFERRED))
+                        .ne("id", task.getId())
+                        .eq("delete_flag", 0))
+                .stream()
+                .map(Task::getId)
+                .toList();
+        if (canceledTaskIds.isEmpty()) {
+            return;
+        }
+        cancelActiveAddSignChildren(canceledTaskIds, tenantId, context);
+        cancelTasksByIds(canceledTaskIds, tenantId, context);
+        cancelCandidatesByTaskIds(canceledTaskIds, tenantId, context);
+    }
+
+    /**
+     * 或签节点任一人通过后，同组其它未完成任务下挂的加签必须一起失效。
+     * 发起加签的父任务会处于 transferred 状态，因此父任务 ID 范围必须包含 transferred sibling。
+     * 否则旧加签完成会恢复已取消父任务，造成当前节点和下一节点并行办理。
+     */
+    private void cancelActiveAddSignChildren(List<String> parentTaskIds, String tenantId, RequestContext context) {
+        if (parentTaskIds == null || parentTaskIds.isEmpty()) {
+            return;
+        }
+        taskMapper.update(null, new UpdateWrapper<Task>()
+                .eq("tenant_id", tenantId)
+                .in("parent_task_id", parentTaskIds)
+                .eq("task_type", WorkflowConstants.TaskType.ADD_SIGN)
+                .eq("status", WorkflowConstants.Status.TODO)
+                .eq("delete_flag", 0)
+                .set("status", WorkflowConstants.Status.CANCELED)
+                .set("update_by", context.getUsername())
+                .set("update_time", LocalDateTime.now()));
+    }
+
+    private void cancelTasksByIds(List<String> taskIds, String tenantId, RequestContext context) {
+        if (taskIds == null || taskIds.isEmpty()) {
+            return;
+        }
+        taskMapper.update(null, new UpdateWrapper<Task>()
+                .eq("tenant_id", tenantId)
+                .in("id", taskIds)
+                .eq("delete_flag", 0)
+                .set("status", WorkflowConstants.Status.CANCELED)
+                .set("update_by", context.getUsername())
+                .set("update_time", LocalDateTime.now()));
+    }
+
+    private void cancelCandidatesByTaskIds(List<String> taskIds, String tenantId, RequestContext context) {
+        if (taskIds == null || taskIds.isEmpty()) {
+            return;
+        }
+        taskCandidateMapper.update(null, new UpdateWrapper<TaskCandidate>()
+                .eq("tenant_id", tenantId)
+                .in("task_id", taskIds)
+                .eq("status", WorkflowConstants.Status.ACTIVE)
+                .eq("delete_flag", 0)
+                .set("status", WorkflowConstants.Status.CANCELED)
+                .set("update_by", context.getUsername())
+                .set("update_time", LocalDateTime.now()));
+    }
+
+    private void updateGroupCompleted(Task task, int completedCount, String tenantId, RequestContext context) {
+        if (!StringUtils.hasText(task.getTaskGroupId())) {
+            return;
+        }
+        taskMapper.update(null, new UpdateWrapper<Task>()
+                .eq("tenant_id", tenantId)
+                .eq("task_group_id", task.getTaskGroupId())
+                .eq("delete_flag", 0)
+                .set("group_completed", completedCount)
+                .set("update_by", context.getUsername())
+                .set("update_time", LocalDateTime.now()));
+    }
+
+    /**
+     * 会签/或签转办给同组已有待办人时不会新增待办，原办理人的完成责任合并到目标人的待办上。
+     * 因此同组应完成人数必须同步收缩，否则会签会停在类似 2/3 的不可完成状态。
+     */
+    private void shrinkGroupTotalAfterMergedTransfer(Task task, String tenantId, RequestContext context) {
+        if (!StringUtils.hasText(task.getTaskGroupId())) {
+            return;
+        }
+        int nextTotal = Math.max(resolveGroupTotal(task) - 1, 1);
+        task.setGroupTotal(nextTotal);
+        taskMapper.update(null, new UpdateWrapper<Task>()
+                .eq("tenant_id", tenantId)
+                .eq("task_group_id", task.getTaskGroupId())
+                .eq("delete_flag", 0)
+                .set("group_total", nextTotal)
+                .set("update_by", context.getUsername())
+                .set("update_time", LocalDateTime.now()));
+    }
+
+    /**
+     * 或签转办给新用户时，原办理人的待办结束，目标人获得同组新待办。
+     * Flowable 仍只有一个真实用户任务，因此新增本地任务使用 group: 前缀保存本地标识。
+     */
+    private Task createGroupTransferTask(Task sourceTask, User targetUser, RequestContext context) {
+        Task targetTask = new Task();
+        targetTask.setId(newId());
+        targetTask.setTenantId(sourceTask.getTenantId());
+        targetTask.setProcessInstanceId(sourceTask.getProcessInstanceId());
+        targetTask.setParentTaskId(sourceTask.getId());
+        targetTask.setFlowableTaskId("group:" + targetTask.getId());
+        targetTask.setNodeId(sourceTask.getNodeId());
+        targetTask.setTaskName(sourceTask.getTaskName());
+        targetTask.setTaskType(WorkflowConstants.TaskType.TRANSFER);
+        targetTask.setApprovalMode(sourceTask.getApprovalMode());
+        targetTask.setTaskGroupId(sourceTask.getTaskGroupId());
+        targetTask.setGroupTotal(sourceTask.getGroupTotal());
+        targetTask.setGroupCompleted(sourceTask.getGroupCompleted());
+        targetTask.setOwnerUserId(sourceTask.getAssigneeUserId());
+        targetTask.setOwnerUsername(sourceTask.getAssigneeUsername());
+        targetTask.setOwnerRealname(sourceTask.getAssigneeRealname());
+        targetTask.setAssigneeUserId(targetUser.getId());
+        targetTask.setAssigneeUsername(targetUser.getUsername());
+        targetTask.setAssigneeRealname(targetUser.getRealname());
+        targetTask.setStatus(WorkflowConstants.Status.TODO);
+        targetTask.setDueTime(sourceTask.getDueTime());
+        targetTask.setClaimTime(LocalDateTime.now());
+        EntityFillUtils.fillAuditFields(targetTask, context, true);
+        taskMapper.insert(targetTask);
+        return targetTask;
     }
 
     private Task createAddSignTask(Task parentTask, User targetUser, RequestContext context) {

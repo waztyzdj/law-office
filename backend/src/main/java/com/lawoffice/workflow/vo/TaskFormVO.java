@@ -21,6 +21,14 @@ public class TaskFormVO {
 
     private String taskType;
 
+    private String approvalMode;
+
+    private String taskGroupId;
+
+    private Integer groupTotal;
+
+    private Integer groupCompleted;
+
     private String parentTaskId;
 
     private String formInstanceId;

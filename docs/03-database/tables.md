@@ -270,6 +270,7 @@ FormCreate 表单实例表，用于保存发起后的表单数据、schema 快�
 - `assignee_type`：审批人类型，取值 `user`、`role`、`depart_leader`、`depart_role`、`starter_supervisor`、`starter_select`、`starter`。
 - `assignee_json`：审批人配置 JSON。
 - `approval_mode`：办理策略，取值 `single`、`countersign`、`orsign`。
+- `assignee_resolve_mode`：执行人确定方式，取值 `all`、`select`；`all` 表示发送给全部解析人员，`select` 表示由上一步办理人在候选范围内选择实际执行人；单人审批固定按 `select` 处理。
 - `reject_policy`：不通过策略，二期取值 `terminate`。
 - `branch_json`：条件分支配置 JSON。
 - `cc_json`：抄送配置 JSON。

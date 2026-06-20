@@ -12,13 +12,17 @@ import { computed, ref } from 'vue';
 
 import { useVbenDrawer } from '@vben/common-ui';
 
-import { Modal, Select, Spin } from 'ant-design-vue';
+import { Modal, Select, Space, Spin, Tag } from 'ant-design-vue';
 
 import {
   getStartForm,
   getWorkflowInstanceDetail,
   getWorkflowTaskForm,
 } from '#/api/workflow';
+import {
+  formatApprovalProgress,
+  getApprovalModeMeta,
+} from '../../components/status';
 import { useRuntimeAssigneeSelection } from './hooks/useRuntimeAssigneeSelection';
 import { useRuntimeFormData } from './hooks/useRuntimeFormData';
 import { useRuntimeProgressNodes } from './hooks/useRuntimeProgressNodes';
@@ -85,6 +89,23 @@ const shouldRenderAssigneeModals = computed(
     assigneePickerOpen.value ||
     assigneeSelectModalOpen.value,
 );
+const taskApprovalMeta = computed(() =>
+  getApprovalModeMeta(taskForm.value?.approvalMode),
+);
+const taskApprovalProgress = computed(() =>
+  taskForm.value ? formatApprovalProgress(taskForm.value) : '',
+);
+const showTaskContext = computed(
+  () => isTodoMode.value && Boolean(taskForm.value) && !isStartDraftTask.value,
+);
+const shouldSelectNextAssigneeOnApprove = computed(() => {
+  if (taskForm.value?.approvalMode !== 'countersign') {
+    return true;
+  }
+  const completed = taskForm.value.groupCompleted ?? 0;
+  const total = taskForm.value.groupTotal ?? 1;
+  return completed + 1 >= total;
+});
 
 const {
   approvalComment,
@@ -124,6 +145,7 @@ const {
   closeAssigneePicker,
   closeAssigneeSelectModal,
   draftSelectedAssigneeUsers,
+  freeSelectMode,
   openNextAssigneeSelect,
   pendingSubmitPayload,
   resetAssigneeSelection,
@@ -132,7 +154,11 @@ const {
 } = useRuntimeAssigneeSelection({
   mode,
   startAssigneeSelectNodes: computed(() => startForm.value?.assigneeSelectNodes ?? []),
-  taskAssigneeSelectNodes: computed(() => taskForm.value?.assigneeSelectNodes ?? []),
+  taskAssigneeSelectNodes: computed(() =>
+    shouldSelectNextAssigneeOnApprove.value
+      ? (taskForm.value?.assigneeSelectNodes ?? [])
+      : [],
+  ),
 });
 
 const { processProgressNodes } = useRuntimeProgressNodes(detail);
@@ -292,6 +318,24 @@ defineExpose({
         v-if="runtimeContentReady"
         class="runtime-drawer-body"
       >
+        <div
+          v-if="showTaskContext"
+          class="task-context-bar"
+        >
+          <Space wrap>
+            <span class="task-context-title">{{ taskForm?.taskName || taskForm?.nodeId }}</span>
+            <Tag :color="taskApprovalMeta.color">
+              {{ taskApprovalMeta.label }}
+            </Tag>
+            <Tag
+              v-if="taskApprovalProgress"
+              color="processing"
+            >
+              {{ taskApprovalProgress }}
+            </Tag>
+          </Space>
+        </div>
+
         <div class="runtime-drawer-main">
           <section class="runtime-form-section">
             <div class="runtime-form-content">
@@ -373,6 +417,7 @@ defineExpose({
       :current-action="currentAction"
       :current-task="currentTask"
       :fixed-select-nodes="runtimeFixedSelectNodes"
+      :free-select-mode="freeSelectMode"
       :submitting="submitting"
       @action-cancel="closeActionUserPicker"
       @action-confirm="handleActionUserPickerConfirm"
@@ -414,6 +459,17 @@ defineExpose({
   gap: 20px;
   grid-template-columns: minmax(0, 3fr) minmax(360px, 2fr);
   min-height: 0;
+}
+
+.task-context-bar {
+  border-bottom: 1px solid #f0f0f0;
+  margin-bottom: 14px;
+  padding-bottom: 12px;
+}
+
+.task-context-title {
+  color: #111827;
+  font-weight: 500;
 }
 
 .runtime-form-section {

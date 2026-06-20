@@ -1,6 +1,6 @@
 import { h } from 'vue';
 
-import { Space } from 'ant-design-vue';
+import { Space, Tag } from 'ant-design-vue';
 
 import type { RuntimeTaskInfo } from '#/api/workflow';
 import type {
@@ -12,6 +12,9 @@ import { defineTableColumns } from '#/composables/Table';
 
 import WorkflowStatusTag from '../../../components/WorkflowStatusTag.vue';
 import {
+  approvalModeOptions,
+  formatApprovalProgress,
+  getApprovalModeMeta,
   taskTypeMap,
   taskTypeOptions,
   todoTaskStatusOptions,
@@ -39,6 +42,28 @@ export function getWorkflowTodoColumns(
         width: 110,
       },
       title: '任务类型',
+    },
+    {
+      dataIndex: 'approvalMode',
+      options: {
+        align: 'center' as const,
+        columnType: 'select' as const,
+        customRender: ({ record }: { record: RuntimeTaskInfo }) => {
+          const meta = getApprovalModeMeta(record.approvalMode);
+          const progress = formatApprovalProgress(record);
+          return h(
+            Space,
+            { size: 4 },
+            () => [
+              h(Tag, { color: meta.color }, () => meta.label),
+              progress ? h('span', { class: 'text-gray-500' }, progress) : null,
+            ],
+          );
+        },
+        selectOptions: approvalModeOptions,
+        width: 140,
+      },
+      title: '办理策略',
     },
     {
       dataIndex: 'starterRealname',
@@ -103,6 +128,6 @@ export function getWorkflowTodoColumns(
     filterState,
     emit,
     pagination,
-    { minTableWidth: 1200, tableKey: 'workflow_todo' },
+    { minTableWidth: 1340, tableKey: 'workflow_todo' },
   );
 }

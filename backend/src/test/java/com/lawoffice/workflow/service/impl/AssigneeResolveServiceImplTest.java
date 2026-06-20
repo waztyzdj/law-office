@@ -39,6 +39,7 @@ import java.util.List;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.reset;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -192,6 +193,96 @@ class AssigneeResolveServiceImplTest {
         assertEquals(2, node.getOptions().size());
         assertEquals("user-1", node.getOptions().get(0).getUserId());
         assertEquals("user-2", node.getOptions().get(1).getUserId());
+    }
+
+    @Test
+    void shouldCreateCountersignTasksForEachResolvedAssignee() {
+        ProcessInstance processInstance = processInstance();
+        ProcessNodeConfig nodeConfig = node(
+                "approve_user",
+                "会签审批",
+                WorkflowConstants.AssigneeType.USER,
+                "{\"userIds\":[\"user-1\",\"user-2\"]}"
+        );
+        nodeConfig.setApprovalMode(WorkflowConstants.ApprovalMode.COUNTERSIGN);
+        nodeConfig.setAssigneeResolveMode(WorkflowConstants.AssigneeResolveMode.ALL);
+        when(flowableService.listActiveTasks(FLOWABLE_INSTANCE_ID))
+                .thenReturn(List.of(new FlowableTaskInfo(FLOWABLE_TASK_ID, "approve_user", "会签审批", null, null)));
+        when(processNodeConfigMapper.selectOne(any(Wrapper.class))).thenReturn(nodeConfig);
+        when(processInstanceAssigneeMapper.selectList(any(Wrapper.class))).thenReturn(List.of());
+        when(userTenantMapper.selectList(any(Wrapper.class))).thenReturn(List.of(userTenant("user-1"), userTenant("user-2")));
+        when(userMapper.selectList(any(Wrapper.class))).thenReturn(List.of(user("user-1", "u1", "张三"), user("user-2", "u2", "李四")));
+
+        service.syncCurrentTasks(processInstance, TENANT_ID, context());
+
+        verify(flowableService).addCandidateUsers(eq(FLOWABLE_TASK_ID), eq(List.of("user-1", "user-2")));
+        ArgumentCaptor<Task> taskCaptor = ArgumentCaptor.forClass(Task.class);
+        verify(taskMapper, times(2)).insert(taskCaptor.capture());
+        List<Task> tasks = taskCaptor.getAllValues();
+        assertEquals(2, tasks.size());
+        assertEquals(WorkflowConstants.TaskType.COUNTERSIGN, tasks.get(0).getTaskType());
+        assertEquals(WorkflowConstants.ApprovalMode.COUNTERSIGN, tasks.get(0).getApprovalMode());
+        assertEquals(2, tasks.get(0).getGroupTotal());
+        assertEquals(0, tasks.get(0).getGroupCompleted());
+        assertEquals(FLOWABLE_TASK_ID, tasks.get(0).getFlowableTaskId());
+        assertEquals(tasks.get(0).getTaskGroupId(), tasks.get(1).getTaskGroupId());
+        assertEquals(tasks.get(0).getId(), tasks.get(1).getParentTaskId());
+        assertEquals("group:" + tasks.get(1).getId(), tasks.get(1).getFlowableTaskId());
+        assertEquals("user-1", tasks.get(0).getAssigneeUserId());
+        assertEquals("user-2", tasks.get(1).getAssigneeUserId());
+        verify(instanceStateService).refreshCurrentTaskSummary(processInstance, TENANT_ID);
+    }
+
+    @Test
+    void shouldRequireMultipleSelectionForCountersignWhenResolveModeSelect() {
+        ProcessInstance processInstance = processInstance();
+        ProcessNodeConfig nodeConfig = node(
+                "approve_user",
+                "会签审批",
+                WorkflowConstants.AssigneeType.USER,
+                "{\"userIds\":[\"user-1\",\"user-2\"]}"
+        );
+        nodeConfig.setApprovalMode(WorkflowConstants.ApprovalMode.COUNTERSIGN);
+        nodeConfig.setAssigneeResolveMode(WorkflowConstants.AssigneeResolveMode.SELECT);
+        when(processModelMapper.selectOne(any(Wrapper.class))).thenReturn(null);
+        when(processNodeConfigMapper.selectList(any(Wrapper.class))).thenReturn(List.of(nodeConfig));
+        when(userTenantMapper.selectList(any(Wrapper.class))).thenReturn(List.of(userTenant("user-1"), userTenant("user-2")));
+        when(userMapper.selectList(any(Wrapper.class))).thenReturn(List.of(user("user-1", "u1", "张三"), user("user-2", "u2", "李四")));
+
+        List<AssigneeSelectNodeVO> nodes = service.buildRequiredAssigneeSelectNodes(
+                PROCESS_MODEL_ID,
+                processInstance,
+                TENANT_ID,
+                WorkflowConstants.VirtualNode.START_DRAFT);
+
+        assertEquals(1, nodes.size());
+        assertEquals("multiple", nodes.get(0).getSelectType());
+        assertEquals(2, nodes.get(0).getOptions().size());
+    }
+
+    @Test
+    void shouldSkipSelectionForCountersignWhenResolveModeAll() {
+        ProcessInstance processInstance = processInstance();
+        ProcessNodeConfig nodeConfig = node(
+                "approve_user",
+                "会签审批",
+                WorkflowConstants.AssigneeType.USER,
+                "{\"userIds\":[\"user-1\",\"user-2\"]}"
+        );
+        nodeConfig.setApprovalMode(WorkflowConstants.ApprovalMode.COUNTERSIGN);
+        nodeConfig.setAssigneeResolveMode(WorkflowConstants.AssigneeResolveMode.ALL);
+        when(processModelMapper.selectOne(any(Wrapper.class))).thenReturn(null);
+        when(processNodeConfigMapper.selectList(any(Wrapper.class))).thenReturn(List.of(nodeConfig));
+        when(userTenantMapper.selectList(any(Wrapper.class))).thenReturn(List.of(userTenant("user-1"), userTenant("user-2")));
+        when(userMapper.selectList(any(Wrapper.class))).thenReturn(List.of(user("user-1", "u1", "张三"), user("user-2", "u2", "李四")));
+
+        List<AssigneeSelectNodeVO> nodes = service.buildRequiredAssigneeSelectNodes(
+                PROCESS_MODEL_ID,
+                processInstance,
+                TENANT_ID,
+                WorkflowConstants.VirtualNode.START_DRAFT);
+
+        assertEquals(0, nodes.size());
     }
 
     @Test

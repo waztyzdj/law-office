@@ -12,8 +12,10 @@ export const workflowActionTitleMap: Record<WorkflowAction, string> = {
 
 export interface ProcessProgressNode {
   action?: string;
+  approvalMode?: string;
   actor?: string;
   comment?: string;
+  groupProgress?: string;
   id: string;
   name: string;
   resultStatus?: string;

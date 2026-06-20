@@ -137,6 +137,14 @@ public class ProcessNodeConfigServiceImpl extends AbstractWorkflowConfigServiceI
                 WorkflowConstants.ApprovalMode.SINGLE,
                 WorkflowConstants.ApprovalMode.COUNTERSIGN,
                 WorkflowConstants.ApprovalMode.ORSIGN);
+        if (WorkflowConstants.ApprovalMode.SINGLE.equals(config.getApprovalMode())) {
+            config.setAssigneeResolveMode(WorkflowConstants.AssigneeResolveMode.SELECT);
+        } else if (!StringUtils.hasText(config.getAssigneeResolveMode())) {
+            config.setAssigneeResolveMode(defaultAssigneeResolveMode(config.getApprovalMode()));
+        }
+        validateIn(config.getAssigneeResolveMode(), "执行人确定方式不合法",
+                WorkflowConstants.AssigneeResolveMode.ALL,
+                WorkflowConstants.AssigneeResolveMode.SELECT);
         if (!StringUtils.hasText(config.getRejectPolicy())) {
             config.setRejectPolicy(WorkflowConstants.RejectPolicy.TERMINATE);
         }
@@ -164,6 +172,15 @@ public class ProcessNodeConfigServiceImpl extends AbstractWorkflowConfigServiceI
         if (config.getSortOrder() == null) {
             config.setSortOrder(0);
         }
+    }
+
+    /**
+     * 默认值按二期产品语义兜底：单人审批固定上一步选择，会签通常需要圈定实际参与人，或签默认发给全部候选人。
+     */
+    private String defaultAssigneeResolveMode(String approvalMode) {
+        return WorkflowConstants.ApprovalMode.ORSIGN.equals(approvalMode)
+                ? WorkflowConstants.AssigneeResolveMode.ALL
+                : WorkflowConstants.AssigneeResolveMode.SELECT;
     }
 
     private void validateDefinitionRules(ProcessNodeConfig config) {

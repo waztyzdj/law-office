@@ -45,6 +45,9 @@ export function useRuntimeAssigneeSelection(
   const runtimeFixedSelectNodes = computed(() =>
     assigneeSelectNodes.value.filter((node) => node.assigneeType !== 'starter_select'),
   );
+  const freeSelectMode = computed(() =>
+    runtimeFreeSelectNode.value?.selectType === 'multiple' ? 'multiple' : 'single',
+  );
 
   function resetAssigneeSelection() {
     assigneePickerOpen.value = false;
@@ -81,7 +84,7 @@ export function useRuntimeAssigneeSelection(
         continue;
       }
       const selected = selectedAssignees.value.find((item) => item.nodeId === node.nodeId);
-      if (!selected?.userIds?.[0]) {
+      if (!selected?.userIds?.length) {
         message.warning(`请选择${node.nodeName || node.nodeId}的审批人`);
         return false;
       }
@@ -93,9 +96,9 @@ export function useRuntimeAssigneeSelection(
     const result: SelectedAssigneeReq[] = [];
     for (const item of selectedAssignees.value) {
       const nodeId = item.nodeId;
-      const userId = item.userIds?.[0];
-      if (nodeId && userId) {
-        result.push({ nodeId, userIds: [userId] });
+      const userIds = item.userIds?.filter(Boolean) ?? [];
+      if (nodeId && userIds.length) {
+        result.push({ nodeId, userIds });
       }
     }
     return result;
@@ -103,12 +106,14 @@ export function useRuntimeAssigneeSelection(
 
   function buildFreeSelectedAssignees() {
     const node = runtimeFreeSelectNode.value;
-    const user = draftSelectedAssigneeUsers.value[0];
-    if (!node?.nodeId || !user?.id) {
+    const userIds = draftSelectedAssigneeUsers.value
+      .map((user) => user.id)
+      .filter((id): id is string => !!id);
+    if (!node?.nodeId || !userIds.length) {
       message.warning('请选择下一审批人');
       return undefined;
     }
-    return [{ nodeId: node.nodeId, userIds: [user.id] }];
+    return [{ nodeId: node.nodeId, userIds }];
   }
 
   function buildFixedSelectedAssignees() {
@@ -138,6 +143,7 @@ export function useRuntimeAssigneeSelection(
     closeAssigneePicker,
     closeAssigneeSelectModal,
     draftSelectedAssigneeUsers,
+    freeSelectMode,
     openNextAssigneeSelect,
     pendingSubmitPayload,
     resetAssigneeSelection,

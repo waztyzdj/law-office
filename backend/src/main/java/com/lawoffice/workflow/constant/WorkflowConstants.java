@@ -106,6 +106,14 @@ public final class WorkflowConstants {
         }
     }
 
+    public static final class AssigneeResolveMode {
+        public static final String ALL = "all";
+        public static final String SELECT = "select";
+
+        private AssigneeResolveMode() {
+        }
+    }
+
     public static final class RejectPolicy {
         public static final String TERMINATE = "terminate";
 

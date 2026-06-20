@@ -15,6 +15,7 @@ public class ProcessNodeConfigVO extends BaseVO {
     private String assigneeType;
     private String assigneeJson;
     private String approvalMode;
+    private String assigneeResolveMode;
     private String rejectPolicy;
     private String branchJson;
     private String ccJson;

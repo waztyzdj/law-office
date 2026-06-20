@@ -5,6 +5,7 @@ import type {
   SelectedAssigneeReq,
 } from '#/api/workflow';
 import type { UserInfo } from '#/api/system/user';
+import type { UserPickerMode } from '#/components/user-picker';
 import type { WorkflowAction } from './runtimeTypes';
 
 import { computed } from 'vue';
@@ -26,6 +27,7 @@ interface Props {
   currentTask?: RuntimeTaskInfo;
   draftSelectedAssigneeUsers: UserInfo[];
   fixedSelectNodes: AssigneeSelectNodeInfo[];
+  freeSelectMode: UserPickerMode;
   selectedAssignees: SelectedAssigneeReq[];
   submitting: boolean;
 }
@@ -94,7 +96,7 @@ const excludedActionUserIds = computed(() =>
     @update:open="(value) => emit('update:assigneePickerOpen', value)"
   >
     <UserPickerPanel
-      mode="single"
+      :mode="freeSelectMode"
       org-only
       :selected-users="draftSelectedAssigneeUsers"
       @update:selected-users="(users) => emit('update:draftSelectedAssigneeUsers', users)"

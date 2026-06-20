@@ -369,6 +369,16 @@ public class ProcessModelServiceImpl extends AbstractWorkflowConfigServiceImpl<P
                     WorkflowConstants.ApprovalMode.SINGLE,
                     WorkflowConstants.ApprovalMode.COUNTERSIGN,
                     WorkflowConstants.ApprovalMode.ORSIGN);
+            if (!StringUtils.hasText(nodeConfig.getAssigneeResolveMode())) {
+                throw new IllegalArgumentException("审批节点执行人确定方式不能为空: " + nodeConfig.getNodeName());
+            }
+            validateIn(nodeConfig.getAssigneeResolveMode(), "审批节点执行人确定方式不合法: " + nodeConfig.getNodeName(),
+                    WorkflowConstants.AssigneeResolveMode.ALL,
+                    WorkflowConstants.AssigneeResolveMode.SELECT);
+            if (WorkflowConstants.ApprovalMode.SINGLE.equals(nodeConfig.getApprovalMode())
+                    && !WorkflowConstants.AssigneeResolveMode.SELECT.equals(nodeConfig.getAssigneeResolveMode())) {
+                throw new IllegalArgumentException("单人审批执行人确定方式必须为上一步选择: " + nodeConfig.getNodeName());
+            }
             if (!StringUtils.hasText(nodeConfig.getRejectPolicy())) {
                 throw new IllegalArgumentException("审批节点不通过策略不能为空: " + nodeConfig.getNodeName());
             }

@@ -60,6 +60,7 @@
 | 字段 | 类型 | 默认值 | 说明 |
 | --- | --- | --- | --- |
 | `approval_mode` | `varchar(20)` | `'single'` | 办理策略：`single` 单人审批、`countersign` 并行会签、`orsign` 或签 |
+| `assignee_resolve_mode` | `varchar(20)` | `'select'` | 执行人确定方式：`all` 发送给全部解析人员、`select` 由上一步办理人选择 |
 | `reject_policy` | `varchar(32)` | `'terminate'` | 不通过策略：`terminate` 终止流程；二期会签/或签默认终止 |
 | `branch_json` | `json` | `NULL` | 条件分支配置 JSON，仅条件节点或带分支的网关节点使用 |
 | `cc_json` | `json` | `NULL` | 抄送配置 JSON |
@@ -68,9 +69,11 @@
 
 字段说明：
 
-- `approval_mode=single`：保持一期语义。多人解析时仍按一期规则由上一环节选择单人，除非节点显式配置为会签或或签。
+- `approval_mode=single`：保持一期语义，执行人确定方式固定为 `select`。多人解析时仍按一期规则由上一环节选择单人，除非节点显式配置为会签或或签。
 - `approval_mode=countersign`：并行会签。为每个有效审批人生成待办，所有待办通过后进入下一节点。
 - `approval_mode=orsign`：或签。为多个有效审批人生成可办理任务，任一人完成后取消其它同组任务并进入下一节点。
+- `assignee_resolve_mode=all`：运行时不要求上一步选择，按审批人配置解析出的全部有效人员创建任务；该模式仅用于会签/或签。
+- `assignee_resolve_mode=select`：运行时先让上一步办理人在候选范围内选择实际执行人；单人审批必须选择 1 人，会签/或签可选择 1 个或多个人。
 - `reject_policy=terminate`：任一办理人不通过则流程标记 `rejected` 并取消其它待办。
 - 二期不实现 `reject_policy=continue` 或 `reject_policy=vote`，字段先保留扩展空间。
 
@@ -464,6 +467,12 @@
 - `single`：单人审批。
 - `countersign`：并行会签。
 - `orsign`：或签。
+
+### 执行人确定方式 `assignee_resolve_mode`
+
+- `all`：进入节点时发送给全部解析人员。
+- `select`：进入节点前由上一步办理人在候选范围内选择实际执行人。
+- 单人审批不开放该配置，固定按 `select` 处理。
 
 ### 流程实例状态 `wf_process_instance.status`
 

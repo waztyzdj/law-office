@@ -1,4 +1,9 @@
-export const workflowStatusMap: Record<string, { color: string; label: string }> = {
+export interface WorkflowMeta {
+  color: string;
+  label: string;
+}
+
+export const workflowStatusMap: Record<string, WorkflowMeta> = {
   approved: { color: 'success', label: '已通过' },
   archived: { color: 'default', label: '已归档' },
   canceled: { color: 'default', label: '已取消' },
@@ -55,19 +60,38 @@ export const doneTaskStatusOptions = [{ label: '已办', value: 'done' }];
 
 export const taskTypeMap: Record<string, string> = {
   add_sign: '加签',
+  countersign: '会签',
   normal: '普通',
+  orsign: '或签',
   start_draft: '待提交',
   transfer: '转办',
 };
 
 export const taskTypeOptions = [
   { label: '普通', value: 'normal' },
+  { label: '会签', value: 'countersign' },
+  { label: '或签', value: 'orsign' },
   { label: '待提交', value: 'start_draft' },
   { label: '转办', value: 'transfer' },
   { label: '加签', value: 'add_sign' },
 ];
 
-export const workflowActionMap: Record<string, { color: string; label: string }> = {
+export const approvalModeMap: Record<string, WorkflowMeta> = {
+  countersign: { color: 'purple', label: '会签' },
+  orsign: { color: 'cyan', label: '或签' },
+  single: { color: 'default', label: '单人审批' },
+};
+
+const defaultApprovalModeMeta: WorkflowMeta = { color: 'default', label: '单人审批' };
+
+export const approvalModeOptions = Object.entries(approvalModeMap).map(
+  ([value, meta]) => ({
+    label: meta.label,
+    value,
+  }),
+);
+
+export const workflowActionMap: Record<string, WorkflowMeta> = {
   add_sign: { color: 'purple', label: '加签' },
   approve: { color: 'green', label: '通过' },
   reject: { color: 'red', label: '不通过' },
@@ -99,4 +123,25 @@ export function getWorkflowActionMeta(action?: string) {
   }
 
   return workflowActionMap[action] ?? { color: 'default', label: action };
+}
+
+export function getApprovalModeMeta(approvalMode?: string): WorkflowMeta {
+  if (!approvalMode) {
+    return defaultApprovalModeMeta;
+  }
+
+  return approvalModeMap[approvalMode] ?? { color: 'default', label: approvalMode };
+}
+
+export function formatApprovalProgress(record: {
+  approvalMode?: string;
+  groupCompleted?: number;
+  groupTotal?: number;
+}) {
+  if (!['countersign', 'orsign'].includes(record.approvalMode || '')) {
+    return '';
+  }
+  const completed = Number(record.groupCompleted ?? 0);
+  const total = Number(record.groupTotal ?? 0);
+  return total > 0 ? `${completed}/${total}` : '';
 }

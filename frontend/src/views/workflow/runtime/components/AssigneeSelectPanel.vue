@@ -33,12 +33,12 @@ const emit = defineEmits<{
 }>();
 
 const valueMap = computed(() => {
-  const map = new Map<string, string>();
+  const map = new Map<string, string[]>();
   for (const item of props.value ?? []) {
     const nodeId = item.nodeId;
-    const userId = item.userIds?.[0];
-    if (nodeId && userId) {
-      map.set(nodeId, userId);
+    const userIds = item.userIds?.filter(Boolean) ?? [];
+    if (nodeId && userIds.length) {
+      map.set(nodeId, userIds);
     }
   }
   return map;
@@ -61,13 +61,27 @@ function isFreeSelectNode(node: AssigneeSelectNodeInfo) {
   return node.assigneeType === 'starter_select';
 }
 
+function isMultipleNode(node: AssigneeSelectNodeInfo) {
+  return node.selectType === 'multiple';
+}
+
+function resolveNodeValue(node: AssigneeSelectNodeInfo) {
+  const values = node.nodeId ? valueMap.value.get(node.nodeId) : undefined;
+  return isMultipleNode(node) ? values : values?.[0];
+}
+
 function handleChange(nodeId: string | undefined, value: unknown) {
   if (!nodeId) {
     return;
   }
   const next = [...(props.value ?? [])].filter((item) => item.nodeId !== nodeId);
-  if (typeof value === 'string' && value) {
-    next.push({ nodeId, userIds: [value] });
+  const userIds = Array.isArray(value)
+    ? value.filter((item): item is string => typeof item === 'string' && !!item)
+    : typeof value === 'string' && value
+      ? [value]
+      : [];
+  if (userIds.length) {
+    next.push({ nodeId, userIds });
   }
   emit('update:value', next);
 }
@@ -106,19 +120,20 @@ function handleUserPickerChange(nodeId: string | undefined, value: unknown) {
           <UserPicker
             v-if="isFreeSelectNode(node)"
             :disabled="disabled"
-            mode="single"
+            :mode="isMultipleNode(node) ? 'multiple' : 'single'"
             placeholder="请选择下一审批人"
-            :value="node.nodeId ? valueMap.get(node.nodeId) : undefined"
+            :value="resolveNodeValue(node)"
             @update:value="(nextValue) => handleUserPickerChange(node.nodeId, nextValue)"
           />
           <Select
             v-else
             :disabled="disabled"
+            :mode="isMultipleNode(node) ? 'multiple' : undefined"
             :options="buildOptions(node)"
             option-filter-prop="label"
             placeholder="请选择审批人"
             show-search
-            :value="node.nodeId ? valueMap.get(node.nodeId) : undefined"
+            :value="resolveNodeValue(node)"
             @update:value="(nextValue) => handleChange(node.nodeId, nextValue)"
           />
           <Tag

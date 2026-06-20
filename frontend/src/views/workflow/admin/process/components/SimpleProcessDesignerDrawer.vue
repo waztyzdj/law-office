@@ -41,6 +41,7 @@ interface SimpleNode {
   allowReturn: boolean;
   allowTransfer: boolean;
   approvalMode: ApprovalMode;
+  assigneeResolveMode: AssigneeResolveMode;
   assigneeJson: Record<string, unknown>;
   assigneeType: string;
   id: string;
@@ -54,6 +55,7 @@ interface SimpleFlowJson {
 }
 
 type ApprovalMode = 'single' | 'countersign' | 'orsign';
+type AssigneeResolveMode = 'all' | 'select';
 
 const approvalModeOptions = [
   { label: '单人审批', value: 'single' },
@@ -107,6 +109,10 @@ function normalizeNode(raw: Record<string, any>, index: number): SimpleNode {
     allowReturn: raw.allowReturn ?? true,
     allowTransfer: raw.allowTransfer ?? true,
     approvalMode: normalizeApprovalMode(raw.approvalMode),
+    assigneeResolveMode: normalizeAssigneeResolveMode(
+      raw.assigneeResolveMode,
+      raw.approvalMode,
+    ),
     assigneeJson: raw.assigneeJson || {},
     assigneeType,
     id: raw.id || raw.nodeId || `approve_${index + 1}`,
@@ -119,6 +125,33 @@ function normalizeNode(raw: Record<string, any>, index: number): SimpleNode {
 function normalizeApprovalMode(value: unknown): ApprovalMode {
   return value === 'countersign' || value === 'orsign' ? value : 'single';
 }
+
+function defaultAssigneeResolveMode(approvalMode: unknown): AssigneeResolveMode {
+  return normalizeApprovalMode(approvalMode) === 'orsign' ? 'all' : 'select';
+}
+
+function resolveAssigneeResolveMode(
+  value: unknown,
+  approvalMode: unknown,
+): AssigneeResolveMode {
+  return normalizeApprovalMode(approvalMode) === 'single'
+    ? 'select'
+    : normalizeAssigneeResolveMode(value, approvalMode);
+}
+
+function normalizeAssigneeResolveMode(
+  value: unknown,
+  approvalMode: unknown,
+): AssigneeResolveMode {
+  return value === 'all' || value === 'select'
+    ? value
+    : defaultAssigneeResolveMode(approvalMode);
+}
+
+const assigneeResolveModeOptions = [
+  { label: '发送全部', value: 'all' },
+  { label: '上一步选择', value: 'select' },
+];
 
 function buildNodesFromProcess(process: WorkflowProcessModelInfo, configs: WorkflowProcessNodeConfigInfo[]) {
   const parsed = parseJsonValue<SimpleFlowJson>(process.nodeJson, { nodes: [] });
@@ -140,6 +173,7 @@ function buildNodesFromProcess(process: WorkflowProcessModelInfo, configs: Workf
           allowReturn: item.allowReturn === 1,
           allowTransfer: item.allowTransfer === 1,
           approvalMode: item.approvalMode,
+          assigneeResolveMode: item.assigneeResolveMode,
           assigneeJson: parseJsonValue<Record<string, unknown>>(item.assigneeJson, {}),
           assigneeType: item.assigneeType,
           id: item.nodeId,
@@ -160,6 +194,10 @@ function buildNodeJson() {
         allowReturn: node.allowReturn,
         allowTransfer: node.allowTransfer,
         approvalMode: node.approvalMode,
+        assigneeResolveMode: resolveAssigneeResolveMode(
+          node.assigneeResolveMode,
+          node.approvalMode,
+        ),
         assigneeJson: node.assigneeJson || {},
         assigneeType: node.assigneeType,
         id: node.id,
@@ -220,6 +258,7 @@ function handleAddNode() {
     allowReturn: true,
     allowTransfer: true,
     approvalMode: 'single',
+    assigneeResolveMode: 'select',
     assigneeJson: {},
     assigneeType: 'starter',
     id: `approve_${Date.now()}`,
@@ -227,6 +266,10 @@ function handleAddNode() {
     rejectPolicy: 'terminate',
     type: 'approver',
   });
+}
+
+function handleApprovalModeChange(node: SimpleNode) {
+  node.assigneeResolveMode = defaultAssigneeResolveMode(node.approvalMode);
 }
 
 function handleRemoveNode(index: number) {
@@ -302,6 +345,10 @@ async function saveNodeConfigs(processId: string) {
       allowReturn: node.allowReturn ? 1 : 0,
       allowTransfer: node.allowTransfer ? 1 : 0,
       approvalMode: node.approvalMode || 'single',
+      assigneeResolveMode: resolveAssigneeResolveMode(
+        node.assigneeResolveMode,
+        node.approvalMode,
+      ),
       assigneeJson: JSON.stringify(node.assigneeJson || {}),
       assigneeType: node.assigneeType,
       nodeId: node.id,
@@ -470,6 +517,19 @@ defineExpose({
                   v-model:value="node.approvalMode"
                   :disabled="isPublished"
                   :options="approvalModeOptions"
+                  button-style="solid"
+                  option-type="button"
+                  @change="handleApprovalModeChange(node)"
+                />
+              </FormItem>
+              <FormItem
+                v-if="node.approvalMode !== 'single'"
+                label="执行人确定方式"
+              >
+                <RadioGroup
+                  v-model:value="node.assigneeResolveMode"
+                  :disabled="isPublished"
+                  :options="assigneeResolveModeOptions"
                   button-style="solid"
                   option-type="button"
                 />

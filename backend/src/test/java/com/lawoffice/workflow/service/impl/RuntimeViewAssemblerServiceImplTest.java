@@ -12,6 +12,7 @@ import com.lawoffice.workflow.mapper.FormInstanceMapper;
 import com.lawoffice.workflow.mapper.ProcessInstanceMapper;
 import com.lawoffice.workflow.mapper.ProcessModelMapper;
 import com.lawoffice.workflow.mapper.TaskCandidateMapper;
+import com.lawoffice.workflow.mapper.TaskMapper;
 import com.lawoffice.workflow.service.IAssigneeResolveService;
 import com.lawoffice.workflow.service.IProcessNodeConfigService;
 import com.lawoffice.workflow.vo.AssigneeSelectNodeVO;
@@ -32,6 +33,8 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.same;
 import static org.mockito.Mockito.verifyNoInteractions;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -51,6 +54,8 @@ class RuntimeViewAssemblerServiceImplTest {
     @Mock
     private TaskCandidateMapper taskCandidateMapper;
     @Mock
+    private TaskMapper taskMapper;
+    @Mock
     private IAssigneeResolveService assigneeResolveService;
     @Mock
     private IProcessNodeConfigService processNodeConfigService;
@@ -65,6 +70,7 @@ class RuntimeViewAssemblerServiceImplTest {
                 formInstanceMapper,
                 processInstanceMapper,
                 taskCandidateMapper,
+                taskMapper,
                 assigneeResolveService,
                 processNodeConfigService
         );
@@ -92,6 +98,10 @@ class RuntimeViewAssemblerServiceImplTest {
         assertEquals(task.getId(), vo.getTaskId());
         assertEquals(processInstance.getId(), vo.getProcessInstanceId());
         assertEquals(formInstance.getFormDefinitionId(), vo.getFormDefinitionId());
+        assertEquals(task.getApprovalMode(), vo.getApprovalMode());
+        assertEquals(task.getTaskGroupId(), vo.getTaskGroupId());
+        assertEquals(task.getGroupTotal(), vo.getGroupTotal());
+        assertEquals(task.getGroupCompleted(), vo.getGroupCompleted());
         assertTrue(vo.getActionPermissions().getAllowApprove());
         assertTrue(vo.getActionPermissions().getAllowReject());
         assertTrue(vo.getActionPermissions().getAllowTransfer());
@@ -131,6 +141,56 @@ class RuntimeViewAssemblerServiceImplTest {
     }
 
     @Test
+    void shouldHideNextAssigneeSelectionBeforeCountersignLastApprover() {
+        Task task = task(WorkflowConstants.TaskType.COUNTERSIGN, "approve_2");
+        task.setApprovalMode(WorkflowConstants.ApprovalMode.COUNTERSIGN);
+        task.setTaskGroupId("group-1");
+        task.setGroupTotal(2);
+        task.setGroupCompleted(0);
+        ProcessInstance processInstance = processInstance();
+        FormInstance formInstance = formInstance();
+        ProcessNodeConfig nodeConfig = nodeConfig("approve_2", "会签审批", 1, 1, 1);
+        FieldPermission permission = fieldPermission("reason", WorkflowConstants.FieldPermission.EDITABLE, 1);
+
+        when(processNodeConfigService.listReturnableNodeConfigs(processInstance, nodeConfig, TENANT_ID))
+                .thenReturn(List.of());
+        when(taskMapper.selectCount(any(Wrapper.class))).thenReturn(0L);
+
+        TaskFormVO vo = service.buildTaskForm(
+                task, processInstance, formInstance, List.of(permission), nodeConfig);
+
+        assertTrue(vo.getAssigneeSelectNodes().isEmpty());
+        verify(assigneeResolveService, never()).buildRequiredAssigneeSelectNodes(
+                any(), any(), any(), any());
+    }
+
+    @Test
+    void shouldShowNextAssigneeSelectionForCountersignLastApprover() {
+        Task task = task(WorkflowConstants.TaskType.COUNTERSIGN, "approve_2");
+        task.setApprovalMode(WorkflowConstants.ApprovalMode.COUNTERSIGN);
+        task.setTaskGroupId("group-1");
+        task.setGroupTotal(2);
+        task.setGroupCompleted(1);
+        ProcessInstance processInstance = processInstance();
+        FormInstance formInstance = formInstance();
+        ProcessNodeConfig nodeConfig = nodeConfig("approve_2", "会签审批", 1, 1, 1);
+        FieldPermission permission = fieldPermission("reason", WorkflowConstants.FieldPermission.EDITABLE, 1);
+        AssigneeSelectNodeVO selectNode = assigneeSelectNode("approve_3");
+
+        when(processNodeConfigService.listReturnableNodeConfigs(processInstance, nodeConfig, TENANT_ID))
+                .thenReturn(List.of());
+        when(taskMapper.selectCount(any(Wrapper.class))).thenReturn(1L);
+        when(assigneeResolveService.buildRequiredAssigneeSelectNodes(
+                eq(PROCESS_MODEL_ID), same(processInstance), eq(TENANT_ID), eq("approve_2")))
+                .thenReturn(List.of(selectNode));
+
+        TaskFormVO vo = service.buildTaskForm(
+                task, processInstance, formInstance, List.of(permission), nodeConfig);
+
+        assertEquals("approve_3", vo.getAssigneeSelectNodes().get(0).getNodeId());
+    }
+
+    @Test
     void shouldBuildRuntimeTaskRecordsWithInstanceSummary() {
         Task task = task(WorkflowConstants.TaskType.NORMAL, "approve_1");
         ProcessInstance processInstance = processInstance();
@@ -156,6 +216,7 @@ class RuntimeViewAssemblerServiceImplTest {
         task.setNodeId(nodeId);
         task.setTaskName("审批");
         task.setTaskType(taskType);
+        task.setApprovalMode(WorkflowConstants.ApprovalMode.SINGLE);
         task.setAssigneeUserId("assignee-1");
         task.setAssigneeUsername("assignee");
         task.setAssigneeRealname("审批人");

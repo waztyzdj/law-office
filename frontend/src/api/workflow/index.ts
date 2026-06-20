@@ -67,6 +67,7 @@ export interface WorkflowProcessNodeConfigInfo {
   allowReturn?: number;
   allowTransfer?: number;
   approvalMode?: string;
+  assigneeResolveMode?: string;
   assigneeJson?: string;
   assigneeType?: string;
   nodeId?: string;
@@ -119,22 +120,29 @@ export interface AvailableProcessPageReq extends BasePageReq {
 
 export interface RuntimeTaskInfo {
   id?: string;
+  approvalMode?: string;
   assigneeRealname?: string;
   assigneeUserId?: string;
   assigneeUsername?: string;
   candidateAssigneeNames?: string;
   claimTime?: string;
   completeTime?: string;
+  dueTime?: string;
   flowableTaskId?: string;
+  groupCompleted?: number;
+  groupTotal?: number;
   instanceNo?: string;
   instanceTitle?: string;
+  lastRemindTime?: string;
   nodeId?: string;
   processInstanceId?: string;
+  remindCount?: number;
   startTime?: string;
   starterRealname?: string;
   starterUserId?: string;
   starterUsername?: string;
   status?: string;
+  taskGroupId?: string;
   taskName?: string;
   taskType?: string;
 }
@@ -274,6 +282,7 @@ export interface RuntimeFieldPermissionInfo {
 
 export interface TaskFormInfo {
   actionPermissions?: TaskActionPermissionInfo;
+  approvalMode?: string;
   assigneeSelectNodes?: AssigneeSelectNodeInfo[];
   fieldPermissions?: RuntimeFieldPermissionInfo[];
   formDataJson?: string;
@@ -290,6 +299,9 @@ export interface TaskFormInfo {
   processInstanceId?: string;
   returnNodes?: TaskReturnNodeInfo[];
   schemaJson?: string;
+  taskGroupId?: string;
+  groupCompleted?: number;
+  groupTotal?: number;
   taskId?: string;
   taskName?: string;
   taskType?: string;

@@ -52,6 +52,44 @@ class ProcessNodeConfigServiceImplTest {
     }
 
     @Test
+    void shouldDefaultAssigneeResolveModeByApprovalMode() {
+        ProcessNodeConfig countersign = baseApprover();
+        countersign.setApprovalMode(WorkflowConstants.ApprovalMode.COUNTERSIGN);
+        service.doBeforeSave(saveDTO(countersign));
+
+        assertEquals(WorkflowConstants.AssigneeResolveMode.SELECT, countersign.getAssigneeResolveMode());
+
+        ProcessNodeConfig orsign = baseApprover();
+        orsign.setApprovalMode(WorkflowConstants.ApprovalMode.ORSIGN);
+        service.doBeforeSave(saveDTO(orsign));
+
+        assertEquals(WorkflowConstants.AssigneeResolveMode.ALL, orsign.getAssigneeResolveMode());
+    }
+
+    @Test
+    void shouldRejectInvalidAssigneeResolveMode() {
+        ProcessNodeConfig config = baseApprover();
+        config.setApprovalMode(WorkflowConstants.ApprovalMode.COUNTERSIGN);
+        config.setAssigneeResolveMode("invalid");
+
+        IllegalArgumentException exception = assertThrows(IllegalArgumentException.class,
+                () -> service.doBeforeSave(saveDTO(config)));
+
+        assertEquals("执行人确定方式不合法", exception.getMessage());
+    }
+
+    @Test
+    void shouldForceSingleApprovalResolveModeToSelect() {
+        ProcessNodeConfig config = baseApprover();
+        config.setApprovalMode(WorkflowConstants.ApprovalMode.SINGLE);
+        config.setAssigneeResolveMode(WorkflowConstants.AssigneeResolveMode.ALL);
+
+        service.doBeforeSave(saveDTO(config));
+
+        assertEquals(WorkflowConstants.AssigneeResolveMode.SELECT, config.getAssigneeResolveMode());
+    }
+
+    @Test
     void shouldRejectGatewayWithoutDefaultBranch() {
         ProcessNodeConfig config = new ProcessNodeConfig();
         config.setTenantId(TENANT_ID);

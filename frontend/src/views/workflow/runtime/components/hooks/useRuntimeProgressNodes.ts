@@ -9,7 +9,10 @@ import type { ProcessProgressNode } from '../runtimeTypes';
 
 import { computed } from 'vue';
 
-import { getStatusMeta } from '../../../components/status';
+import {
+  formatApprovalProgress,
+  getStatusMeta,
+} from '../../../components/status';
 
 export function useRuntimeProgressNodes(
   detail: Ref<InstanceDetailInfo | undefined>,
@@ -37,7 +40,9 @@ export function useRuntimeProgressNodes(
 
     currentTasks.value.forEach((task, index) => {
       nodes.push({
+        approvalMode: task.approvalMode,
         actor: formatTaskActor(task),
+        groupProgress: formatApprovalProgress(task),
         id: task.id ?? `current-${index}`,
         name: task.taskName ?? task.nodeId ?? '当前任务',
         status: 'current',

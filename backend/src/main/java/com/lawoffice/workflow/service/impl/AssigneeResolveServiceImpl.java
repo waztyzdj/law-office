@@ -63,6 +63,7 @@ public class AssigneeResolveServiceImpl implements IAssigneeResolveService {
 
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
     private static final String SELECT_TYPE_SINGLE = "single";
+    private static final String SELECT_TYPE_MULTIPLE = "multiple";
 
     private record ResolvedAssignee(String userId, String username, String realname, String sourceType, String sourceId) {
     }
@@ -233,27 +234,7 @@ public class AssigneeResolveServiceImpl implements IAssigneeResolveService {
             ProcessNodeConfig nodeConfig = requireNodeConfig(processInstance.getProcessModelId(), flowableTask.getTaskDefinitionKey(), tenantId);
             List<ResolvedAssignee> assignees = resolveTaskAssigneesForInstance(nodeConfig, processInstance, tenantId);
             applyFlowableAssignees(flowableTask.getTaskId(), assignees);
-
-            Task task = new Task();
-            task.setTenantId(tenantId);
-            task.setProcessInstanceId(processInstance.getId());
-            task.setFlowableTaskId(flowableTask.getTaskId());
-            task.setNodeId(flowableTask.getTaskDefinitionKey());
-            task.setTaskName(flowableTask.getTaskName());
-            task.setTaskType(WorkflowConstants.TaskType.NORMAL);
-            task.setOwnerUsername(flowableTask.getOwner());
-            if (assignees.size() == 1) {
-                ResolvedAssignee assignee = assignees.get(0);
-                task.setAssigneeUserId(assignee.userId());
-                task.setAssigneeUsername(assignee.username());
-                task.setAssigneeRealname(assignee.realname());
-            }
-            task.setStatus(WorkflowConstants.Status.TODO);
-            EntityFillUtils.fillAuditFields(task, context, true);
-            taskMapper.insert(task);
-            if (assignees.size() > 1) {
-                createTaskCandidates(task, assignees, context);
-            }
+            createRuntimeTasks(processInstance, flowableTask, nodeConfig, assignees, context);
         }
         instanceStateService.refreshCurrentTaskSummary(processInstance, tenantId);
     }
@@ -399,6 +380,9 @@ public class AssigneeResolveServiceImpl implements IAssigneeResolveService {
                 || WorkflowConstants.AssigneeType.STARTER_SELECT.equals(nodeConfig.getAssigneeType());
     }
 
+    /**
+     * 只有配置为上一步选择时，才把候选范围暴露给当前办理人；发送全部模式直接由运行时创建任务。
+     */
     private AssigneeSelectNodeVO buildAssigneeSelectNode(ProcessNodeConfig nodeConfig,
             ProcessInstance processInstance, String tenantId) {
         if (WorkflowConstants.AssigneeType.STARTER_SELECT.equals(nodeConfig.getAssigneeType())) {
@@ -410,14 +394,18 @@ public class AssigneeResolveServiceImpl implements IAssigneeResolveService {
         } catch (IllegalArgumentException e) {
             return buildStarterSelectNode(nodeConfig, true);
         }
-        if (assignees.size() <= 1 || !requiresExplicitAssigneeSelection(nodeConfig)) {
+        if (!WorkflowConstants.AssigneeResolveMode.SELECT.equals(normalizeAssigneeResolveMode(nodeConfig))) {
+            return null;
+        }
+        if (assignees.size() <= 1
+                || !requiresExplicitAssigneeSelection(nodeConfig)) {
             return null;
         }
         AssigneeSelectNodeVO vo = new AssigneeSelectNodeVO();
         vo.setNodeId(nodeConfig.getNodeId());
         vo.setNodeName(nodeConfig.getNodeName());
         vo.setAssigneeType(nodeConfig.getAssigneeType());
-        vo.setSelectType(SELECT_TYPE_SINGLE);
+        vo.setSelectType(resolveSelectType(nodeConfig.getApprovalMode()));
         vo.setRequired(true);
         vo.setOptions(assignees.stream().map(this::buildAssigneeOption).toList());
         return vo;
@@ -428,7 +416,7 @@ public class AssigneeResolveServiceImpl implements IAssigneeResolveService {
         vo.setNodeId(nodeConfig.getNodeId());
         vo.setNodeName(nodeConfig.getNodeName());
         vo.setAssigneeType(WorkflowConstants.AssigneeType.STARTER_SELECT);
-        vo.setSelectType(SELECT_TYPE_SINGLE);
+        vo.setSelectType(resolveSelectType(nodeConfig.getApprovalMode()));
         vo.setRequired(true);
         vo.setFallback(fallback);
         if (fallback) {
@@ -483,29 +471,35 @@ public class AssigneeResolveServiceImpl implements IAssigneeResolveService {
             List<String> selectedUserIds = selected == null || selected.getUserIds() == null
                     ? List.of()
                     : selected.getUserIds().stream().filter(StringUtils::hasText).distinct().toList();
-            if (selectedUserIds.size() != 1) {
+            if (SELECT_TYPE_MULTIPLE.equals(node.getSelectType())) {
+                if (selectedUserIds.isEmpty()) {
+                    throw new IllegalArgumentException("请选择节点审批人: " + node.getNodeName());
+                }
+            } else if (selectedUserIds.size() != 1) {
                 throw new IllegalArgumentException("请选择节点审批人: " + node.getNodeName());
             }
-            ResolvedAssignee selectedAssignee = resolveSelectedAssignee(node, selectedUserIds.get(0), tenantId);
-            if (selectedAssignee == null) {
-                throw new IllegalArgumentException("节点审批人不在允许范围内: " + node.getNodeName());
+            for (String selectedUserId : selectedUserIds) {
+                ResolvedAssignee selectedAssignee = resolveSelectedAssignee(node, selectedUserId, tenantId);
+                if (selectedAssignee == null) {
+                    throw new IllegalArgumentException("节点审批人不在允许范围内: " + node.getNodeName());
+                }
+                ProcessInstanceAssignee snapshot = new ProcessInstanceAssignee();
+                snapshot.setTenantId(tenantId);
+                snapshot.setProcessInstanceId(processInstance.getId());
+                snapshot.setProcessModelId(processInstance.getProcessModelId());
+                snapshot.setNodeId(node.getNodeId());
+                snapshot.setNodeName(node.getNodeName());
+                snapshot.setAssigneeType(node.getAssigneeType());
+                snapshot.setAssigneeUserId(selectedAssignee.userId());
+                snapshot.setAssigneeUsername(selectedAssignee.username());
+                snapshot.setAssigneeRealname(selectedAssignee.realname());
+                snapshot.setSourceType(selectedAssignee.sourceType());
+                snapshot.setSourceId(selectedAssignee.sourceId());
+                snapshot.setSelectType(node.getSelectType());
+                snapshot.setStatus(WorkflowConstants.Status.ACTIVE);
+                EntityFillUtils.fillAuditFields(snapshot, context, true);
+                processInstanceAssigneeMapper.insert(snapshot);
             }
-            ProcessInstanceAssignee snapshot = new ProcessInstanceAssignee();
-            snapshot.setTenantId(tenantId);
-            snapshot.setProcessInstanceId(processInstance.getId());
-            snapshot.setProcessModelId(processInstance.getProcessModelId());
-            snapshot.setNodeId(node.getNodeId());
-            snapshot.setNodeName(node.getNodeName());
-            snapshot.setAssigneeType(node.getAssigneeType());
-            snapshot.setAssigneeUserId(selectedAssignee.userId());
-            snapshot.setAssigneeUsername(selectedAssignee.username());
-            snapshot.setAssigneeRealname(selectedAssignee.realname());
-            snapshot.setSourceType(selectedAssignee.sourceType());
-            snapshot.setSourceId(selectedAssignee.sourceId());
-            snapshot.setSelectType(node.getSelectType());
-            snapshot.setStatus(WorkflowConstants.Status.ACTIVE);
-            EntityFillUtils.fillAuditFields(snapshot, context, true);
-            processInstanceAssigneeMapper.insert(snapshot);
         }
     }
 
@@ -546,7 +540,9 @@ public class AssigneeResolveServiceImpl implements IAssigneeResolveService {
             throw new IllegalArgumentException("请选择下一审批人: " + nodeConfig.getNodeName());
         }
         List<ResolvedAssignee> assignees = resolveTaskAssignees(nodeConfig, processInstance, tenantId);
-        if (requiresExplicitAssigneeSelection(nodeConfig) && assignees.size() > 1) {
+        if (requiresExplicitAssigneeSelection(nodeConfig)
+                && WorkflowConstants.AssigneeResolveMode.SELECT.equals(normalizeAssigneeResolveMode(nodeConfig))
+                && assignees.size() > 1) {
             throw new IllegalArgumentException("节点存在多个可选审批人，请选择后再提交: " + nodeConfig.getNodeName());
         }
         return assignees;
@@ -761,6 +757,110 @@ public class AssigneeResolveServiceImpl implements IAssigneeResolveService {
                 .toList());
     }
 
+    /**
+     * 根据节点办理策略生成业务任务。会签/或签需要多条 wf_task 表达多个办理人，
+     * 但 Flowable 只有一个用户任务令牌，因此只让组内第一条任务持有真实 Flowable taskId。
+     */
+    private void createRuntimeTasks(ProcessInstance processInstance, FlowableTaskInfo flowableTask,
+            ProcessNodeConfig nodeConfig, List<ResolvedAssignee> assignees, RequestContext context) {
+        String approvalMode = normalizeApprovalMode(nodeConfig.getApprovalMode());
+        if (!isMultiApprovalMode(approvalMode)) {
+            createSingleRuntimeTask(processInstance, flowableTask, approvalMode, assignees, context);
+            return;
+        }
+        createGroupRuntimeTasks(processInstance, flowableTask, approvalMode, assignees, context);
+    }
+
+    /**
+     * 单人审批保留一期语义：解析出一人时直接分配，解析出多人时仍作为候选抢办处理。
+     */
+    private void createSingleRuntimeTask(ProcessInstance processInstance, FlowableTaskInfo flowableTask,
+            String approvalMode, List<ResolvedAssignee> assignees, RequestContext context) {
+        Task task = buildBaseTask(processInstance, flowableTask, WorkflowConstants.TaskType.NORMAL, approvalMode);
+        if (assignees.size() == 1) {
+            fillTaskAssignee(task, assignees.get(0));
+        }
+        EntityFillUtils.fillAuditFields(task, context, true);
+        taskMapper.insert(task);
+        if (assignees.size() > 1) {
+            createTaskCandidates(task, assignees, context);
+        }
+    }
+
+    /**
+     * 会签/或签为每个办理人创建独立业务待办，同组任务用 taskGroupId 关联。
+     * 其它任务使用本地 Flowable 标识是为了避开 wf_task 的唯一索引，真实引擎任务由组内锚点任务保存。
+     */
+    private void createGroupRuntimeTasks(ProcessInstance processInstance, FlowableTaskInfo flowableTask,
+            String approvalMode, List<ResolvedAssignee> assignees, RequestContext context) {
+        String groupId = newId();
+        String anchorTaskId = null;
+        for (int i = 0; i < assignees.size(); i++) {
+            ResolvedAssignee assignee = assignees.get(i);
+            Task task = buildBaseTask(processInstance, flowableTask, approvalMode, approvalMode);
+            task.setId(newId());
+            task.setTaskGroupId(groupId);
+            task.setGroupTotal(assignees.size());
+            task.setGroupCompleted(0);
+            if (i == 0) {
+                anchorTaskId = task.getId();
+            } else {
+                task.setParentTaskId(anchorTaskId);
+                task.setFlowableTaskId("group:" + task.getId());
+            }
+            fillTaskAssignee(task, assignee);
+            EntityFillUtils.fillAuditFields(task, context, true);
+            taskMapper.insert(task);
+        }
+    }
+
+    private Task buildBaseTask(ProcessInstance processInstance, FlowableTaskInfo flowableTask,
+            String taskType, String approvalMode) {
+        Task task = new Task();
+        task.setTenantId(processInstance.getTenantId());
+        task.setProcessInstanceId(processInstance.getId());
+        task.setFlowableTaskId(flowableTask.getTaskId());
+        task.setNodeId(flowableTask.getTaskDefinitionKey());
+        task.setTaskName(flowableTask.getTaskName());
+        task.setTaskType(taskType);
+        task.setApprovalMode(approvalMode);
+        task.setOwnerUsername(flowableTask.getOwner());
+        task.setStatus(WorkflowConstants.Status.TODO);
+        return task;
+    }
+
+    private void fillTaskAssignee(Task task, ResolvedAssignee assignee) {
+        task.setAssigneeUserId(assignee.userId());
+        task.setAssigneeUsername(assignee.username());
+        task.setAssigneeRealname(assignee.realname());
+    }
+
+    private String resolveSelectType(String approvalMode) {
+        return isMultiApprovalMode(approvalMode) ? SELECT_TYPE_MULTIPLE : SELECT_TYPE_SINGLE;
+    }
+
+    private boolean isMultiApprovalMode(String approvalMode) {
+        return WorkflowConstants.ApprovalMode.COUNTERSIGN.equals(approvalMode)
+                || WorkflowConstants.ApprovalMode.ORSIGN.equals(approvalMode);
+    }
+
+    private String normalizeApprovalMode(String approvalMode) {
+        return isMultiApprovalMode(approvalMode) ? approvalMode : WorkflowConstants.ApprovalMode.SINGLE;
+    }
+
+    private String normalizeAssigneeResolveMode(ProcessNodeConfig nodeConfig) {
+        if (WorkflowConstants.ApprovalMode.SINGLE.equals(normalizeApprovalMode(nodeConfig.getApprovalMode()))) {
+            return WorkflowConstants.AssigneeResolveMode.SELECT;
+        }
+        if (WorkflowConstants.AssigneeResolveMode.ALL.equals(nodeConfig.getAssigneeResolveMode())
+                || WorkflowConstants.AssigneeResolveMode.SELECT.equals(nodeConfig.getAssigneeResolveMode())) {
+            return nodeConfig.getAssigneeResolveMode();
+        }
+        return WorkflowConstants.ApprovalMode.ORSIGN.equals(normalizeApprovalMode(nodeConfig.getApprovalMode()))
+                ? WorkflowConstants.AssigneeResolveMode.ALL
+                : WorkflowConstants.AssigneeResolveMode.SELECT;
+    }
+
     private void createTaskCandidates(Task task, List<ResolvedAssignee> assignees, RequestContext context) {
         for (ResolvedAssignee assignee : assignees) {
             TaskCandidate candidate = new TaskCandidate();
@@ -791,5 +891,9 @@ public class AssigneeResolveServiceImpl implements IAssigneeResolveService {
             throw new IllegalArgumentException("流程节点审批人类型不能为空: " + nodeConfig.getNodeName());
         }
         return nodeConfig;
+    }
+
+    private String newId() {
+        return java.util.UUID.randomUUID().toString().replace("-", "");
     }
 }

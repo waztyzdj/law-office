@@ -44,6 +44,7 @@ public class BpmnSecurityServiceImpl implements IBpmnSecurityService {
             "BPMNPlane",
             "BPMNShape",
             "BPMNEdge",
+            "BPMNLabel",
             "Bounds",
             "waypoint"
     );
