@@ -31,6 +31,7 @@ import org.springframework.util.StringUtils;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 @Slf4j
@@ -192,29 +193,50 @@ public class DepartRoleServiceImpl extends BaseServiceImpl<DepartRoleMapper, Dep
             throw new IllegalArgumentException("部门默认角色用户由部门成员自动维护");
         }
 
-        // 先删除部门角色现有的所有用户
-        LambdaUpdateWrapper<DepartRoleUser> deleteWrapper = new LambdaUpdateWrapper<>();
-        deleteWrapper.eq(DepartRoleUser::getDroleId, departRoleId)
-                .eq(DepartRoleUser::getDeleteFlag, 0);
-        logicDeleteByWrapper(departRoleUserMapper, new DepartRoleUser(), deleteWrapper, resolveDeleteBy(null));
-
-        // 批量插入新的用户关联
-        if (userIds != null && !userIds.isEmpty()) {
-            List<DepartRoleUser> roleUsers = userIds.stream()
-                .map(userId -> {
-                    DepartRoleUser roleUser = new DepartRoleUser();
-                    roleUser.setDroleId(departRoleId);
-                    roleUser.setUserId(userId);
-                    return roleUser;
-                })
+        List<String> targetUserIds = userIds == null ? List.of() : userIds.stream()
+                .filter(StringUtils::hasText)
+                .distinct()
                 .collect(Collectors.toList());
 
-            for (DepartRoleUser roleUser : roleUsers) {
-                departRoleUserMapper.insert(roleUser);
-            }
+        LambdaQueryWrapper<DepartRoleUser> queryWrapper = new LambdaQueryWrapper<>();
+        queryWrapper.eq(DepartRoleUser::getDroleId, departRoleId)
+                .eq(DepartRoleUser::getDeleteFlag, 0);
+        List<DepartRoleUser> existingRoleUsers = departRoleUserMapper.selectList(queryWrapper);
+
+        // 只软删本次移除的成员，避免未变化成员软删时撞上历史 delete_flag=1 唯一索引。
+        Set<String> targetUserIdSet = Set.copyOf(targetUserIds);
+        List<String> staleUserIds = existingRoleUsers.stream()
+                .map(DepartRoleUser::getUserId)
+                .filter(StringUtils::hasText)
+                .filter(userId -> !targetUserIdSet.contains(userId))
+                .distinct()
+                .collect(Collectors.toList());
+        if (!staleUserIds.isEmpty()) {
+            LambdaUpdateWrapper<DepartRoleUser> deleteWrapper = new LambdaUpdateWrapper<>();
+            deleteWrapper.eq(DepartRoleUser::getDroleId, departRoleId)
+                    .in(DepartRoleUser::getUserId, staleUserIds)
+                    .eq(DepartRoleUser::getDeleteFlag, 0);
+            logicDeleteByWrapper(departRoleUserMapper, new DepartRoleUser(), deleteWrapper, resolveDeleteBy(null));
         }
 
-        log.info("为部门角色分配用户成功，部门角色ID: {}, 用户数量: {}", departRoleId, userIds == null ? 0 : userIds.size());
+        Set<String> existingUserIds = existingRoleUsers.stream()
+                .map(DepartRoleUser::getUserId)
+                .filter(StringUtils::hasText)
+                .collect(Collectors.toSet());
+        for (String userId : targetUserIds) {
+            if (existingUserIds.contains(userId)) {
+                continue;
+            }
+            DepartRoleUser roleUser = new DepartRoleUser();
+            roleUser.setDroleId(departRoleId);
+            roleUser.setUserId(userId);
+            if (StringUtils.hasText(role.getTenantId())) {
+                roleUser.setTenantId(role.getTenantId());
+            }
+            departRoleUserMapper.insert(roleUser);
+        }
+
+        log.info("为部门角色分配用户成功，部门角色ID: {}, 用户数量: {}", departRoleId, targetUserIds.size());
     }
 
     @Override

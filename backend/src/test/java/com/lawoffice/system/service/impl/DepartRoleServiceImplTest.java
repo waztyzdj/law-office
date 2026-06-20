@@ -3,6 +3,7 @@ package com.lawoffice.system.service.impl;
 import com.baomidou.mybatisplus.core.conditions.Wrapper;
 import com.lawoffice.framework.dto.BaseDTO;
 import com.lawoffice.system.entity.DepartRole;
+import com.lawoffice.system.entity.DepartRoleUser;
 import com.lawoffice.system.entity.SysDepart;
 import com.lawoffice.system.mapper.DepartRoleMapper;
 import com.lawoffice.system.mapper.DepartRolePermissionMapper;
@@ -13,6 +14,7 @@ import com.lawoffice.system.mapper.UserMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.test.util.ReflectionTestUtils;
@@ -22,6 +24,8 @@ import java.util.List;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -101,6 +105,27 @@ class DepartRoleServiceImplTest {
     }
 
     @Test
+    void shouldAssignUsersByDiffWithoutDeletingUnchangedRelations() {
+        DepartRole role = buildCustomRole();
+        role.setTenantId("tenant-1");
+
+        when(departRoleMapper.selectById("role-2")).thenReturn(role);
+        when(sysDepartMapper.selectById("depart-1")).thenReturn(buildDepart());
+        when(departRoleUserMapper.selectList(any(Wrapper.class)))
+                .thenReturn(List.of(buildRoleUser("user-1"), buildRoleUser("user-2")));
+
+        service.assignUsers("role-2", List.of("user-1", "user-2", "user-3", "user-3", ""));
+
+        verify(departRoleUserMapper, never()).update(any(), any());
+        ArgumentCaptor<DepartRoleUser> insertCaptor = ArgumentCaptor.forClass(DepartRoleUser.class);
+        verify(departRoleUserMapper).insert(insertCaptor.capture());
+        DepartRoleUser inserted = insertCaptor.getValue();
+        assertEquals("role-2", inserted.getDroleId());
+        assertEquals("user-3", inserted.getUserId());
+        assertEquals("tenant-1", inserted.getTenantId());
+    }
+
+    @Test
     void shouldRejectCustomDepartRoleCodeWithProtectedPrefix() {
         DepartRole role = buildCustomRole();
         role.setId(null);
@@ -149,6 +174,14 @@ class DepartRoleServiceImplTest {
         role.setDescription("自定义角色");
         role.setDeleteFlag(0);
         return role;
+    }
+
+    private DepartRoleUser buildRoleUser(String userId) {
+        DepartRoleUser roleUser = new DepartRoleUser();
+        roleUser.setDroleId("role-2");
+        roleUser.setUserId(userId);
+        roleUser.setDeleteFlag(0);
+        return roleUser;
     }
 
     private SysDepart buildDepart() {
