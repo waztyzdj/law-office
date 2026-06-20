@@ -36,13 +36,14 @@ export function getRoleColumns(
           dataIndex: 'action',
           title: '操作',
           options: {
-            width: 180,
+            width: 220,
             fixed: 'right' as const,
             hasFilter: false,
             customRender: ({ record }: { record: RoleInfo }) =>
               h(Space, { size: 'middle' }, () => {
                 const actions = [
                   h('a', { onClick: () => emit('assign', record) }, '授权'),
+                  h('a', { onClick: () => emit('members', record) }, '成员'),
                   h('a', { onClick: () => emit('edit', record) }, '编辑'),
                 ];
                 if (canDeleteRole(record)) {

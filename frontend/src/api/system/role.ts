@@ -30,3 +30,9 @@ export const getRolePermissionIds = (id: string) =>
 
 export const assignRolePermissions = (id: string, ids: string[]) =>
   requestClient.post<void>('/role/assignPermissions', { id, ids });
+
+export const getRoleUserIds = (id: string) =>
+  requestClient.post<string[]>('/role/userIds', { id });
+
+export const assignRoleUsers = (id: string, ids: string[]) =>
+  requestClient.post<void>('/role/assignUsers', { id, ids });

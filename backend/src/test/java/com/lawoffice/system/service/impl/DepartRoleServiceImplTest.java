@@ -5,11 +5,13 @@ import com.lawoffice.framework.dto.BaseDTO;
 import com.lawoffice.system.entity.DepartRole;
 import com.lawoffice.system.entity.DepartRoleUser;
 import com.lawoffice.system.entity.SysDepart;
+import com.lawoffice.system.entity.UserDepart;
 import com.lawoffice.system.mapper.DepartRoleMapper;
 import com.lawoffice.system.mapper.DepartRolePermissionMapper;
 import com.lawoffice.system.mapper.DepartRoleUserMapper;
 import com.lawoffice.system.mapper.PermissionMapper;
 import com.lawoffice.system.mapper.SysDepartMapper;
+import com.lawoffice.system.mapper.UserDepartMapper;
 import com.lawoffice.system.mapper.UserMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -42,6 +44,8 @@ class DepartRoleServiceImplTest {
     @Mock
     private UserMapper userMapper;
     @Mock
+    private UserDepartMapper userDepartMapper;
+    @Mock
     private SysDepartMapper sysDepartMapper;
 
     private DepartRoleServiceImpl service;
@@ -54,6 +58,7 @@ class DepartRoleServiceImplTest {
         ReflectionTestUtils.setField(service, "departRoleUserMapper", departRoleUserMapper);
         ReflectionTestUtils.setField(service, "permissionMapper", permissionMapper);
         ReflectionTestUtils.setField(service, "userMapper", userMapper);
+        ReflectionTestUtils.setField(service, "userDepartMapper", userDepartMapper);
         ReflectionTestUtils.setField(service, "sysDepartMapper", sysDepartMapper);
     }
 
@@ -111,6 +116,9 @@ class DepartRoleServiceImplTest {
 
         when(departRoleMapper.selectById("role-2")).thenReturn(role);
         when(sysDepartMapper.selectById("depart-1")).thenReturn(buildDepart());
+        when(sysDepartMapper.selectList(any(Wrapper.class))).thenReturn(List.of(buildDepart()));
+        when(userDepartMapper.selectList(any(Wrapper.class)))
+                .thenReturn(List.of(buildUserDepart("user-1"), buildUserDepart("user-2"), buildUserDepart("user-3")));
         when(departRoleUserMapper.selectList(any(Wrapper.class)))
                 .thenReturn(List.of(buildRoleUser("user-1"), buildRoleUser("user-2")));
 
@@ -123,6 +131,25 @@ class DepartRoleServiceImplTest {
         assertEquals("role-2", inserted.getDroleId());
         assertEquals("user-3", inserted.getUserId());
         assertEquals("tenant-1", inserted.getTenantId());
+    }
+
+    @Test
+    void shouldRejectDepartRoleUserOutsideDepartScope() {
+        DepartRole role = buildCustomRole();
+        role.setTenantId("tenant-1");
+
+        when(departRoleMapper.selectById("role-2")).thenReturn(role);
+        when(sysDepartMapper.selectById("depart-1")).thenReturn(buildDepart());
+        when(sysDepartMapper.selectList(any(Wrapper.class))).thenReturn(List.of(buildDepart()));
+        when(userDepartMapper.selectList(any(Wrapper.class)))
+                .thenReturn(List.of(buildUserDepart("user-1")));
+
+        IllegalArgumentException exception = assertThrows(
+                IllegalArgumentException.class,
+                () -> service.assignUsers("role-2", List.of("user-1", "user-outside"))
+        );
+
+        assertEquals("部门角色成员只能选择本部门及下级部门人员", exception.getMessage());
     }
 
     @Test
@@ -182,6 +209,15 @@ class DepartRoleServiceImplTest {
         roleUser.setUserId(userId);
         roleUser.setDeleteFlag(0);
         return roleUser;
+    }
+
+    private UserDepart buildUserDepart(String userId) {
+        UserDepart userDepart = new UserDepart();
+        userDepart.setDepId("depart-1");
+        userDepart.setUserId(userId);
+        userDepart.setTenantId("tenant-1");
+        userDepart.setDeleteFlag(0);
+        return userDepart;
     }
 
     private SysDepart buildDepart() {

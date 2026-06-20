@@ -29,6 +29,14 @@ public interface IRoleService extends IBaseService<Role, RoleVO> {
     void assignPermissions(String roleId, List<String> permissionIds, String operatorUsername);
 
     /**
+     * 为角色覆盖保存成员。
+     *
+     * @param roleId 角色 ID
+     * @param userIds 用户 ID 列表
+     */
+    void assignUsers(String roleId, List<String> userIds);
+
+    /**
      * 查询角色已授权限。
      *
      * @param roleId 角色 ID
@@ -51,4 +59,12 @@ public interface IRoleService extends IBaseService<Role, RoleVO> {
      * @return 权限 ID 列表
      */
     List<String> getRolePermissionIds(String roleId);
+
+    /**
+     * 查询角色已分配成员 ID。
+     *
+     * @param roleId 角色 ID
+     * @return 用户 ID 列表
+     */
+    List<String> getRoleUserIds(String roleId);
 }

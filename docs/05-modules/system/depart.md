@@ -40,7 +40,7 @@
 - `POST /departRole/assignPermissions`：覆盖保存部门角色权限。
 - `POST /departRole/userIds`：查询部门角色用户 ID。
 - `POST /departRole/users`：查询部门角色用户。
-- `POST /departRole/assignUsers`：覆盖保存部门角色用户。
+- `POST /departRole/assignUsers`：覆盖保存部门角色用户，成员范围限制为角色所属部门及下级部门人员。
 - `POST /departRole/save`：新增或编辑普通部门角色。
 - `POST /departRole/delete`：删除普通部门角色，并清理角色权限、角色人员关系。
 
@@ -54,6 +54,7 @@
 - 部门保存后会自动维护默认部门角色，并同步 `iz_leaf` 叶子节点标记。
 - 默认部门角色编码为 `DEPART_租户编号_部门编号`，其中部门编号对应 `org_code`。
 - 部门成员默认拥有本部门默认角色；成员从部门移除时同步移除该部门下的角色用户关系。
+- 普通部门角色可从本部门及下级部门人员中选择成员，不能跨组织选择其它部门人员。
 - 默认部门角色由系统维护，不能修改、删除，也不能手动分配人员；默认角色人员来自部门成员。
 - 默认部门角色允许授权权限，普通部门角色允许新增、编辑、删除、授权和分配人员。
 - 用户部门关系 `sys_user_depart` 承载主部门、部门唯一负责人和部门维度直属上级。

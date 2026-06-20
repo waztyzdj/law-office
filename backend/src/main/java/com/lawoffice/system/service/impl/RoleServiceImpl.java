@@ -1,6 +1,7 @@
 package com.lawoffice.system.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.lawoffice.framework.config.TenantContextHolder;
 import com.lawoffice.framework.dto.BaseDTO;
 import com.lawoffice.framework.service.impl.BaseServiceImpl;
 import com.lawoffice.system.entity.Permission;
@@ -8,11 +9,13 @@ import com.lawoffice.system.entity.Role;
 import com.lawoffice.system.entity.RolePermission;
 import com.lawoffice.system.entity.User;
 import com.lawoffice.system.entity.UserRole;
+import com.lawoffice.system.entity.UserTenant;
 import com.lawoffice.system.mapper.PermissionMapper;
 import com.lawoffice.system.mapper.RoleMapper;
 import com.lawoffice.system.mapper.RolePermissionMapper;
 import com.lawoffice.system.mapper.UserMapper;
 import com.lawoffice.system.mapper.UserRoleMapper;
+import com.lawoffice.system.mapper.UserTenantMapper;
 import com.lawoffice.system.service.ITokenService;
 import com.lawoffice.system.service.IRoleService;
 import com.lawoffice.system.service.IUserService;
@@ -51,6 +54,9 @@ public class RoleServiceImpl extends BaseServiceImpl<RoleMapper, Role, RoleVO> i
 
     @Autowired
     private UserMapper userMapper;
+
+    @Autowired
+    private UserTenantMapper userTenantMapper;
 
     @Autowired
     private ITokenService tokenService;
@@ -138,6 +144,38 @@ public class RoleServiceImpl extends BaseServiceImpl<RoleMapper, Role, RoleVO> i
 
         log.info("为角色分配权限成功，角色ID: {}, 权限数量: {}", roleId, normalizedPermissionIds.size());
         refreshUsersAuthorizationByRoleIds(List.of(roleId));
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void assignUsers(String roleId, List<String> userIds) {
+        Role role = validateActiveRole(roleId);
+        String tenantId = getRequiredTenantId();
+        validateCurrentTenantRole(role, tenantId);
+
+        List<String> normalizedUserIds = normalizeIds(userIds);
+        validateTenantUsers(normalizedUserIds, tenantId);
+
+        List<String> existingUserIds = listRoleUserIds(roleId, tenantId);
+        Set<String> affectedUserIds = new LinkedHashSet<>(existingUserIds);
+        affectedUserIds.addAll(normalizedUserIds);
+
+        LambdaQueryWrapper<UserRole> deleteWrapper = new LambdaQueryWrapper<>();
+        deleteWrapper.eq(UserRole::getRoleId, roleId)
+                .eq(UserRole::getTenantId, tenantId)
+                .eq(UserRole::getDeleteFlag, 0);
+        userRoleMapper.delete(deleteWrapper);
+
+        for (String userId : normalizedUserIds) {
+            UserRole userRole = new UserRole();
+            userRole.setRoleId(roleId);
+            userRole.setUserId(userId);
+            userRole.setTenantId(tenantId);
+            userRoleMapper.insert(userRole);
+        }
+
+        log.info("为角色分配用户成功，角色ID: {}, 用户数量: {}", roleId, normalizedUserIds.size());
+        refreshUsersAuthorizationByUserIds(new ArrayList<>(affectedUserIds));
     }
 
     @Override
@@ -253,6 +291,14 @@ public class RoleServiceImpl extends BaseServiceImpl<RoleMapper, Role, RoleVO> i
                 .collect(Collectors.toList());
     }
 
+    @Override
+    public List<String> getRoleUserIds(String roleId) {
+        Role role = validateActiveRole(roleId);
+        String tenantId = getRequiredTenantId();
+        validateCurrentTenantRole(role, tenantId);
+        return listRoleUserIds(roleId, tenantId);
+    }
+
     /**
      * 清洗 ID 列表，去空、去重并保持传入顺序。
      */
@@ -281,6 +327,36 @@ public class RoleServiceImpl extends BaseServiceImpl<RoleMapper, Role, RoleVO> i
         long count = permissionMapper.selectCount(wrapper);
         if (count != permissionIds.size()) {
             throw new IllegalArgumentException("包含不存在或已删除的权限");
+        }
+    }
+
+    /**
+     * 角色管理按角色维护成员时，只允许选择当前租户下正常启用的用户。
+     */
+    private void validateTenantUsers(List<String> userIds, String tenantId) {
+        if (userIds.isEmpty()) {
+            return;
+        }
+
+        LambdaQueryWrapper<UserTenant> tenantWrapper = new LambdaQueryWrapper<>();
+        tenantWrapper.eq(UserTenant::getTenantId, tenantId)
+                .eq(UserTenant::getStatus, "1")
+                .eq(UserTenant::getDeleteFlag, 0)
+                .in(UserTenant::getUserId, userIds);
+        Set<String> tenantUserIds = userTenantMapper.selectList(tenantWrapper).stream()
+                .map(UserTenant::getUserId)
+                .filter(StringUtils::hasText)
+                .collect(Collectors.toSet());
+        if (!tenantUserIds.containsAll(userIds)) {
+            throw new IllegalArgumentException("只能选择当前租户的正常成员");
+        }
+
+        LambdaQueryWrapper<User> userWrapper = new LambdaQueryWrapper<>();
+        userWrapper.in(User::getId, userIds)
+                .eq(User::getDeleteFlag, 0)
+                .eq(User::getStatus, 1);
+        if (userMapper.selectCount(userWrapper) != userIds.size()) {
+            throw new IllegalArgumentException("只能选择启用且未删除的用户");
         }
     }
 
@@ -370,6 +446,43 @@ public class RoleServiceImpl extends BaseServiceImpl<RoleMapper, Role, RoleVO> i
         }
     }
 
+    private Role validateActiveRole(String roleId) {
+        if (!StringUtils.hasText(roleId)) {
+            throw new IllegalArgumentException("角色ID不能为空");
+        }
+        Role role = baseMapper.selectById(roleId);
+        if (role == null || (role.getDeleteFlag() != null && role.getDeleteFlag() == 1)) {
+            throw new IllegalArgumentException("角色不存在或已被删除");
+        }
+        return role;
+    }
+
+    private void validateCurrentTenantRole(Role role, String tenantId) {
+        if (!tenantId.equals(role.getTenantId())) {
+            throw new IllegalArgumentException("只能维护当前租户角色");
+        }
+    }
+
+    private String getRequiredTenantId() {
+        String tenantId = TenantContextHolder.getCurrentTenantId();
+        if (!StringUtils.hasText(tenantId)) {
+            throw new IllegalArgumentException("当前租户不能为空");
+        }
+        return tenantId;
+    }
+
+    private List<String> listRoleUserIds(String roleId, String tenantId) {
+        LambdaQueryWrapper<UserRole> wrapper = new LambdaQueryWrapper<>();
+        wrapper.eq(UserRole::getRoleId, roleId)
+                .eq(UserRole::getTenantId, tenantId)
+                .eq(UserRole::getDeleteFlag, 0);
+        return userRoleMapper.selectList(wrapper).stream()
+                .map(UserRole::getUserId)
+                .filter(StringUtils::hasText)
+                .distinct()
+                .collect(Collectors.toList());
+    }
+
     /**
      * 判断角色是否为系统默认超级管理员角色。
      */
@@ -415,6 +528,24 @@ public class RoleServiceImpl extends BaseServiceImpl<RoleMapper, Role, RoleVO> i
 
         LambdaQueryWrapper<User> userWrapper = new LambdaQueryWrapper<>();
         userWrapper.in(User::getId, userIds);
+        userMapper.selectList(userWrapper).stream()
+                .map(User::getUsername)
+                .filter(StringUtils::hasText)
+                .distinct()
+                .forEach(username -> {
+                    var userInfo = userService.getCurrentUserDetailInfo(username);
+                    tokenService.refreshUserAuthorization(username, userInfo.getPermissions(), userInfo.getRoles());
+                });
+    }
+
+    private void refreshUsersAuthorizationByUserIds(List<String> userIds) {
+        if (userIds == null || userIds.isEmpty()) {
+            return;
+        }
+
+        LambdaQueryWrapper<User> userWrapper = new LambdaQueryWrapper<>();
+        userWrapper.in(User::getId, userIds)
+                .eq(User::getDeleteFlag, 0);
         userMapper.selectList(userWrapper).stream()
                 .map(User::getUsername)
                 .filter(StringUtils::hasText)

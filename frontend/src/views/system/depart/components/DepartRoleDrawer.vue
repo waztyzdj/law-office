@@ -33,10 +33,12 @@ import {
   getDepartRoles,
   getDepartUserIds,
   getDepartUsers,
+  listDeparts,
   saveDepartRole,
 } from '#/api/system/depart';
 import {
   buildAntTreeData,
+  buildTreeFromFlat,
   collectDescendantKeys,
   collectExpandedKeysByDepth,
   collectTreeKeys,
@@ -199,17 +201,34 @@ function handleCollapseAll() {
 async function loadData(departId: string) {
   loading.value = true;
   try {
-    const [departUsers, userIds, roleList] = await Promise.all([
-      getDepartUsers(departId),
+    const [roleCandidateUsers, userIds, roleList] = await Promise.all([
+      loadRoleCandidateUsers(departId),
       getDepartUserIds(departId),
       getDepartRoles(departId),
     ]);
-    roleMemberOptions.value = toTransferItems(departUsers);
+    roleMemberOptions.value = toTransferItems(roleCandidateUsers);
     selectedDepartUserIds.value = userIds;
     roles.value = roleList;
   } finally {
     loading.value = false;
   }
+}
+
+async function loadRoleCandidateUsers(departId: string) {
+  const departList = await listDeparts();
+  const departTree = buildTreeFromFlat(departList);
+  const departIds = [
+    departId,
+    ...collectDescendantKeys(departTree, departId).map(String),
+  ];
+  const userMap = new Map<string, UserInfo>();
+  const userLists = await Promise.all(departIds.map((id) => getDepartUsers(id)));
+  userLists.flat().forEach((user) => {
+    if (user.id && !userMap.has(user.id)) {
+      userMap.set(user.id, user);
+    }
+  });
+  return [...userMap.values()];
 }
 
 async function loadRoles() {
@@ -518,10 +537,10 @@ defineExpose({
           :data-source="roleMemberOptions"
           :disabled="selectedRoleIsDefault"
           :render="renderTransferItem"
-          :titles="['部门成员', selectedRoleIsDefault ? '默认角色成员' : '角色成员']"
+          :titles="['本部门及下级成员', selectedRoleIsDefault ? '默认角色成员' : '角色成员']"
           show-search
         />
-        <Empty v-else description="暂无部门成员" />
+        <Empty v-else description="暂无本部门及下级成员" />
       </Spin>
     </Modal>
   </Drawer>

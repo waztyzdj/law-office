@@ -4,6 +4,7 @@ import type { RoleInfo } from '#/api/system/role';
 import RoleFormDrawer from './components/RoleFormDrawer.vue';
 import RolePermissionDrawer from './components/RolePermissionDrawer.vue';
 import RoleTable from './components/RoleTable.vue';
+import RoleUserDrawer from './components/RoleUserDrawer.vue';
 import { useRoleTable } from './hooks/useRoleTable';
 
 const {
@@ -19,6 +20,7 @@ const {
 
 const roleFormDrawerRef = ref();
 const rolePermissionDrawerRef = ref();
+const roleUserDrawerRef = ref();
 
 function handleAdd() {
   roleFormDrawerRef.value?.open({ mode: 'create' });
@@ -30,6 +32,10 @@ function handleEdit(record: RoleInfo) {
 
 function handleAssign(record: RoleInfo) {
   rolePermissionDrawerRef.value?.open(record);
+}
+
+function handleMembers(record: RoleInfo) {
+  roleUserDrawerRef.value?.open(record);
 }
 
 function handleSaveSuccess() {
@@ -54,9 +60,11 @@ onMounted(() => {
       @change="handleTableChange"
       @delete="handleDelete"
       @edit="handleEdit"
+      @members="handleMembers"
     />
     <RoleFormDrawer ref="roleFormDrawerRef" @success="handleSaveSuccess" />
     <RolePermissionDrawer ref="rolePermissionDrawerRef" @success="handleSaveSuccess" />
+    <RoleUserDrawer ref="roleUserDrawerRef" @success="handleSaveSuccess" />
   </div>
 </template>
 

@@ -23,6 +23,7 @@ const emit = defineEmits<{
   change: [pag: any, filters: any, sorter: any];
   delete: [record: RoleInfo];
   edit: [record: RoleInfo];
+  members: [record: RoleInfo];
 }>();
 
 const filterStateRef = toRef(props, 'activeFilters');

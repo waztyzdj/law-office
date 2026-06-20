@@ -47,4 +47,19 @@ public class RoleController extends BaseController<IRoleService, Role, RoleVO, R
         baseService.assignPermissions(req.getId(), req.getIds(), username != null ? username.toString() : null);
         return BaseResult.success();
     }
+
+    @PostMapping("/userIds")
+    @Operation(summary = "获取角色用户ID列表", description = "获取指定角色已分配的用户ID")
+    @RequiresPermission("role:view")
+    public BaseResult<List<String>> getRoleUserIds(@Valid @RequestBody AssignIdsReq req) {
+        return BaseResult.success(baseService.getRoleUserIds(req.getId()));
+    }
+
+    @PostMapping("/assignUsers")
+    @Operation(summary = "分配角色用户", description = "覆盖保存指定角色的用户")
+    @RequiresPermission("role:edit")
+    public BaseResult<Void> assignUsers(@Valid @RequestBody AssignIdsReq req) {
+        baseService.assignUsers(req.getId(), req.getIds());
+        return BaseResult.success();
+    }
 }

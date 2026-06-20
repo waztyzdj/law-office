@@ -13,11 +13,13 @@ import com.lawoffice.system.entity.DepartRoleUser;
 import com.lawoffice.system.entity.Permission;
 import com.lawoffice.system.entity.SysDepart;
 import com.lawoffice.system.entity.User;
+import com.lawoffice.system.entity.UserDepart;
 import com.lawoffice.system.mapper.DepartRoleMapper;
 import com.lawoffice.system.mapper.DepartRolePermissionMapper;
 import com.lawoffice.system.mapper.DepartRoleUserMapper;
 import com.lawoffice.system.mapper.PermissionMapper;
 import com.lawoffice.system.mapper.SysDepartMapper;
+import com.lawoffice.system.mapper.UserDepartMapper;
 import com.lawoffice.system.mapper.UserMapper;
 import com.lawoffice.system.service.IDepartRoleService;
 import com.lawoffice.system.vo.DepartRoleVO;
@@ -29,6 +31,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
 import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Objects;
 import java.util.Set;
@@ -52,6 +55,9 @@ public class DepartRoleServiceImpl extends BaseServiceImpl<DepartRoleMapper, Dep
 
     @Autowired
     private UserMapper userMapper;
+
+    @Autowired
+    private UserDepartMapper userDepartMapper;
 
     @Autowired
     private SysDepartMapper sysDepartMapper;
@@ -189,7 +195,14 @@ public class DepartRoleServiceImpl extends BaseServiceImpl<DepartRoleMapper, Dep
     @Transactional(rollbackFor = Exception.class)
     public void assignUsers(String departRoleId, List<String> userIds) {
         DepartRole role = validateActiveRole(departRoleId);
-        if (isDefaultDepartRole(role)) {
+        if (DEFAULT_ROLE_DESCRIPTION.equals(role.getDescription())) {
+            throw new IllegalArgumentException("部门默认角色用户由部门成员自动维护");
+        }
+        SysDepart depart = getActiveDepart(role.getDepartId());
+        if (depart == null) {
+            throw new IllegalArgumentException("部门不存在或已被删除");
+        }
+        if (isDefaultDepartRole(role, depart)) {
             throw new IllegalArgumentException("部门默认角色用户由部门成员自动维护");
         }
 
@@ -197,6 +210,7 @@ public class DepartRoleServiceImpl extends BaseServiceImpl<DepartRoleMapper, Dep
                 .filter(StringUtils::hasText)
                 .distinct()
                 .collect(Collectors.toList());
+        validateDepartRoleUserScope(depart, targetUserIds);
 
         LambdaQueryWrapper<DepartRoleUser> queryWrapper = new LambdaQueryWrapper<>();
         queryWrapper.eq(DepartRoleUser::getDroleId, departRoleId)
@@ -414,6 +428,62 @@ public class DepartRoleServiceImpl extends BaseServiceImpl<DepartRoleMapper, Dep
         return StringUtils.hasText(roleCode)
                 && (roleCode.startsWith(DepartRoleCodes.DEFAULT_DEPART_ROLE_PREFIX)
                 || roleCode.startsWith(ADMIN_ROLE_CODE_PREFIX));
+    }
+
+    /**
+     * 部门角色成员只能从角色所属部门及其下级部门成员中选择，避免跨组织授权。
+     */
+    private void validateDepartRoleUserScope(SysDepart depart, List<String> userIds) {
+        if (userIds.isEmpty()) {
+            return;
+        }
+        Set<String> allowedUserIds = getDepartAndChildUserIds(depart);
+        List<String> invalidUserIds = userIds.stream()
+                .filter(userId -> !allowedUserIds.contains(userId))
+                .collect(Collectors.toList());
+        if (!invalidUserIds.isEmpty()) {
+            throw new IllegalArgumentException("部门角色成员只能选择本部门及下级部门人员");
+        }
+    }
+
+    private Set<String> getDepartAndChildUserIds(SysDepart depart) {
+        Set<String> departIds = getDepartAndChildIds(depart);
+        if (departIds.isEmpty()) {
+            return Set.of();
+        }
+
+        LambdaQueryWrapper<UserDepart> wrapper = new LambdaQueryWrapper<>();
+        wrapper.eq(UserDepart::getTenantId, depart.getTenantId())
+                .in(UserDepart::getDepId, departIds)
+                .eq(UserDepart::getDeleteFlag, 0);
+        return userDepartMapper.selectList(wrapper).stream()
+                .map(UserDepart::getUserId)
+                .filter(StringUtils::hasText)
+                .collect(Collectors.toSet());
+    }
+
+    private Set<String> getDepartAndChildIds(SysDepart rootDepart) {
+        Set<String> scopeIds = new LinkedHashSet<>();
+        scopeIds.add(rootDepart.getId());
+
+        LambdaQueryWrapper<SysDepart> wrapper = new LambdaQueryWrapper<>();
+        wrapper.eq(SysDepart::getTenantId, rootDepart.getTenantId())
+                .eq(SysDepart::getDeleteFlag, 0);
+        List<SysDepart> departs = sysDepartMapper.selectList(wrapper);
+
+        boolean changed;
+        do {
+            changed = false;
+            for (SysDepart depart : departs) {
+                if (StringUtils.hasText(depart.getId())
+                        && scopeIds.contains(depart.getParentId())
+                        && scopeIds.add(depart.getId())) {
+                    changed = true;
+                }
+            }
+        } while (changed);
+
+        return scopeIds;
     }
 
     /**
