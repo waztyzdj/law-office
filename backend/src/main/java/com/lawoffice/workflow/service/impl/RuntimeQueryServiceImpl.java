@@ -52,6 +52,7 @@ import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 
@@ -62,6 +63,46 @@ public class RuntimeQueryServiceImpl implements IRuntimeQueryService {
             WorkflowConstants.Status.DONE,
             WorkflowConstants.Status.RETURNED,
             WorkflowConstants.Status.TRANSFERRED
+    );
+    private static final String TASK_INSTANCE_TITLE_SORT_SQL =
+            "(select pi.instance_title from wf_process_instance pi "
+                    + "where pi.id = wf_task.process_instance_id "
+                    + "and pi.tenant_id = wf_task.tenant_id and pi.delete_flag = 0)";
+    private static final String TASK_INSTANCE_START_TIME_SORT_SQL =
+            "(select pi.start_time from wf_process_instance pi "
+                    + "where pi.id = wf_task.process_instance_id "
+                    + "and pi.tenant_id = wf_task.tenant_id and pi.delete_flag = 0)";
+    private static final String TASK_INSTANCE_STARTER_REALNAME_SORT_SQL =
+            "(select pi.starter_realname from wf_process_instance pi "
+                    + "where pi.id = wf_task.process_instance_id "
+                    + "and pi.tenant_id = wf_task.tenant_id and pi.delete_flag = 0)";
+    private static final String STARTED_PROCESS_NAME_SORT_SQL =
+            "(select pm.process_name from wf_process_model pm "
+                    + "where pm.id = wf_process_instance.process_model_id "
+                    + "and pm.tenant_id = wf_process_instance.tenant_id and pm.delete_flag = 0)";
+    private static final Map<String, String> TASK_SORT_FIELDS = Map.ofEntries(
+            Map.entry("instanceTitle", TASK_INSTANCE_TITLE_SORT_SQL),
+            Map.entry("taskName", "task_name"),
+            Map.entry("taskType", "task_type"),
+            Map.entry("approvalMode", "approval_mode"),
+            Map.entry("starterRealname", TASK_INSTANCE_STARTER_REALNAME_SORT_SQL),
+            Map.entry("assigneeRealname", "assignee_realname"),
+            Map.entry("startTime", TASK_INSTANCE_START_TIME_SORT_SQL),
+            Map.entry("status", "status"),
+            Map.entry("completeTime", "complete_time"),
+            Map.entry("createTime", "create_time"),
+            Map.entry("updateTime", "update_time")
+    );
+    private static final Map<String, String> STARTED_INSTANCE_SORT_FIELDS = Map.ofEntries(
+            Map.entry("instanceTitle", "instance_title"),
+            Map.entry("processName", STARTED_PROCESS_NAME_SORT_SQL),
+            Map.entry("currentTaskNames", "current_task_names"),
+            Map.entry("currentAssigneeNames", "current_assignee_names"),
+            Map.entry("startTime", "start_time"),
+            Map.entry("endTime", "end_time"),
+            Map.entry("status", "status"),
+            Map.entry("createTime", "create_time"),
+            Map.entry("updateTime", "update_time")
     );
 
     private final ProcessModelMapper processModelMapper;
@@ -241,7 +282,7 @@ public class RuntimeQueryServiceImpl implements IRuntimeQueryService {
             if (req != null && StringUtils.hasText(req.getEndTimeLe())) {
                 wrapper.le("end_time", parseDateTime(req.getEndTimeLe(), "结束时间结束值不合法"));
             }
-            wrapper.orderByDesc("start_time").orderByDesc("create_time");
+            applyStartedInstancePageOrder(wrapper, req);
 
             Page<ProcessInstance> page = processInstanceMapper.selectPage(new Page<>(pageNum, pageSize), wrapper);
             return BaseResult.success(new PageVO<>(
@@ -482,11 +523,68 @@ public class RuntimeQueryServiceImpl implements IRuntimeQueryService {
                 condition.or().in("id", candidateTaskIds);
             }
         });
-        wrapper.orderByDesc("create_time");
+        applyTaskPageOrder(wrapper, req, status);
 
         Page<Task> page = taskMapper.selectPage(new Page<>(pageNum, pageSize), wrapper);
         List<RuntimeTaskVO> records = runtimeViewAssemblerService.buildRuntimeTaskRecords(page.getRecords(), tenantId);
         return new PageVO<>(records, page.getTotal(), page.getCurrent(), page.getSize());
+    }
+
+    /**
+     * 我发起的列表默认按流程最近一次状态变化时间排序；点击列头时只允许排序白名单字段进入 SQL。
+     */
+    private void applyStartedInstancePageOrder(QueryWrapper<ProcessInstance> wrapper, StartedInstancePageReq req) {
+        if (applyAllowedSorting(wrapper, req == null ? null : req.getSortField(),
+                req == null ? null : req.getSortOrder(), STARTED_INSTANCE_SORT_FIELDS)) {
+            return;
+        }
+        wrapper.orderByDesc("update_time").orderByDesc("start_time").orderByDesc("create_time");
+    }
+
+    /**
+     * 待办默认按任务到达时间倒序，已办默认按任务办理完成时间倒序。
+     */
+    private void applyTaskPageOrder(QueryWrapper<Task> wrapper, TaskPageReq req, String pageStatus) {
+        if (applyAllowedSorting(wrapper, req == null ? null : req.getSortField(),
+                req == null ? null : req.getSortOrder(), TASK_SORT_FIELDS)) {
+            return;
+        }
+        if (WorkflowConstants.Status.TODO.equals(pageStatus)) {
+            wrapper.orderByDesc("create_time");
+            return;
+        }
+        wrapper.orderByDesc("complete_time").orderByDesc("update_time").orderByDesc("create_time");
+    }
+
+    /**
+     * 运行时列表是自定义查询，不能直接复用通用 QueryWrapperBuilder 的无白名单排序。
+     */
+    private <T> boolean applyAllowedSorting(QueryWrapper<T> wrapper, String sortField, String sortOrder,
+            Map<String, String> allowedFields) {
+        if (!StringUtils.hasText(sortField)) {
+            return false;
+        }
+        String[] fields = sortField.split(",");
+        String[] orders = StringUtils.hasText(sortOrder) ? sortOrder.split(",") : new String[]{"desc"};
+        for (int i = 0; i < fields.length; i++) {
+            String field = fields[i].trim();
+            if (!StringUtils.hasText(field)) {
+                continue;
+            }
+            String column = allowedFields.get(field);
+            if (!StringUtils.hasText(column)) {
+                throw new IllegalArgumentException("不支持的排序字段");
+            }
+            String order = i < orders.length ? orders[i].trim() : orders[orders.length - 1].trim();
+            if ("asc".equalsIgnoreCase(order)) {
+                wrapper.orderByAsc(column);
+            } else if ("desc".equalsIgnoreCase(order)) {
+                wrapper.orderByDesc(column);
+            } else {
+                throw new IllegalArgumentException("不支持的排序方向");
+            }
+        }
+        return true;
     }
 
     private List<String> listCandidateTaskIds(String tenantId, String userId, String status) {
