@@ -19,6 +19,7 @@ import com.lawoffice.workflow.mapper.TaskMapper;
 import com.lawoffice.workflow.req.SelectedAssigneeReq;
 import com.lawoffice.workflow.req.StartProcessReq;
 import com.lawoffice.workflow.service.IAssigneeResolveService;
+import com.lawoffice.workflow.service.ICcRuntimeService;
 import com.lawoffice.workflow.service.IConditionBranchRuntimeService;
 import com.lawoffice.workflow.service.IFlowableService;
 import com.lawoffice.workflow.service.IInstanceStateService;
@@ -52,6 +53,7 @@ public class ProcessStartServiceImpl implements IProcessStartService {
     private final ProcessInstanceMapper processInstanceMapper;
     private final TaskMapper taskMapper;
     private final IConditionBranchRuntimeService conditionBranchRuntimeService;
+    private final ICcRuntimeService ccRuntimeService;
     private final IFlowableService flowableService;
     private final IAssigneeResolveService assigneeResolveService;
     private final IInstanceStateService instanceStateService;
@@ -63,6 +65,7 @@ public class ProcessStartServiceImpl implements IProcessStartService {
             ProcessInstanceMapper processInstanceMapper,
             TaskMapper taskMapper,
             IConditionBranchRuntimeService conditionBranchRuntimeService,
+            ICcRuntimeService ccRuntimeService,
             IFlowableService flowableService,
             IAssigneeResolveService assigneeResolveService,
             IInstanceStateService instanceStateService,
@@ -73,6 +76,7 @@ public class ProcessStartServiceImpl implements IProcessStartService {
         this.processInstanceMapper = processInstanceMapper;
         this.taskMapper = taskMapper;
         this.conditionBranchRuntimeService = conditionBranchRuntimeService;
+        this.ccRuntimeService = ccRuntimeService;
         this.flowableService = flowableService;
         this.assigneeResolveService = assigneeResolveService;
         this.instanceStateService = instanceStateService;
@@ -116,6 +120,8 @@ public class ProcessStartServiceImpl implements IProcessStartService {
             EntityFillUtils.fillAuditFields(processInstance, context, false);
             processInstanceMapper.updateById(processInstance);
             instanceStateService.createStartRecord(processInstance, formInstance, tenantId, context);
+            ccRuntimeService.triggerConfiguredCc(processInstance, null,
+                    WorkflowConstants.CcTriggerAction.START, tenantId, context);
 
             return BaseResult.success(buildStartResult(processInstance, formInstance));
         }, "发起申请失败");

@@ -113,6 +113,18 @@ export const processInstanceStatusOptions = [
   { label: '已终止', value: 'terminated' },
 ];
 
+export const ccStatusOptions = [
+  { label: '未读', value: 'unread' },
+  { label: '已读', value: 'read' },
+];
+
+export const ccTriggerActionMap: Record<string, string> = {
+  approve: '节点通过',
+  manual: '手动抄送',
+  process_finished: '流程结束',
+  start: '发起后',
+};
+
 export function getStatusMeta(status?: string) {
   if (!status) {
     return { color: 'default', label: '-' };

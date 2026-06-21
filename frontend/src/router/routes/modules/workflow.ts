@@ -39,6 +39,15 @@ const routes: RouteRecordRaw[] = [
         },
       },
       {
+        name: 'WorkflowCc',
+        path: '/workflow/cc',
+        component: () => import('#/views/workflow/runtime/cc/index.vue'),
+        meta: {
+          icon: 'lucide:send',
+          title: '我的抄送',
+        },
+      },
+      {
         name: 'WorkflowStart',
         path: '/workflow/start',
         component: () => import('#/views/workflow/runtime/start/index.vue'),

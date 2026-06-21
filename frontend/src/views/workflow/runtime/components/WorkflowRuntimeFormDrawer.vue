@@ -381,6 +381,7 @@ defineExpose({
           <aside class="runtime-side-section">
             <RuntimeSideTabs
               v-model:active-key="activeTab"
+              :cc-records="detail?.ccRecords ?? []"
               :nodes="processProgressNodes"
             />
           </aside>

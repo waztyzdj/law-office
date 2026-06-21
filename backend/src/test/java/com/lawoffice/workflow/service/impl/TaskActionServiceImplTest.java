@@ -17,6 +17,8 @@ import com.lawoffice.workflow.mapper.TaskCandidateMapper;
 import com.lawoffice.workflow.mapper.TaskMapper;
 import com.lawoffice.workflow.req.TaskActionReq;
 import com.lawoffice.workflow.service.IAssigneeResolveService;
+import com.lawoffice.workflow.service.ICcRuntimeService;
+import com.lawoffice.workflow.service.IConditionBranchRuntimeService;
 import com.lawoffice.workflow.service.IFlowableService;
 import com.lawoffice.workflow.service.IInstanceStateService;
 import com.lawoffice.workflow.service.IProcessNodeConfigService;
@@ -47,6 +49,7 @@ import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.same;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -72,6 +75,10 @@ class TaskActionServiceImplTest {
     @Mock
     private TaskCandidateMapper taskCandidateMapper;
     @Mock
+    private IConditionBranchRuntimeService conditionBranchRuntimeService;
+    @Mock
+    private ICcRuntimeService ccRuntimeService;
+    @Mock
     private IFlowableService flowableService;
     @Mock
     private IAssigneeResolveService assigneeResolveService;
@@ -96,6 +103,8 @@ class TaskActionServiceImplTest {
                 processInstanceMapper,
                 taskMapper,
                 taskCandidateMapper,
+                conditionBranchRuntimeService,
+                ccRuntimeService,
                 flowableService,
                 assigneeResolveService,
                 instanceStateService,
@@ -111,13 +120,19 @@ class TaskActionServiceImplTest {
                 .build();
         processInstance = processInstance();
         formInstance = formInstance();
+        lenient().when(conditionBranchRuntimeService.matchNextBranch(
+                any(), any(ProcessInstance.class), any(FormInstance.class),
+                anyString(), any(), anyString(), any(RequestContext.class)))
+                .thenReturn(java.util.Optional.empty());
+        lenient().when(conditionBranchRuntimeService.buildFlowableVariables(any()))
+                .thenReturn(Map.of());
     }
 
     @Test
     void shouldNotCompleteFlowableWhenCountersignGroupIsNotFinished() {
         Task task = groupTask("task-1", WorkflowConstants.ApprovalMode.COUNTERSIGN, USER_ID);
         mockCommonLookup(task);
-        when(taskMapper.selectCount(any(Wrapper.class))).thenReturn(0L, 0L, 1L);
+        when(taskMapper.selectCount(any(Wrapper.class))).thenReturn(0L, 0L, 0L, 1L);
 
         BaseResult<TaskActionVO> result = service.approve(task.getId(), req(), context);
 
@@ -202,7 +217,7 @@ class TaskActionServiceImplTest {
         Task anchor = groupTask("task-1", WorkflowConstants.ApprovalMode.COUNTERSIGN, USER_ID);
         anchor.setFlowableTaskId(FLOWABLE_TASK_ID);
         mockCommonLookup(task);
-        when(taskMapper.selectCount(any(Wrapper.class))).thenReturn(0L, 1L, 2L);
+        when(taskMapper.selectCount(any(Wrapper.class))).thenReturn(1L, 0L, 1L, 2L);
         when(taskMapper.selectOne(any(Wrapper.class))).thenReturn(anchor);
         when(flowableService.isProcessInstanceActive(FLOWABLE_INSTANCE_ID)).thenReturn(true);
 

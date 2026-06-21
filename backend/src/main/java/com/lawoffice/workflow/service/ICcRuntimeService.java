@@ -3,6 +3,8 @@ package com.lawoffice.workflow.service;
 import com.lawoffice.framework.dto.RequestContext;
 import com.lawoffice.framework.result.BaseResult;
 import com.lawoffice.framework.vo.PageVO;
+import com.lawoffice.workflow.entity.ProcessInstance;
+import com.lawoffice.workflow.entity.Task;
 import com.lawoffice.workflow.req.CcPageReq;
 import com.lawoffice.workflow.vo.CcRecordVO;
 
@@ -28,4 +30,18 @@ public interface ICcRuntimeService {
      * @return 标记后的抄送记录
      */
     BaseResult<CcRecordVO> markRead(String ccRecordId, RequestContext context);
+
+    /**
+     * 按流程配置触发抄送。
+     * <p>
+     * 抄送只授予查看权，不生成待办，也不改变流程状态。
+     *
+     * @param processInstance 流程实例
+     * @param task 触发任务；发起后或流程结束等无具体任务时可为空
+     * @param triggerAction 触发动作，见 {@code WorkflowConstants.CcTriggerAction}
+     * @param tenantId 租户ID
+     * @param context 请求上下文
+     */
+    void triggerConfiguredCc(ProcessInstance processInstance, Task task, String triggerAction,
+            String tenantId, RequestContext context);
 }

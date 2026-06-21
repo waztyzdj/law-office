@@ -8,6 +8,7 @@ import com.lawoffice.framework.vo.PageVO;
 import com.lawoffice.system.entity.SysDepart;
 import com.lawoffice.system.service.IUserService;
 import com.lawoffice.workflow.constant.WorkflowConstants;
+import com.lawoffice.workflow.entity.CcRecord;
 import com.lawoffice.workflow.entity.FieldPermission;
 import com.lawoffice.workflow.entity.FormDefinition;
 import com.lawoffice.workflow.entity.FormInstance;
@@ -30,6 +31,7 @@ import com.lawoffice.workflow.req.AvailableProcessPageReq;
 import com.lawoffice.workflow.req.StartedInstancePageReq;
 import com.lawoffice.workflow.req.TaskPageReq;
 import com.lawoffice.workflow.dto.BranchMatchResult;
+import com.lawoffice.workflow.mapper.CcRecordMapper;
 import com.lawoffice.workflow.service.IAssigneeResolveService;
 import com.lawoffice.workflow.service.IConditionBranchRuntimeService;
 import com.lawoffice.workflow.service.IProcessNodeConfigService;
@@ -109,6 +111,7 @@ public class RuntimeQueryServiceImpl implements IRuntimeQueryService {
     private final FormDefinitionMapper formDefinitionMapper;
     private final ProcessStartPermissionMapper processStartPermissionMapper;
     private final ProcessInstanceMapper processInstanceMapper;
+    private final CcRecordMapper ccRecordMapper;
     private final OperationRecordMapper operationRecordMapper;
     private final TaskCandidateMapper taskCandidateMapper;
     private final TaskMapper taskMapper;
@@ -124,6 +127,7 @@ public class RuntimeQueryServiceImpl implements IRuntimeQueryService {
             FormDefinitionMapper formDefinitionMapper,
             ProcessStartPermissionMapper processStartPermissionMapper,
             ProcessInstanceMapper processInstanceMapper,
+            CcRecordMapper ccRecordMapper,
             OperationRecordMapper operationRecordMapper,
             TaskCandidateMapper taskCandidateMapper,
             TaskMapper taskMapper,
@@ -138,6 +142,7 @@ public class RuntimeQueryServiceImpl implements IRuntimeQueryService {
         this.formDefinitionMapper = formDefinitionMapper;
         this.processStartPermissionMapper = processStartPermissionMapper;
         this.processInstanceMapper = processInstanceMapper;
+        this.ccRecordMapper = ccRecordMapper;
         this.operationRecordMapper = operationRecordMapper;
         this.taskCandidateMapper = taskCandidateMapper;
         this.taskMapper = taskMapper;
@@ -374,8 +379,9 @@ public class RuntimeQueryServiceImpl implements IRuntimeQueryService {
             FormInstance formInstance = requireFormInstance(processInstance.getFormInstanceId(), tenantId);
             List<Task> currentTasks = listCurrentTasks(processInstance.getId(), tenantId);
             List<OperationRecord> records = listOperationRecords(processInstance.getId(), tenantId);
+            List<CcRecord> ccRecords = listCcRecords(processInstance.getId(), tenantId);
             return BaseResult.success(runtimeViewAssemblerService.buildInstanceDetail(
-                    processInstance, formInstance, currentTasks, records));
+                    processInstance, formInstance, currentTasks, records, ccRecords));
         } catch (IllegalArgumentException e) {
             return BaseResult.error(400, e.getMessage());
         } catch (Exception e) {
@@ -444,6 +450,17 @@ public class RuntimeQueryServiceImpl implements IRuntimeQueryService {
                 .eq("delete_flag", 0)
                 .orderByAsc("operate_time")
                 .orderByAsc("create_time"));
+    }
+
+    /**
+     * 审批详情页展示当前实例的全部有效抄送记录；“我的抄送”列表仍由抄送运行时服务按接收人过滤。
+     */
+    private List<CcRecord> listCcRecords(String processInstanceId, String tenantId) {
+        return ccRecordMapper.selectList(new QueryWrapper<CcRecord>()
+                .eq("tenant_id", tenantId)
+                .eq("process_instance_id", processInstanceId)
+                .eq("delete_flag", 0)
+                .orderByDesc("create_time"));
     }
 
     private PageVO<RuntimeTaskVO> pageTasks(TaskPageReq req, RequestContext context, String status) {

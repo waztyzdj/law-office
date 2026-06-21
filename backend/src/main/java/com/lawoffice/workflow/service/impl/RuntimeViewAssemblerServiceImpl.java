@@ -3,6 +3,7 @@ package com.lawoffice.workflow.service.impl;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.lawoffice.framework.dto.RequestContext;
 import com.lawoffice.workflow.constant.WorkflowConstants;
+import com.lawoffice.workflow.entity.CcRecord;
 import com.lawoffice.workflow.entity.FieldPermission;
 import com.lawoffice.workflow.entity.FormDefinition;
 import com.lawoffice.workflow.entity.FormInstance;
@@ -22,6 +23,7 @@ import com.lawoffice.workflow.service.IAssigneeResolveService;
 import com.lawoffice.workflow.service.IProcessNodeConfigService;
 import com.lawoffice.workflow.service.IRuntimeViewAssemblerService;
 import com.lawoffice.workflow.vo.AvailableProcessVO;
+import com.lawoffice.workflow.vo.CcRecordVO;
 import com.lawoffice.workflow.vo.FormInstanceVO;
 import com.lawoffice.workflow.vo.InstanceDetailVO;
 import com.lawoffice.workflow.vo.OperationRecordVO;
@@ -160,7 +162,7 @@ public class RuntimeViewAssemblerServiceImpl implements IRuntimeViewAssemblerSer
 
     @Override
     public InstanceDetailVO buildInstanceDetail(ProcessInstance processInstance, FormInstance formInstance,
-            List<Task> currentTasks, List<OperationRecord> records) {
+            List<Task> currentTasks, List<OperationRecord> records, List<CcRecord> ccRecords) {
         InstanceDetailVO vo = new InstanceDetailVO();
         vo.setProcessInstance(buildProcessInstanceVO(processInstance));
         vo.setFormInstance(buildFormInstanceVO(formInstance));
@@ -171,6 +173,35 @@ public class RuntimeViewAssemblerServiceImpl implements IRuntimeViewAssemblerSer
         vo.setRecords(records.stream()
                 .map(this::buildOperationRecordVO)
                 .toList());
+        vo.setCcRecords(ccRecords.stream()
+                .map(this::buildCcRecordVO)
+                .toList());
+        return vo;
+    }
+
+    private CcRecordVO buildCcRecordVO(CcRecord record) {
+        CcRecordVO vo = new CcRecordVO();
+        vo.setId(record.getId());
+        vo.setCreateTime(record.getCreateTime());
+        vo.setCreateBy(record.getCreateBy());
+        vo.setUpdateTime(record.getUpdateTime());
+        vo.setUpdateBy(record.getUpdateBy());
+        vo.setTenantId(record.getTenantId());
+        vo.setProcessInstanceId(record.getProcessInstanceId());
+        vo.setProcessModelId(record.getProcessModelId());
+        vo.setTaskId(record.getTaskId());
+        vo.setNodeId(record.getNodeId());
+        vo.setNodeName(record.getNodeName());
+        vo.setTriggerAction(record.getTriggerAction());
+        vo.setSourceType(record.getSourceType());
+        vo.setSourceId(record.getSourceId());
+        vo.setReceiverUserId(record.getReceiverUserId());
+        vo.setReceiverUsername(record.getReceiverUsername());
+        vo.setReceiverRealname(record.getReceiverRealname());
+        vo.setStatus(record.getStatus());
+        vo.setReadTime(record.getReadTime());
+        vo.setMessageId(record.getMessageId());
+        vo.setRemark(record.getRemark());
         return vo;
     }
 

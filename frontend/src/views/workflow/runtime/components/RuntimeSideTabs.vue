@@ -1,15 +1,18 @@
 <script setup lang="ts">
+import type { WorkflowCcRecordInfo } from '#/api/workflow';
 import type { ProcessProgressNode } from './runtimeTypes';
 
 import { Empty, Tabs, Tag, Timeline } from 'ant-design-vue';
 
 import {
+  ccTriggerActionMap,
   getApprovalModeMeta,
   getWorkflowActionMeta,
 } from '../../components/status';
 
 interface Props {
   activeKey: string;
+  ccRecords: WorkflowCcRecordInfo[];
   nodes: ProcessProgressNode[];
 }
 
@@ -34,6 +37,23 @@ function getProgressNodeColor(node: ProcessProgressNode) {
     return 'green';
   }
   return getTimelineColor(node.action);
+}
+
+function getCcStatusMeta(status?: string) {
+  if (status === 'read') {
+    return { color: 'success', label: '已读' };
+  }
+  if (status === 'unread') {
+    return { color: 'processing', label: '未读' };
+  }
+  if (status === 'canceled') {
+    return { color: 'default', label: '已取消' };
+  }
+  return { color: 'default', label: status || '-' };
+}
+
+function getCcTriggerLabel(triggerAction?: string) {
+  return ccTriggerActionMap[triggerAction ?? ''] ?? triggerAction ?? '-';
 }
 </script>
 
@@ -107,17 +127,49 @@ function getProgressNodeColor(node: ProcessProgressNode) {
 
     <Tabs.TabPane
       key="circulate"
-      tab="传阅"
+      tab="抄送"
     >
-      <div class="runtime-empty-panel circulate-empty-panel">
-        <Empty description="暂无传阅记录">
-          <template #description>
-            <div class="empty-description">
-              <div>暂无传阅记录</div>
-              <span>传阅/抄送属于二期能力，后续会在这里展示传阅人、传阅时间和阅读状态。</span>
-            </div>
-          </template>
-        </Empty>
+      <div
+        v-if="ccRecords.length"
+        class="cc-record-list"
+      >
+        <div
+          v-for="record in ccRecords"
+          :key="record.id"
+          class="cc-record-item"
+        >
+          <div class="cc-record-head">
+            <span class="cc-record-receiver">
+              {{ record.receiverRealname || record.receiverUsername || '-' }}
+            </span>
+            <Tag :color="getCcStatusMeta(record.status).color">
+              {{ getCcStatusMeta(record.status).label }}
+            </Tag>
+          </div>
+          <div class="cc-record-meta">
+            <span>触发：{{ getCcTriggerLabel(record.triggerAction) }}</span>
+            <span>节点：{{ record.nodeName || '-' }}</span>
+            <span>时间：{{ record.createTime || '-' }}</span>
+          </div>
+          <div
+            v-if="record.readTime"
+            class="cc-record-meta"
+          >
+            <span>阅读时间：{{ record.readTime }}</span>
+          </div>
+          <div
+            v-if="record.remark"
+            class="cc-record-remark"
+          >
+            {{ record.remark }}
+          </div>
+        </div>
+      </div>
+      <div
+        v-else
+        class="runtime-empty-panel circulate-empty-panel"
+      >
+        <Empty description="暂无抄送记录" />
       </div>
     </Tabs.TabPane>
   </Tabs>
@@ -167,6 +219,51 @@ function getProgressNodeColor(node: ProcessProgressNode) {
 
 .circulate-empty-panel {
   min-height: 180px;
+}
+
+.cc-record-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 8px 4px 0;
+}
+
+.cc-record-item {
+  background: #fafafa;
+  border: 1px solid #f0f0f0;
+  border-radius: 6px;
+  padding: 10px 12px;
+}
+
+.cc-record-head {
+  align-items: center;
+  display: flex;
+  gap: 8px;
+  justify-content: space-between;
+  margin-bottom: 6px;
+}
+
+.cc-record-receiver {
+  color: #111827;
+  font-weight: 500;
+}
+
+.cc-record-meta {
+  color: #6b7280;
+  display: flex;
+  flex-wrap: wrap;
+  font-size: 13px;
+  gap: 6px 14px;
+  line-height: 1.7;
+}
+
+.cc-record-remark {
+  color: #4b5563;
+  font-size: 13px;
+  line-height: 1.6;
+  margin-top: 6px;
+  white-space: pre-wrap;
+  word-break: break-word;
 }
 
 .process-progress-panel {

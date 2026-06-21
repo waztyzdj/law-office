@@ -13,6 +13,13 @@ public class CcRecordVO extends BaseVO {
     private String tenantId;
     private String processInstanceId;
     private String processModelId;
+    private String processName;
+    private String instanceNo;
+    private String instanceTitle;
+    private String processStatus;
+    private String starterUserId;
+    private String starterUsername;
+    private String starterRealname;
     private String taskId;
     private String nodeId;
     private String nodeName;

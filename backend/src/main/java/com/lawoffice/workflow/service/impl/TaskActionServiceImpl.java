@@ -23,6 +23,7 @@ import com.lawoffice.workflow.mapper.TaskMapper;
 import com.lawoffice.workflow.req.SelectedAssigneeReq;
 import com.lawoffice.workflow.req.TaskActionReq;
 import com.lawoffice.workflow.service.IAssigneeResolveService;
+import com.lawoffice.workflow.service.ICcRuntimeService;
 import com.lawoffice.workflow.service.IConditionBranchRuntimeService;
 import com.lawoffice.workflow.service.IFlowableService;
 import com.lawoffice.workflow.service.IInstanceStateService;
@@ -54,6 +55,7 @@ public class TaskActionServiceImpl implements ITaskActionService {
     private final TaskMapper taskMapper;
     private final TaskCandidateMapper taskCandidateMapper;
     private final IConditionBranchRuntimeService conditionBranchRuntimeService;
+    private final ICcRuntimeService ccRuntimeService;
     private final IFlowableService flowableService;
     private final IAssigneeResolveService assigneeResolveService;
     private final IInstanceStateService instanceStateService;
@@ -67,6 +69,7 @@ public class TaskActionServiceImpl implements ITaskActionService {
             TaskMapper taskMapper,
             TaskCandidateMapper taskCandidateMapper,
             IConditionBranchRuntimeService conditionBranchRuntimeService,
+            ICcRuntimeService ccRuntimeService,
             IFlowableService flowableService,
             IAssigneeResolveService assigneeResolveService,
             IInstanceStateService instanceStateService,
@@ -79,6 +82,7 @@ public class TaskActionServiceImpl implements ITaskActionService {
         this.taskMapper = taskMapper;
         this.taskCandidateMapper = taskCandidateMapper;
         this.conditionBranchRuntimeService = conditionBranchRuntimeService;
+        this.ccRuntimeService = ccRuntimeService;
         this.flowableService = flowableService;
         this.assigneeResolveService = assigneeResolveService;
         this.instanceStateService = instanceStateService;
@@ -144,6 +148,9 @@ public class TaskActionServiceImpl implements ITaskActionService {
 
         saveTaskFormData(req, formInstance, permissions, context);
         autoClaimIfNeeded(task, candidate, context);
+        boolean nodeApprovedCcTrigger = WorkflowConstants.Action.APPROVE.equals(action)
+                && !WorkflowConstants.TaskType.ADD_SIGN.equals(task.getTaskType())
+                && willAdvanceAfterApprove(task, tenantId);
         if (WorkflowConstants.Action.APPROVE.equals(action)) {
             if (WorkflowConstants.TaskType.ADD_SIGN.equals(task.getTaskType()) && StringUtils.hasText(task.getParentTaskId())) {
                 completeAddSignTask(task, processInstance, formInstance, req, tenantId, context);
@@ -167,6 +174,14 @@ public class TaskActionServiceImpl implements ITaskActionService {
             throw new IllegalArgumentException("不支持的审批动作");
         }
         instanceStateService.createTaskRecord(task, processInstance, formInstance, req, action, tenantId, context);
+        if (nodeApprovedCcTrigger) {
+            ccRuntimeService.triggerConfiguredCc(processInstance, task,
+                    WorkflowConstants.CcTriggerAction.APPROVE, tenantId, context);
+        }
+        if (isProcessFinished(processInstance)) {
+            ccRuntimeService.triggerConfiguredCc(processInstance, task,
+                    WorkflowConstants.CcTriggerAction.PROCESS_FINISHED, tenantId, context);
+        }
         return buildTaskActionResult(task, processInstance);
     }
 
@@ -209,6 +224,8 @@ public class TaskActionServiceImpl implements ITaskActionService {
         formInstanceMapper.updateById(formInstance);
 
         instanceStateService.createStartRecord(processInstance, formInstance, tenantId, context);
+        ccRuntimeService.triggerConfiguredCc(processInstance, task,
+                WorkflowConstants.CcTriggerAction.START, tenantId, context);
         return buildTaskActionResult(task, processInstance);
     }
 
@@ -501,6 +518,13 @@ public class TaskActionServiceImpl implements ITaskActionService {
             return true;
         }
         return countGroupTasks(task, tenantId, WorkflowConstants.Status.DONE) + 1 >= resolveGroupTotal(task);
+    }
+
+    private boolean isProcessFinished(ProcessInstance processInstance) {
+        return WorkflowConstants.Status.APPROVED.equals(processInstance.getStatus())
+                || WorkflowConstants.Status.REJECTED.equals(processInstance.getStatus())
+                || WorkflowConstants.Status.TERMINATED.equals(processInstance.getStatus())
+                || WorkflowConstants.Status.WITHDRAWN.equals(processInstance.getStatus());
     }
 
     /**

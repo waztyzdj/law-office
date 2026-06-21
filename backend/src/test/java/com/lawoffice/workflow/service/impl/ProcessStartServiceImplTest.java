@@ -15,6 +15,8 @@ import com.lawoffice.workflow.mapper.ProcessInstanceMapper;
 import com.lawoffice.workflow.mapper.TaskMapper;
 import com.lawoffice.workflow.req.StartProcessReq;
 import com.lawoffice.workflow.service.IAssigneeResolveService;
+import com.lawoffice.workflow.service.ICcRuntimeService;
+import com.lawoffice.workflow.service.IConditionBranchRuntimeService;
 import com.lawoffice.workflow.service.IFlowableService;
 import com.lawoffice.workflow.service.IInstanceStateService;
 import com.lawoffice.workflow.service.IWorkflowFormDataService;
@@ -40,11 +42,13 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyMap;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.same;
 import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -71,6 +75,10 @@ class ProcessStartServiceImplTest {
     @Mock
     private TaskMapper taskMapper;
     @Mock
+    private IConditionBranchRuntimeService conditionBranchRuntimeService;
+    @Mock
+    private ICcRuntimeService ccRuntimeService;
+    @Mock
     private IFlowableService flowableService;
     @Mock
     private IAssigneeResolveService assigneeResolveService;
@@ -90,6 +98,8 @@ class ProcessStartServiceImplTest {
                 formInstanceMapper,
                 processInstanceMapper,
                 taskMapper,
+                conditionBranchRuntimeService,
+                ccRuntimeService,
                 flowableService,
                 assigneeResolveService,
                 instanceStateService,
@@ -102,6 +112,12 @@ class ProcessStartServiceImplTest {
                 .userId(USER_ID)
                 .username(USERNAME)
                 .build();
+        lenient().when(conditionBranchRuntimeService.matchNextBranch(
+                any(ProcessModel.class), any(ProcessInstance.class), any(FormInstance.class),
+                anyString(), any(), anyString(), any(RequestContext.class)))
+                .thenReturn(java.util.Optional.empty());
+        lenient().when(conditionBranchRuntimeService.buildFlowableVariables(any()))
+                .thenReturn(Map.of());
     }
 
     @Test
@@ -223,6 +239,13 @@ class ProcessStartServiceImplTest {
             formInstance.setId(FORM_INSTANCE_ID);
             return 1;
         }).when(formInstanceMapper).insert(any(FormInstance.class));
+        doAnswer(invocation -> {
+            String formDataJson = invocation.getArgument(0);
+            FormInstance formInstance = invocation.getArgument(1);
+            formInstance.setFormDataJson(formDataJson);
+            return null;
+        }).when(workflowFormDataService).saveStartFormData(
+                anyString(), any(FormInstance.class), any(), same(context), anyBoolean());
     }
 
     private StartProcessReq startReq(String title, String businessKey) {

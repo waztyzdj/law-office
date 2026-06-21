@@ -70,7 +70,9 @@ export interface WorkflowProcessNodeConfigInfo {
   assigneeResolveMode?: string;
   assigneeJson?: string;
   assigneeType?: string;
+  attachmentJson?: string;
   branchJson?: string;
+  ccJson?: string;
   nodeId?: string;
   nodeName?: string;
   nodeType?: string;
@@ -78,6 +80,7 @@ export interface WorkflowProcessNodeConfigInfo {
   rejectPolicy?: string;
   sortOrder?: number;
   tenantId?: string;
+  timeoutJson?: string;
 }
 
 export interface WorkflowFieldPermissionInfo {
@@ -190,6 +193,40 @@ export interface StartedInstancePageReq extends BasePageReq {
   processName?: string;
   startTimeGe?: string;
   startTimeLe?: string;
+  status?: string;
+}
+
+export interface WorkflowCcRecordInfo {
+  id?: string;
+  createTime?: string;
+  instanceNo?: string;
+  instanceTitle?: string;
+  messageId?: string;
+  nodeId?: string;
+  nodeName?: string;
+  processInstanceId?: string;
+  processModelId?: string;
+  processName?: string;
+  processStatus?: string;
+  readTime?: string;
+  receiverRealname?: string;
+  receiverUserId?: string;
+  receiverUsername?: string;
+  remark?: string;
+  sourceId?: string;
+  sourceType?: string;
+  starterRealname?: string;
+  starterUserId?: string;
+  starterUsername?: string;
+  status?: string;
+  triggerAction?: string;
+}
+
+export interface WorkflowCcPageReq extends BasePageReq {
+  createTimeGe?: string;
+  createTimeLe?: string;
+  instanceTitle?: string;
+  processInstanceId?: string;
   status?: string;
 }
 
@@ -366,6 +403,7 @@ export interface OperationRecordInfo {
 }
 
 export interface InstanceDetailInfo {
+  ccRecords?: WorkflowCcRecordInfo[];
   currentTasks?: RuntimeTaskInfo[];
   formInstance?: FormInstanceInfo;
   processInstance?: ProcessInstanceInfo;
@@ -488,6 +526,13 @@ export const pageStartedInstances = (params: StartedInstancePageReq) =>
     '/workflow/started/page',
     normalizeStartedInstancePageReq(params),
   );
+export const pageWorkflowCcRecords = (params: WorkflowCcPageReq) =>
+  requestClient.post<WorkflowPageResult<WorkflowCcRecordInfo>>(
+    '/workflow/cc/page',
+    normalizeWorkflowCcPageReq(params),
+  );
+export const markWorkflowCcRead = (id: string) =>
+  requestClient.post<WorkflowCcRecordInfo>('/workflow/cc/read', { id });
 export const getWorkflowInstanceDetail = (id: string) =>
   requestClient.post<InstanceDetailInfo>('/workflow/instance/detail', { id });
 export const listWorkflowInstanceRecords = (id: string) =>
@@ -610,6 +655,17 @@ function normalizeStartedInstancePageReq(
       queryParams.startTime_le ??
       queryParams.startTime_lt ??
       queryParams.startTime_eq,
+    status: params.status ?? queryParams.status_eq,
+  };
+}
+
+function normalizeWorkflowCcPageReq(params: WorkflowCcPageReq): WorkflowCcPageReq {
+  const queryParams = params.queryParams ?? {};
+  return {
+    ...params,
+    createTimeGe: params.createTimeGe ?? queryParams.createTime_ge,
+    createTimeLe: params.createTimeLe ?? queryParams.createTime_le,
+    instanceTitle: params.instanceTitle ?? queryParams.instanceTitle_like,
     status: params.status ?? queryParams.status_eq,
   };
 }

@@ -14,4 +14,6 @@ public class InstanceDetailVO {
     private List<RuntimeTaskVO> currentTasks;
 
     private List<OperationRecordVO> records;
+
+    private List<CcRecordVO> ccRecords;
 }

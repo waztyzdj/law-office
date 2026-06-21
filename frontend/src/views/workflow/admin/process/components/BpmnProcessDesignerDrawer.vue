@@ -18,6 +18,7 @@ import {
   Alert,
   Button,
   Checkbox,
+  Divider,
   Empty,
   Form,
   FormItem,
@@ -39,6 +40,7 @@ import {
 } from '#/api/workflow';
 
 import WorkflowAssigneeSelector from './WorkflowAssigneeSelector.vue';
+import WorkflowCcConfigEditor from './WorkflowCcConfigEditor.vue';
 
 interface DrawerPayload {
   record: WorkflowProcessModelInfo;
@@ -86,6 +88,7 @@ interface NodeConfigDraft {
   assigneeJson: Record<string, unknown>;
   assigneeType: string;
   branchConfig?: BranchConfig;
+  ccConfig?: CcConfig;
   id?: string;
   rejectPolicy: string;
 }
@@ -110,6 +113,14 @@ interface BranchItem {
 
 interface BranchConfig {
   branches: BranchItem[];
+}
+
+interface CcConfig {
+  events?: string[];
+  targets?: Array<{
+    targetIds?: string[];
+    targetType: string;
+  }>;
 }
 
 interface BpmnElementRegistry {
@@ -500,6 +511,7 @@ function buildNodeConfigDraft(
       config?.approvalMode,
     ),
     branchConfig: parseJsonValue<BranchConfig | undefined>(config?.branchJson, undefined),
+    ccConfig: parseJsonValue<CcConfig | undefined>(config?.ccJson, undefined),
     assigneeJson: parseJsonValue<Record<string, unknown>>(config?.assigneeJson, {}),
     assigneeType,
     id: config?.id,
@@ -1013,6 +1025,7 @@ async function saveNodeConfigs(processId: string) {
       ),
       assigneeJson: JSON.stringify(config?.assigneeJson || {}),
       assigneeType: config?.assigneeType || 'starter',
+      ccJson: JSON.stringify(config?.ccConfig || { events: [], targets: [] }),
       nodeId: node.id,
       nodeName: node.name,
       nodeType: 'approver',
@@ -1259,6 +1272,11 @@ defineExpose({
                     </Checkbox>
                   </Space>
                 </FormItem>
+                <Divider />
+                <WorkflowCcConfigEditor
+                  v-model="activeNodeConfig.ccConfig"
+                  :disabled="isPublished"
+                />
               </template>
               <template v-else>
                 <div class="branch-list">

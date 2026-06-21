@@ -194,6 +194,7 @@
 | `POST` | `/task/urge` | 催办当前审批任务 |
 | `POST` | `/cc/page` | 查询我的抄送 |
 | `POST` | `/cc/read` | 标记抄送已读 |
+| `POST` | `/instance/detail` | 查询审批详情，响应包含 `ccRecords` 抄送记录 |
 | `POST` | `/instance/diagram` | 查询实例流程图和节点高亮状态 |
 | `POST` | `/attachment/page` | 查询审批附件 |
 | `POST` | `/attachment/bind` | 绑定已上传文件到审批实例或任务 |

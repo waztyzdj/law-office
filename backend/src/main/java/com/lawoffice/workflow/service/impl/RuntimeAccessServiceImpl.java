@@ -2,10 +2,12 @@ package com.lawoffice.workflow.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.lawoffice.framework.dto.RequestContext;
+import com.lawoffice.workflow.entity.CcRecord;
 import com.lawoffice.workflow.entity.OperationRecord;
 import com.lawoffice.workflow.entity.ProcessInstance;
 import com.lawoffice.workflow.entity.Task;
 import com.lawoffice.workflow.entity.TaskCandidate;
+import com.lawoffice.workflow.mapper.CcRecordMapper;
 import com.lawoffice.workflow.mapper.OperationRecordMapper;
 import com.lawoffice.workflow.mapper.TaskCandidateMapper;
 import com.lawoffice.workflow.mapper.TaskMapper;
@@ -19,15 +21,18 @@ import java.util.List;
 public class RuntimeAccessServiceImpl implements IRuntimeAccessService {
 
     private final OperationRecordMapper operationRecordMapper;
+    private final CcRecordMapper ccRecordMapper;
     private final TaskCandidateMapper taskCandidateMapper;
     private final TaskMapper taskMapper;
     private final IWorkflowRuntimeLookupService workflowRuntimeLookupService;
 
     public RuntimeAccessServiceImpl(OperationRecordMapper operationRecordMapper,
+            CcRecordMapper ccRecordMapper,
             TaskCandidateMapper taskCandidateMapper,
             TaskMapper taskMapper,
             IWorkflowRuntimeLookupService workflowRuntimeLookupService) {
         this.operationRecordMapper = operationRecordMapper;
+        this.ccRecordMapper = ccRecordMapper;
         this.taskCandidateMapper = taskCandidateMapper;
         this.taskMapper = taskMapper;
         this.workflowRuntimeLookupService = workflowRuntimeLookupService;
@@ -46,6 +51,9 @@ public class RuntimeAccessServiceImpl implements IRuntimeAccessService {
             return;
         }
         if (hasRecordAccess(processInstance.getId(), processInstance.getTenantId(), userId)) {
+            return;
+        }
+        if (hasCcAccess(processInstance.getId(), processInstance.getTenantId(), userId)) {
             return;
         }
         throw new IllegalArgumentException("当前用户无权查看该审批实例");
@@ -89,6 +97,17 @@ public class RuntimeAccessServiceImpl implements IRuntimeAccessService {
                 .eq("tenant_id", tenantId)
                 .eq("process_instance_id", processInstanceId)
                 .eq("operator_user_id", userId)
+                .eq("delete_flag", 0)) > 0;
+    }
+
+    /**
+     * 抄送记录是二期新增的详情查看权来源，但只授予查看权，不授予办理权。
+     */
+    private boolean hasCcAccess(String processInstanceId, String tenantId, String userId) {
+        return ccRecordMapper.selectCount(new QueryWrapper<CcRecord>()
+                .eq("tenant_id", tenantId)
+                .eq("process_instance_id", processInstanceId)
+                .eq("receiver_user_id", userId)
                 .eq("delete_flag", 0)) > 0;
     }
 }

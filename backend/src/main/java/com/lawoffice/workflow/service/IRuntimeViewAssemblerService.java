@@ -1,6 +1,7 @@
 package com.lawoffice.workflow.service;
 
 import com.lawoffice.framework.dto.RequestContext;
+import com.lawoffice.workflow.entity.CcRecord;
 import com.lawoffice.workflow.entity.FieldPermission;
 import com.lawoffice.workflow.entity.FormDefinition;
 import com.lawoffice.workflow.entity.FormInstance;
@@ -58,10 +59,11 @@ public interface IRuntimeViewAssemblerService {
      * @param formInstance 表单实例
      * @param currentTasks 当前任务列表
      * @param records 操作记录列表
+     * @param ccRecords 抄送记录列表
      * @return 审批实例详情
      */
     InstanceDetailVO buildInstanceDetail(ProcessInstance processInstance, FormInstance formInstance,
-            List<Task> currentTasks, List<OperationRecord> records);
+            List<Task> currentTasks, List<OperationRecord> records, List<CcRecord> ccRecords);
 
     /**
      * 组装操作记录VO。

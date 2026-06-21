@@ -8,6 +8,7 @@ import com.lawoffice.workflow.entity.ProcessModel;
 import com.lawoffice.workflow.entity.ProcessNodeConfig;
 import com.lawoffice.workflow.mapper.ProcessModelMapper;
 import com.lawoffice.workflow.mapper.ProcessNodeConfigMapper;
+import com.lawoffice.workflow.mapper.TaskMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -29,13 +30,15 @@ class ProcessNodeConfigServiceImplTest {
     @Mock
     private ProcessModelMapper processModelMapper;
     @Mock
+    private TaskMapper taskMapper;
+    @Mock
     private ProcessNodeConfigMapper processNodeConfigMapper;
 
     private ProcessNodeConfigServiceImpl service;
 
     @BeforeEach
     void setUp() {
-        service = new ProcessNodeConfigServiceImpl(processModelMapper);
+        service = new ProcessNodeConfigServiceImpl(processModelMapper, taskMapper);
         ReflectionTestUtils.setField(service, "baseMapper", processNodeConfigMapper);
         lenient().when(processModelMapper.selectOne(any(Wrapper.class))).thenReturn(draftModel());
     }
@@ -98,7 +101,7 @@ class ProcessNodeConfigServiceImplTest {
         config.setNodeName("金额判断");
         config.setNodeType(WorkflowConstants.NodeType.GATEWAY);
         config.setBranchJson("""
-                {"branches":[{"branchId":"high","targetNodeId":"manager"}]}
+                {"branches":[{"branchId":"high","targetNodeId":"manager","conditions":[{"sourceType":"form_field","fieldKey":"amount","valueType":"number","operator":"gt","value":100}]}]}
                 """);
 
         IllegalArgumentException exception = assertThrows(IllegalArgumentException.class,

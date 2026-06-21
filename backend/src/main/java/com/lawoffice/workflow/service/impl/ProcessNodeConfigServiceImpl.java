@@ -375,9 +375,13 @@ public class ProcessNodeConfigServiceImpl extends AbstractWorkflowConfigServiceI
             return;
         }
         JsonNode root = parseJson(ccJson, "抄送配置JSON");
-        JsonNode receivers = root.get("receivers");
-        if (receivers != null && (!receivers.isArray() || receivers.isEmpty())) {
-            throw new IllegalArgumentException("抄送配置receivers必须为非空数组");
+        JsonNode events = root.has("events") ? root.get("events") : root.get("triggerActions");
+        if (events != null && !events.isArray()) {
+            throw new IllegalArgumentException("抄送触发时机必须为数组");
+        }
+        JsonNode targets = root.has("targets") ? root.get("targets") : root.get("receivers");
+        if (targets != null && !targets.isArray()) {
+            throw new IllegalArgumentException("抄送对象必须为数组");
         }
     }
 

@@ -5,6 +5,7 @@ import com.lawoffice.framework.dto.RequestContext;
 import com.lawoffice.workflow.entity.ProcessInstance;
 import com.lawoffice.workflow.entity.Task;
 import com.lawoffice.workflow.entity.TaskCandidate;
+import com.lawoffice.workflow.mapper.CcRecordMapper;
 import com.lawoffice.workflow.mapper.OperationRecordMapper;
 import com.lawoffice.workflow.mapper.TaskCandidateMapper;
 import com.lawoffice.workflow.mapper.TaskMapper;
@@ -35,6 +36,8 @@ class RuntimeAccessServiceImplTest {
     @Mock
     private OperationRecordMapper operationRecordMapper;
     @Mock
+    private CcRecordMapper ccRecordMapper;
+    @Mock
     private TaskCandidateMapper taskCandidateMapper;
     @Mock
     private TaskMapper taskMapper;
@@ -47,6 +50,7 @@ class RuntimeAccessServiceImplTest {
     void setUp() {
         service = new RuntimeAccessServiceImpl(
                 operationRecordMapper,
+                ccRecordMapper,
                 taskCandidateMapper,
                 taskMapper,
                 workflowRuntimeLookupService
@@ -60,7 +64,7 @@ class RuntimeAccessServiceImplTest {
 
         assertDoesNotThrow(() -> service.ensureInstanceAccess(instance, context(STARTER_ID)));
 
-        verifyNoInteractions(taskMapper, taskCandidateMapper, operationRecordMapper);
+        verifyNoInteractions(taskMapper, taskCandidateMapper, operationRecordMapper, ccRecordMapper);
     }
 
     @Test

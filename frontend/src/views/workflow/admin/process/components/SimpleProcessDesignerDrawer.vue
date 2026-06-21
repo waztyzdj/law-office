@@ -33,6 +33,7 @@ import {
 } from '#/api/workflow';
 
 import WorkflowAssigneeSelector from './WorkflowAssigneeSelector.vue';
+import WorkflowCcConfigEditor from './WorkflowCcConfigEditor.vue';
 
 interface DrawerPayload {
   record: WorkflowProcessModelInfo;
@@ -47,6 +48,7 @@ interface SimpleNode {
   assigneeJson?: Record<string, unknown>;
   assigneeType?: string;
   branchConfig?: BranchConfig;
+  ccConfig?: CcConfig;
   id: string;
   name: string;
   rejectPolicy?: string;
@@ -77,6 +79,14 @@ interface BranchItem {
 
 interface BranchConfig {
   branches: BranchItem[];
+}
+
+interface CcConfig {
+  events?: string[];
+  targets?: Array<{
+    targetIds?: string[];
+    targetType: string;
+  }>;
 }
 
 type ApprovalMode = 'single' | 'countersign' | 'orsign';
@@ -148,6 +158,7 @@ function normalizeNode(raw: Record<string, any>, index: number): SimpleNode {
     ),
     assigneeJson: raw.assigneeJson || {},
     assigneeType,
+    ccConfig: raw.ccConfig || raw.ccJson || { events: [], targets: [] },
     id: raw.id || raw.nodeId || `approve_${index + 1}`,
     name: raw.name || raw.nodeName || `审批节点${index + 1}`,
     rejectPolicy: raw.rejectPolicy || 'terminate',
@@ -248,6 +259,7 @@ function buildNodesFromProcess(process: WorkflowProcessModelInfo, configs: Workf
           assigneeJson: parseJsonValue<Record<string, unknown>>(item.assigneeJson, {}),
           assigneeType: item.assigneeType,
           branchConfig: parseJsonValue<BranchConfig | undefined>(item.branchJson, undefined),
+          ccConfig: parseJsonValue<CcConfig | undefined>(item.ccJson, undefined),
           id: item.nodeId,
           name: item.nodeName,
           type: item.nodeType,
@@ -281,6 +293,7 @@ function buildNodeJson() {
               ),
               assigneeJson: node.assigneeJson || {},
               assigneeType: node.assigneeType,
+              ccConfig: node.ccConfig || { events: [], targets: [] },
               id: node.id,
               name: node.name,
               rejectPolicy: node.rejectPolicy,
@@ -624,6 +637,7 @@ async function saveNodeConfigs(processId: string) {
       ),
       assigneeJson: JSON.stringify(node.assigneeJson || {}),
       assigneeType: node.assigneeType,
+      ccJson: JSON.stringify(node.ccConfig || { events: [], targets: [] }),
       nodeId: node.id,
       nodeName: node.name,
       nodeType: 'approver',
@@ -862,6 +876,11 @@ defineExpose({
                     </Checkbox>
                   </Space>
                 </FormItem>
+                <Divider />
+                <WorkflowCcConfigEditor
+                  v-model="node.ccConfig"
+                  :disabled="isPublished"
+                />
               </template>
               <template v-else>
                 <div class="branch-list">
