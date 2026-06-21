@@ -5,7 +5,7 @@ import type { UserInfo } from '#/api/system/user';
 
 import { computed, onMounted, ref, watch } from 'vue';
 
-import { Button, CheckboxGroup, FormItem, Select, Space } from 'ant-design-vue';
+import { Button, CheckboxGroup, FormItem, Select } from 'ant-design-vue';
 
 import {
   listPickerDeparts,
@@ -192,7 +192,17 @@ function optionsForTarget(target: CcTarget) {
       />
     </FormItem>
 
-    <FormItem label="抄送对象">
+    <FormItem>
+      <div class="cc-target-header">
+        <span>抄送对象</span>
+        <Button
+          :disabled="disabled"
+          type="primary"
+          @click="addTarget"
+        >
+          添加抄送对象
+        </Button>
+      </div>
       <div class="cc-target-list">
         <div
           v-for="(target, index) in targets"
@@ -236,16 +246,6 @@ function optionsForTarget(target: CcTarget) {
             删除
           </Button>
         </div>
-        <Space>
-          <Button
-            :disabled="disabled"
-            size="small"
-            type="dashed"
-            @click="addTarget"
-          >
-            添加抄送对象
-          </Button>
-        </Space>
       </div>
     </FormItem>
   </div>
@@ -261,6 +261,19 @@ function optionsForTarget(target: CcTarget) {
   display: flex;
   flex-direction: column;
   gap: 8px;
+}
+
+.cc-target-header {
+  align-items: center;
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+  margin-bottom: 8px;
+  width: 100%;
+}
+
+.cc-target-header > span {
+  color: rgb(0 0 0 / 88%);
 }
 
 .cc-target-row {

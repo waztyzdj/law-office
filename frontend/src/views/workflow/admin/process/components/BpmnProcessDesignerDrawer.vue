@@ -18,7 +18,6 @@ import {
   Alert,
   Button,
   Checkbox,
-  Divider,
   Empty,
   Form,
   FormItem,
@@ -27,6 +26,7 @@ import {
   RadioGroup,
   Select,
   Space,
+  Tabs,
   Tag,
   message,
 } from 'ant-design-vue';
@@ -167,6 +167,10 @@ interface BpmnModeling {
 
 interface BpmnModdle {
   create: (type: string, properties: Record<string, unknown>) => unknown;
+}
+
+interface BpmnSelection {
+  select: (element: BpmnElement | BpmnElement[]) => void;
 }
 
 type BpmnToolTarget = BpmnElement | BpmnElement[] | undefined;
@@ -496,6 +500,22 @@ function isBpmnUserTaskElement(element: BpmnElement | undefined) {
   );
 }
 
+function isBpmnExclusiveGatewayElement(element: BpmnElement | undefined) {
+  return (
+    !!element
+    && (element.type === 'bpmn:ExclusiveGateway'
+      || element.businessObject?.$type === 'bpmn:ExclusiveGateway')
+  );
+}
+
+function isBpmnConfigurableNodeElement(element: BpmnElement | undefined) {
+  return isBpmnUserTaskElement(element) || isBpmnExclusiveGatewayElement(element);
+}
+
+function resolveBpmnElementId(element: BpmnElement | undefined) {
+  return element?.businessObject?.id || element?.id || '';
+}
+
 function buildNodeConfigDraft(
   config?: WorkflowProcessNodeConfigInfo,
 ): NodeConfigDraft {
@@ -719,17 +739,39 @@ function bindModelerEvents() {
     const selected = (
       Array.isArray(event.newSelection) ? event.newSelection : []
     ) as BpmnElement[];
-    const userTask = selected.find(
-      (item) => item.type === 'bpmn:UserTask'
-        || item.businessObject?.$type === 'bpmn:UserTask',
-    );
-    if (userTask?.businessObject?.id || userTask?.id) {
-      activeNodeId.value = userTask.businessObject?.id || userTask.id || '';
-    }
+    const node = selected.find(isBpmnConfigurableNodeElement);
+    setActiveNode(resolveBpmnElementId(node));
   });
   eventBus?.on('elements.changed', () => {
     syncBpmnUserTasks();
   });
+}
+
+function setActiveNode(nodeId: string, syncCanvas = false) {
+  if (!nodeId) {
+    return;
+  }
+  syncBpmnUserTasks();
+  if (!bpmnNodes.value.some((node) => node.id === nodeId)) {
+    return;
+  }
+  activeNodeId.value = nodeId;
+  if (syncCanvas) {
+    selectCanvasElement(nodeId);
+  }
+}
+
+function selectCanvasElement(nodeId: string) {
+  const elementRegistry = modeler.value?.get('elementRegistry') as
+    | BpmnElementRegistry
+    | undefined;
+  const selection = modeler.value?.get('selection') as
+    | BpmnSelection
+    | undefined;
+  const element = elementRegistry?.get(nodeId);
+  if (element) {
+    selection?.select(element);
+  }
 }
 
 function extractBpmnUserTasks() {
@@ -1178,7 +1220,7 @@ defineExpose({
             <div>
               <div class="node-config-title">节点配置</div>
               <div class="node-config-subtitle">
-                BPMN 用户任务需配置审批人
+                BPMN 用户任务配置审批人，条件分支配置流转规则
               </div>
             </div>
             <Tag>{{ bpmnNodes.length }} 个节点</Tag>
@@ -1189,24 +1231,9 @@ defineExpose({
             description="暂无用户任务节点"
           />
           <template v-else>
-            <div class="node-list">
-              <button
-                v-for="node in bpmnNodes"
-                :key="node.id"
-                class="node-list-item"
-                :class="{ active: node.id === activeNodeId }"
-                type="button"
-                @click="activeNodeId = node.id"
-              >
-                <span class="node-list-name">{{ node.name }}</span>
-                <span class="node-list-id">
-                  {{ node.type === 'gateway' ? '条件分支' : '审批节点' }} · {{ node.id }}
-                </span>
-              </button>
-            </div>
-
             <Form
               v-if="activeNode && activeNodeConfig"
+              :key="activeNode.id"
               :model="activeNodeConfig"
               layout="vertical"
             >
@@ -1223,60 +1250,79 @@ defineExpose({
                 />
               </FormItem>
               <template v-if="activeNode.type === 'approver'">
-                <WorkflowAssigneeSelector
-                  v-model="activeNodeConfig.assigneeJson"
-                  v-model:type="activeNodeConfig.assigneeType"
-                  :disabled="isPublished"
-                />
-                <FormItem label="办理策略">
-                  <RadioGroup
-                    v-model:value="activeNodeConfig.approvalMode"
-                    :disabled="isPublished"
-                    :options="approvalModeOptions"
-                    button-style="solid"
-                    option-type="button"
-                    @change="handleApprovalModeChange(activeNodeConfig)"
-                  />
-                </FormItem>
-                <FormItem
-                  v-if="activeNodeConfig.approvalMode !== 'single'"
-                  label="执行人确定方式"
+                <Tabs
+                  class="node-config-tabs"
+                  size="small"
                 >
-                  <RadioGroup
-                    v-model:value="activeNodeConfig.assigneeResolveMode"
-                    :disabled="isPublished"
-                    :options="assigneeResolveModeOptions"
-                    button-style="solid"
-                    option-type="button"
-                  />
-                </FormItem>
-                <FormItem label="节点动作">
-                  <Space wrap>
-                    <Checkbox
-                      v-model:checked="activeNodeConfig.allowTransfer"
+                  <Tabs.TabPane
+                    key="assignee"
+                    tab="审批人配置"
+                  >
+                    <WorkflowAssigneeSelector
+                      v-model="activeNodeConfig.assigneeJson"
+                      v-model:type="activeNodeConfig.assigneeType"
                       :disabled="isPublished"
+                    />
+                    <FormItem label="办理策略">
+                      <RadioGroup
+                        v-model:value="activeNodeConfig.approvalMode"
+                        :disabled="isPublished"
+                        :options="approvalModeOptions"
+                        button-style="solid"
+                        option-type="button"
+                        @change="handleApprovalModeChange(activeNodeConfig)"
+                      />
+                    </FormItem>
+                    <FormItem
+                      v-if="activeNodeConfig.approvalMode !== 'single'"
+                      label="执行人确定方式"
                     >
-                      转办
-                    </Checkbox>
-                    <Checkbox
-                      v-model:checked="activeNodeConfig.allowReturn"
+                      <RadioGroup
+                        v-model:value="activeNodeConfig.assigneeResolveMode"
+                        :disabled="isPublished"
+                        :options="assigneeResolveModeOptions"
+                        button-style="solid"
+                        option-type="button"
+                      />
+                    </FormItem>
+                  </Tabs.TabPane>
+                  <Tabs.TabPane
+                    key="cc"
+                    tab="抄送配置"
+                  >
+                    <WorkflowCcConfigEditor
+                      v-model="activeNodeConfig.ccConfig"
                       :disabled="isPublished"
-                    >
-                      退回
-                    </Checkbox>
-                    <Checkbox
-                      v-model:checked="activeNodeConfig.allowAddSign"
-                      :disabled="isPublished"
-                    >
-                      加签
-                    </Checkbox>
-                  </Space>
-                </FormItem>
-                <Divider />
-                <WorkflowCcConfigEditor
-                  v-model="activeNodeConfig.ccConfig"
-                  :disabled="isPublished"
-                />
+                    />
+                  </Tabs.TabPane>
+                  <Tabs.TabPane
+                    key="actions"
+                    tab="节点动作"
+                  >
+                    <FormItem label="节点动作">
+                      <Space wrap>
+                        <Checkbox
+                          v-model:checked="activeNodeConfig.allowTransfer"
+                          :disabled="isPublished"
+                        >
+                          转办
+                        </Checkbox>
+                        <Checkbox
+                          v-model:checked="activeNodeConfig.allowReturn"
+                          :disabled="isPublished"
+                        >
+                          退回
+                        </Checkbox>
+                        <Checkbox
+                          v-model:checked="activeNodeConfig.allowAddSign"
+                          :disabled="isPublished"
+                        >
+                          加签
+                        </Checkbox>
+                      </Space>
+                    </FormItem>
+                  </Tabs.TabPane>
+                </Tabs>
               </template>
               <template v-else>
                 <div class="branch-list">
@@ -1450,7 +1496,7 @@ defineExpose({
   border-radius: 6px;
   display: grid;
   flex: 1;
-  grid-template-columns: minmax(0, 1fr) 320px;
+  grid-template-columns: minmax(0, 70%) minmax(380px, 30%);
   min-height: 0;
   overflow: hidden;
 }
@@ -1490,47 +1536,12 @@ defineExpose({
   margin-top: 2px;
 }
 
-.node-list {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
+.node-config-tabs {
+  min-width: 0;
 }
 
-.node-list-item {
-  background: #fff;
-  border: 1px solid #d9e2ec;
-  border-radius: 6px;
-  cursor: pointer;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  padding: 9px 10px;
-  text-align: left;
-  transition:
-    border-color 0.2s ease,
-    box-shadow 0.2s ease;
-}
-
-.node-list-item.active {
-  border-color: #1677ff;
-  box-shadow: 0 0 0 2px rgb(22 119 255 / 12%);
-}
-
-.node-list-name {
-  color: #111827;
-  font-size: 13px;
-  font-weight: 500;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.node-list-id {
-  color: #6b7280;
-  font-size: 12px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+.node-config-tabs :deep(.ant-tabs-content-holder) {
+  padding-top: 2px;
 }
 
 .branch-list {
