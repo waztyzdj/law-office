@@ -208,6 +208,24 @@ public class AssigneeResolveServiceImpl implements IAssigneeResolveService {
     }
 
     @Override
+    public void saveAssigneeSnapshotForNode(ProcessInstance processInstance, String nodeId,
+            List<SelectedAssigneeReq> selectedAssignees, String tenantId, RequestContext context) {
+        saveSelectedAssigneeSnapshots(processInstance, selectedAssignees, tenantId, context,
+                buildAssigneeSelectNodesForNode(processInstance, nodeId, tenantId));
+    }
+
+    @Override
+    public List<AssigneeSelectNodeVO> buildAssigneeSelectNodesForNode(ProcessInstance processInstance, String nodeId,
+            String tenantId) {
+        Optional<ProcessNodeConfig> nodeConfig = findRuntimeAssigneeNodeConfig(processInstance, nodeId, tenantId);
+        if (nodeConfig.isEmpty()) {
+            return List.of();
+        }
+        AssigneeSelectNodeVO requiredNode = buildAssigneeSelectNode(nodeConfig.get(), processInstance, tenantId);
+        return requiredNode == null ? List.of() : List.of(requiredNode);
+    }
+
+    @Override
     public void syncCurrentTasks(ProcessInstance processInstance, String tenantId, RequestContext context) {
         if (!StringUtils.hasText(processInstance.getFlowableProcessInstanceId())) {
             instanceStateService.refreshCurrentTaskSummary(processInstance, tenantId);
@@ -363,6 +381,26 @@ public class AssigneeResolveServiceImpl implements IAssigneeResolveService {
                 .orderByAsc("create_time"));
     }
 
+    /**
+     * 条件分支预判已经确定目标节点时，只需要判断该节点本身是否需要运行时选择审批人。
+     */
+    private Optional<ProcessNodeConfig> findRuntimeAssigneeNodeConfig(ProcessInstance processInstance,
+            String nodeId, String tenantId) {
+        if (!StringUtils.hasText(nodeId)) {
+            return Optional.empty();
+        }
+        ProcessNodeConfig nodeConfig = processNodeConfigMapper.selectOne(new QueryWrapper<ProcessNodeConfig>()
+                .eq("tenant_id", tenantId)
+                .eq("process_model_id", processInstance.getProcessModelId())
+                .eq("node_id", nodeId)
+                .eq("delete_flag", 0));
+        if (nodeConfig == null || !StringUtils.hasText(nodeConfig.getAssigneeType())
+                || !requiresRuntimeAssigneeSelection(nodeConfig)) {
+            return Optional.empty();
+        }
+        return Optional.of(nodeConfig);
+    }
+
     private boolean requiresRuntimeAssigneeSelection(ProcessNodeConfig nodeConfig) {
         return WorkflowConstants.AssigneeType.USER.equals(nodeConfig.getAssigneeType())
                 || WorkflowConstants.AssigneeType.ROLE.equals(nodeConfig.getAssigneeType())
@@ -441,6 +479,14 @@ public class AssigneeResolveServiceImpl implements IAssigneeResolveService {
             String tenantId, RequestContext context, String currentNodeId) {
         List<AssigneeSelectNodeVO> requiredNodes = buildRequiredAssigneeSelectNodes(
                 processInstance.getProcessModelId(), processInstance, tenantId, currentNodeId);
+        saveSelectedAssigneeSnapshots(processInstance, selectedAssignees, tenantId, context, requiredNodes);
+    }
+
+    /**
+     * 统一执行节点审批人选择结果的校验和快照写入；顺序流和条件分支只在“需要保存哪些节点”上不同。
+     */
+    private void saveSelectedAssigneeSnapshots(ProcessInstance processInstance, List<SelectedAssigneeReq> selectedAssignees,
+            String tenantId, RequestContext context, List<AssigneeSelectNodeVO> requiredNodes) {
         Set<String> requiredNodeIds = requiredNodes.stream()
                 .map(AssigneeSelectNodeVO::getNodeId)
                 .filter(StringUtils::hasText)

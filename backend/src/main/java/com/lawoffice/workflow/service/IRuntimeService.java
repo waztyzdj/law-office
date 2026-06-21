@@ -4,6 +4,7 @@ import com.lawoffice.framework.dto.RequestContext;
 import com.lawoffice.framework.result.BaseResult;
 import com.lawoffice.framework.vo.PageVO;
 import com.lawoffice.workflow.req.AvailableProcessPageReq;
+import com.lawoffice.workflow.req.AssigneePreviewReq;
 import com.lawoffice.workflow.req.AttachmentBindReq;
 import com.lawoffice.workflow.req.BranchRecordReq;
 import com.lawoffice.workflow.req.CcPageReq;
@@ -12,6 +13,7 @@ import com.lawoffice.workflow.req.StartProcessReq;
 import com.lawoffice.workflow.req.TaskActionReq;
 import com.lawoffice.workflow.req.TaskPageReq;
 import com.lawoffice.workflow.vo.AttachmentVO;
+import com.lawoffice.workflow.vo.AssigneeSelectNodeVO;
 import com.lawoffice.workflow.vo.AvailableProcessVO;
 import com.lawoffice.workflow.vo.BranchRecordVO;
 import com.lawoffice.workflow.vo.CcRecordVO;
@@ -124,6 +126,15 @@ public interface IRuntimeService {
      * @return 任务表单
      */
     BaseResult<TaskFormVO> getTaskForm(String taskId, RequestContext context);
+
+    /**
+     * 按当前表单数据预判下一审批节点需要选择的审批人。
+     *
+     * @param req 预判请求
+     * @param context 当前请求上下文
+     * @return 审批人选择节点
+     */
+    BaseResult<List<AssigneeSelectNodeVO>> previewNextAssigneeSelectNodes(AssigneePreviewReq req, RequestContext context);
 
     /**
      * 审批通过当前任务。

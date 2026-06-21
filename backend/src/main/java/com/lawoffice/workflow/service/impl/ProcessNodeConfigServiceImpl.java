@@ -7,14 +7,17 @@ import com.lawoffice.workflow.constant.WorkflowConstants;
 import com.lawoffice.workflow.entity.ProcessModel;
 import com.lawoffice.workflow.entity.ProcessInstance;
 import com.lawoffice.workflow.entity.ProcessNodeConfig;
+import com.lawoffice.workflow.entity.Task;
 import com.lawoffice.workflow.mapper.ProcessModelMapper;
 import com.lawoffice.workflow.mapper.ProcessNodeConfigMapper;
+import com.lawoffice.workflow.mapper.TaskMapper;
 import com.lawoffice.workflow.service.IProcessNodeConfigService;
 import com.lawoffice.workflow.vo.ProcessNodeConfigVO;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.regex.Pattern;
@@ -60,10 +63,12 @@ public class ProcessNodeConfigServiceImpl extends AbstractWorkflowConfigServiceI
     private static final Pattern BRANCH_ID_PATTERN = Pattern.compile("^[A-Za-z0-9_-]+$");
 
     private final ProcessModelMapper processModelMapper;
+    private final TaskMapper taskMapper;
 
     @Autowired
-    public ProcessNodeConfigServiceImpl(ProcessModelMapper processModelMapper) {
+    public ProcessNodeConfigServiceImpl(ProcessModelMapper processModelMapper, TaskMapper taskMapper) {
         this.processModelMapper = processModelMapper;
+        this.taskMapper = taskMapper;
     }
 
     @Override
@@ -101,6 +106,10 @@ public class ProcessNodeConfigServiceImpl extends AbstractWorkflowConfigServiceI
             return List.of();
         }
         Integer currentSortOrder = currentNodeConfig.getSortOrder();
+        Set<String> visitedNodeIds = listVisitedApproverNodeIds(processInstance, currentNodeConfig.getNodeId(), tenantId);
+        if (visitedNodeIds.isEmpty()) {
+            return List.of();
+        }
         return baseMapper.selectList(new QueryWrapper<ProcessNodeConfig>()
                         .eq("tenant_id", tenantId)
                         .eq("process_model_id", processInstance.getProcessModelId())
@@ -110,6 +119,7 @@ public class ProcessNodeConfigServiceImpl extends AbstractWorkflowConfigServiceI
                         .orderByAsc("create_time"))
                 .stream()
                 .filter(nodeConfig -> !currentNodeConfig.getNodeId().equals(nodeConfig.getNodeId()))
+                .filter(nodeConfig -> visitedNodeIds.contains(nodeConfig.getNodeId()))
                 .filter(nodeConfig -> currentSortOrder == null
                         || (nodeConfig.getSortOrder() != null && nodeConfig.getSortOrder() < currentSortOrder))
                 .toList();
@@ -126,6 +136,25 @@ public class ProcessNodeConfigServiceImpl extends AbstractWorkflowConfigServiceI
         if (!allowed) {
             throw new IllegalArgumentException("退回目标节点不允许");
         }
+    }
+
+    /**
+     * 退回目标必须来自当前实例真实到达过的审批节点，避免条件分支未命中的节点被静态顺序误判为可退回。
+     */
+    private Set<String> listVisitedApproverNodeIds(ProcessInstance processInstance, String currentNodeId, String tenantId) {
+        return taskMapper.selectList(new QueryWrapper<Task>()
+                        .select("node_id")
+                        .eq("tenant_id", tenantId)
+                        .eq("process_instance_id", processInstance.getId())
+                        .isNotNull("node_id")
+                        .ne("node_id", currentNodeId)
+                        .eq("delete_flag", 0)
+                        .orderByAsc("create_time"))
+                .stream()
+                .map(Task::getNodeId)
+                .filter(StringUtils::hasText)
+                .filter(nodeId -> !WorkflowConstants.VirtualNode.START_DRAFT.equals(nodeId))
+                .collect(java.util.stream.Collectors.toCollection(LinkedHashSet::new));
     }
 
     @Override

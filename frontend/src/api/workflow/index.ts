@@ -235,6 +235,12 @@ export interface SelectedAssigneeReq {
   userIds?: string[];
 }
 
+export interface AssigneePreviewReq {
+  formDataJson?: string;
+  processModelId?: string;
+  taskId?: string;
+}
+
 export interface AssigneeOptionInfo {
   displayName?: string;
   realname?: string;
@@ -490,6 +496,8 @@ export const listWorkflowInstanceRecords = (id: string) =>
   });
 export const getWorkflowTaskForm = (taskId: string) =>
   requestClient.post<TaskFormInfo>('/workflow/task/form', { taskId });
+export const previewNextAssigneeSelectNodes = (data: AssigneePreviewReq) =>
+  requestClient.post<AssigneeSelectNodeInfo[]>('/workflow/assignee/preview', data);
 export const approveWorkflowTask = (data: TaskActionReq) =>
   requestClient.post<TaskActionResult>('/workflow/task/approve', data);
 export const saveWorkflowStartDraftTask = (data: TaskActionReq) =>

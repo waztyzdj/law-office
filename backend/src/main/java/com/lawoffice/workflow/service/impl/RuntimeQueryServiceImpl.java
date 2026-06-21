@@ -25,14 +25,19 @@ import com.lawoffice.workflow.mapper.ProcessModelMapper;
 import com.lawoffice.workflow.mapper.ProcessStartPermissionMapper;
 import com.lawoffice.workflow.mapper.TaskCandidateMapper;
 import com.lawoffice.workflow.mapper.TaskMapper;
+import com.lawoffice.workflow.req.AssigneePreviewReq;
 import com.lawoffice.workflow.req.AvailableProcessPageReq;
 import com.lawoffice.workflow.req.StartedInstancePageReq;
 import com.lawoffice.workflow.req.TaskPageReq;
+import com.lawoffice.workflow.dto.BranchMatchResult;
+import com.lawoffice.workflow.service.IAssigneeResolveService;
+import com.lawoffice.workflow.service.IConditionBranchRuntimeService;
 import com.lawoffice.workflow.service.IProcessNodeConfigService;
 import com.lawoffice.workflow.service.IRuntimeAccessService;
 import com.lawoffice.workflow.service.IRuntimeQueryService;
 import com.lawoffice.workflow.service.IRuntimeViewAssemblerService;
 import com.lawoffice.workflow.service.IWorkflowRuntimeLookupService;
+import com.lawoffice.workflow.vo.AssigneeSelectNodeVO;
 import com.lawoffice.workflow.vo.AvailableProcessVO;
 import com.lawoffice.workflow.vo.InstanceDetailVO;
 import com.lawoffice.workflow.vo.OperationRecordVO;
@@ -47,10 +52,17 @@ import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 
 @Service
 public class RuntimeQueryServiceImpl implements IRuntimeQueryService {
+
+    private static final List<String> DONE_TASK_STATUSES = List.of(
+            WorkflowConstants.Status.DONE,
+            WorkflowConstants.Status.RETURNED,
+            WorkflowConstants.Status.TRANSFERRED
+    );
 
     private final ProcessModelMapper processModelMapper;
     private final FormDefinitionMapper formDefinitionMapper;
@@ -60,6 +72,8 @@ public class RuntimeQueryServiceImpl implements IRuntimeQueryService {
     private final TaskCandidateMapper taskCandidateMapper;
     private final TaskMapper taskMapper;
     private final IProcessNodeConfigService processNodeConfigService;
+    private final IConditionBranchRuntimeService conditionBranchRuntimeService;
+    private final IAssigneeResolveService assigneeResolveService;
     private final IRuntimeAccessService runtimeAccessService;
     private final IRuntimeViewAssemblerService runtimeViewAssemblerService;
     private final IWorkflowRuntimeLookupService workflowRuntimeLookupService;
@@ -73,6 +87,8 @@ public class RuntimeQueryServiceImpl implements IRuntimeQueryService {
             TaskCandidateMapper taskCandidateMapper,
             TaskMapper taskMapper,
             IProcessNodeConfigService processNodeConfigService,
+            IConditionBranchRuntimeService conditionBranchRuntimeService,
+            IAssigneeResolveService assigneeResolveService,
             IRuntimeAccessService runtimeAccessService,
             IRuntimeViewAssemblerService runtimeViewAssemblerService,
             IWorkflowRuntimeLookupService workflowRuntimeLookupService,
@@ -85,6 +101,8 @@ public class RuntimeQueryServiceImpl implements IRuntimeQueryService {
         this.taskCandidateMapper = taskCandidateMapper;
         this.taskMapper = taskMapper;
         this.processNodeConfigService = processNodeConfigService;
+        this.conditionBranchRuntimeService = conditionBranchRuntimeService;
+        this.assigneeResolveService = assigneeResolveService;
         this.runtimeAccessService = runtimeAccessService;
         this.runtimeViewAssemblerService = runtimeViewAssemblerService;
         this.workflowRuntimeLookupService = workflowRuntimeLookupService;
@@ -285,6 +303,28 @@ public class RuntimeQueryServiceImpl implements IRuntimeQueryService {
     }
 
     @Override
+    public BaseResult<List<AssigneeSelectNodeVO>> previewNextAssigneeSelectNodes(AssigneePreviewReq req,
+            RequestContext context) {
+        try {
+            if (req == null) {
+                throw new IllegalArgumentException("预判请求不能为空");
+            }
+            String tenantId = requireTenantId(context);
+            if (StringUtils.hasText(req.getTaskId())) {
+                return BaseResult.success(previewTaskNextAssigneeSelectNodes(req, tenantId, context));
+            }
+            if (StringUtils.hasText(req.getProcessModelId())) {
+                return BaseResult.success(previewStartNextAssigneeSelectNodes(req, tenantId, context));
+            }
+            throw new IllegalArgumentException("流程模型ID或任务ID不能为空");
+        } catch (IllegalArgumentException e) {
+            return BaseResult.error(400, e.getMessage());
+        } catch (Exception e) {
+            return BaseResult.error("预判下一审批人失败: " + e.getMessage());
+        }
+    }
+
+    @Override
     public BaseResult<InstanceDetailVO> getInstanceDetail(String id, RequestContext context) {
         try {
             String tenantId = requireTenantId(context);
@@ -376,16 +416,19 @@ public class RuntimeQueryServiceImpl implements IRuntimeQueryService {
 
         QueryWrapper<Task> wrapper = new QueryWrapper<>();
         wrapper.eq("tenant_id", tenantId)
-                .eq("status", status)
                 .eq("delete_flag", 0);
+        if (req != null && StringUtils.hasText(req.getStatus())) {
+            wrapper.eq("status", req.getStatus());
+        } else if (WorkflowConstants.Status.DONE.equals(status)) {
+            wrapper.in("status", DONE_TASK_STATUSES);
+        } else {
+            wrapper.eq("status", status);
+        }
         if (req != null && StringUtils.hasText(req.getProcessInstanceId())) {
             wrapper.eq("process_instance_id", req.getProcessInstanceId());
         }
         if (req != null && StringUtils.hasText(req.getTaskType())) {
             wrapper.eq("task_type", req.getTaskType());
-        }
-        if (req != null && StringUtils.hasText(req.getStatus())) {
-            wrapper.eq("status", req.getStatus());
         }
         if (req != null && StringUtils.hasText(req.getTaskName())) {
             wrapper.like("task_name", req.getTaskName());
@@ -494,6 +537,100 @@ public class RuntimeQueryServiceImpl implements IRuntimeQueryService {
 
     private Task requireTodoTask(String taskId, String tenantId) {
         return workflowRuntimeLookupService.requireTodoTask(taskId, tenantId);
+    }
+
+    /**
+     * 发起前根据当前表单数据预判真实首个审批节点，条件分支命中时只返回命中目标节点的审批人选择项。
+     */
+    private List<AssigneeSelectNodeVO> previewStartNextAssigneeSelectNodes(AssigneePreviewReq req,
+            String tenantId, RequestContext context) {
+        requireUserId(context);
+        ProcessModel model = requirePublishedModel(req.getProcessModelId(), tenantId);
+        checkStartPermission(model, context);
+        ProcessInstance processInstance = buildPreviewProcessInstance(model, context);
+        FormInstance formInstance = buildPreviewFormInstance(req.getFormDataJson());
+        Optional<BranchMatchResult> branchMatch = conditionBranchRuntimeService.previewNextBranch(
+                model, processInstance, formInstance, WorkflowConstants.VirtualNode.START, null, tenantId, context);
+        if (branchMatch.isPresent()) {
+            return assigneeResolveService.buildAssigneeSelectNodesForNode(
+                    processInstance, branchMatch.get().getTargetNodeId(), tenantId);
+        }
+        return assigneeResolveService.buildRequiredAssigneeSelectNodes(
+                model.getId(), processInstance, tenantId, WorkflowConstants.VirtualNode.START_DRAFT);
+    }
+
+    /**
+     * 审批通过前按最新表单数据预判真实下一审批节点，避免条件分支场景继续按静态顺序展示审批人选择弹窗。
+     */
+    private List<AssigneeSelectNodeVO> previewTaskNextAssigneeSelectNodes(AssigneePreviewReq req,
+            String tenantId, RequestContext context) {
+        Task task = requireTodoTask(req.getTaskId(), tenantId);
+        ensureTaskHandler(task, findActiveCandidate(task, context), context);
+        if (!willAdvanceAfterApprove(task, tenantId)) {
+            return List.of();
+        }
+        ProcessInstance processInstance = requireProcessInstance(task.getProcessInstanceId(), tenantId);
+        FormInstance formInstance = requireFormInstance(processInstance.getFormInstanceId(), tenantId);
+        formInstance.setFormDataJson(resolvePreviewFormDataJson(req.getFormDataJson(), formInstance.getFormDataJson()));
+        ProcessModel model = requirePublishedModel(processInstance.getProcessModelId(), tenantId);
+        Optional<BranchMatchResult> branchMatch = conditionBranchRuntimeService.previewNextBranch(
+                model, processInstance, formInstance, task.getNodeId(), task, tenantId, context);
+        if (branchMatch.isPresent()) {
+            return assigneeResolveService.buildAssigneeSelectNodesForNode(
+                    processInstance, branchMatch.get().getTargetNodeId(), tenantId);
+        }
+        return assigneeResolveService.buildRequiredAssigneeSelectNodes(
+                processInstance.getProcessModelId(), processInstance, tenantId, task.getNodeId());
+    }
+
+    private ProcessInstance buildPreviewProcessInstance(ProcessModel model, RequestContext context) {
+        ProcessInstance processInstance = new ProcessInstance();
+        processInstance.setTenantId(model.getTenantId());
+        processInstance.setProcessModelId(model.getId());
+        processInstance.setFormDefinitionId(model.getFormDefinitionId());
+        processInstance.setStarterUserId(context.getUserId());
+        processInstance.setStarterUsername(context.getUsername());
+        processInstance.setStarterRealname(context.getUsername());
+        processInstance.setStatus(WorkflowConstants.Status.RUNNING);
+        return processInstance;
+    }
+
+    private FormInstance buildPreviewFormInstance(String formDataJson) {
+        FormInstance formInstance = new FormInstance();
+        formInstance.setFormDataJson(resolvePreviewFormDataJson(formDataJson, "{}"));
+        return formInstance;
+    }
+
+    private String resolvePreviewFormDataJson(String previewFormDataJson, String fallbackFormDataJson) {
+        return StringUtils.hasText(previewFormDataJson) ? previewFormDataJson : fallbackFormDataJson;
+    }
+
+    private boolean willAdvanceAfterApprove(Task task, String tenantId) {
+        if (!isCountersignTask(task)) {
+            return true;
+        }
+        return countGroupTasks(task, tenantId, WorkflowConstants.Status.DONE) + 1 >= resolveGroupTotal(task);
+    }
+
+    private boolean isCountersignTask(Task task) {
+        return WorkflowConstants.ApprovalMode.COUNTERSIGN.equals(task.getApprovalMode())
+                || WorkflowConstants.TaskType.COUNTERSIGN.equals(task.getTaskType());
+    }
+
+    private int resolveGroupTotal(Task task) {
+        return task.getGroupTotal() == null || task.getGroupTotal() <= 0 ? 1 : task.getGroupTotal();
+    }
+
+    private int countGroupTasks(Task task, String tenantId, String status) {
+        if (!StringUtils.hasText(task.getTaskGroupId())) {
+            return WorkflowConstants.Status.DONE.equals(status) && WorkflowConstants.Status.DONE.equals(task.getStatus()) ? 1 : 0;
+        }
+        Long count = taskMapper.selectCount(new QueryWrapper<Task>()
+                .eq("tenant_id", tenantId)
+                .eq("task_group_id", task.getTaskGroupId())
+                .eq("status", status)
+                .eq("delete_flag", 0));
+        return count == null ? 0 : count.intValue();
     }
 
     private ProcessModel requirePublishedModel(String processModelId, String tenantId) {

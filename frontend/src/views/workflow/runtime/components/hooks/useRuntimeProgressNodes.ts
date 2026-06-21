@@ -14,14 +14,18 @@ import {
   getStatusMeta,
 } from '../../../components/status';
 
+const hiddenApprovalRecordActions = new Set(['branch_match']);
+
 export function useRuntimeProgressNodes(
   detail: Ref<InstanceDetailInfo | undefined>,
 ) {
   const processInstance = computed(() => detail.value?.processInstance);
   const chronologicalRecords = computed(() =>
-    [...(detail.value?.records ?? [])].sort((a, b) =>
-      String(a.operateTime ?? '').localeCompare(String(b.operateTime ?? '')),
-    ),
+    [...(detail.value?.records ?? [])]
+      .filter((record) => !hiddenApprovalRecordActions.has(record.action ?? ''))
+      .sort((a, b) =>
+        String(a.operateTime ?? '').localeCompare(String(b.operateTime ?? '')),
+      ),
   );
   const currentTasks = computed(() => detail.value?.currentTasks ?? []);
 

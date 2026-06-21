@@ -1,5 +1,3 @@
-import type { Ref } from 'vue';
-
 import type {
   AssigneeSelectNodeInfo,
   SelectedAssigneeReq,
@@ -7,7 +5,6 @@ import type {
   TaskActionReq,
 } from '#/api/workflow';
 import type { UserInfo } from '#/api/system/user';
-import type { DrawerMode } from '../runtimeTypes';
 
 import { computed, ref } from 'vue';
 
@@ -15,30 +12,17 @@ import { message } from 'ant-design-vue';
 
 type PendingSubmitPayload = StartProcessReq | TaskActionReq;
 
-interface UseRuntimeAssigneeSelectionOptions {
-  mode: Ref<DrawerMode>;
-  startAssigneeSelectNodes: Ref<AssigneeSelectNodeInfo[]>;
-  taskAssigneeSelectNodes: Ref<AssigneeSelectNodeInfo[]>;
-}
-
-export function useRuntimeAssigneeSelection(
-  options: UseRuntimeAssigneeSelectionOptions,
-) {
+export function useRuntimeAssigneeSelection() {
   const assigneePickerOpen = ref(false);
   const assigneeSelectModalOpen = ref(false);
   const pendingSubmitPayload = ref<PendingSubmitPayload>();
   const selectedAssignees = ref<SelectedAssigneeReq[]>([]);
   const draftSelectedAssigneeUsers = ref<UserInfo[]>([]);
+  const previewAssigneeSelectNodes = ref<AssigneeSelectNodeInfo[]>([]);
 
-  const assigneeSelectNodes = computed<AssigneeSelectNodeInfo[]>(() => {
-    if (options.mode.value === 'start') {
-      return options.startAssigneeSelectNodes.value;
-    }
-    if (options.mode.value === 'todo') {
-      return options.taskAssigneeSelectNodes.value;
-    }
-    return [];
-  });
+  const assigneeSelectNodes = computed<AssigneeSelectNodeInfo[]>(
+    () => previewAssigneeSelectNodes.value,
+  );
   const runtimeFreeSelectNode = computed(() =>
     assigneeSelectNodes.value.find((node) => node.assigneeType === 'starter_select'),
   );
@@ -55,9 +39,14 @@ export function useRuntimeAssigneeSelection(
     pendingSubmitPayload.value = undefined;
     selectedAssignees.value = [];
     draftSelectedAssigneeUsers.value = [];
+    previewAssigneeSelectNodes.value = [];
   }
 
-  function openNextAssigneeSelect(payload: PendingSubmitPayload) {
+  function openNextAssigneeSelect(
+    payload: PendingSubmitPayload,
+    nodes: AssigneeSelectNodeInfo[],
+  ) {
+    previewAssigneeSelectNodes.value = nodes;
     if (!assigneeSelectNodes.value.length) {
       return false;
     }

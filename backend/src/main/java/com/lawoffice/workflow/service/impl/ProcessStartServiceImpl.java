@@ -5,6 +5,7 @@ import com.lawoffice.framework.dto.RequestContext;
 import com.lawoffice.framework.result.BaseResult;
 import com.lawoffice.util.EntityFillUtils;
 import com.lawoffice.workflow.constant.WorkflowConstants;
+import com.lawoffice.workflow.dto.BranchMatchResult;
 import com.lawoffice.workflow.dto.FlowableStartResult;
 import com.lawoffice.workflow.entity.FieldPermission;
 import com.lawoffice.workflow.entity.FormDefinition;
@@ -15,8 +16,10 @@ import com.lawoffice.workflow.entity.Task;
 import com.lawoffice.workflow.mapper.FormInstanceMapper;
 import com.lawoffice.workflow.mapper.ProcessInstanceMapper;
 import com.lawoffice.workflow.mapper.TaskMapper;
+import com.lawoffice.workflow.req.SelectedAssigneeReq;
 import com.lawoffice.workflow.req.StartProcessReq;
 import com.lawoffice.workflow.service.IAssigneeResolveService;
+import com.lawoffice.workflow.service.IConditionBranchRuntimeService;
 import com.lawoffice.workflow.service.IFlowableService;
 import com.lawoffice.workflow.service.IInstanceStateService;
 import com.lawoffice.workflow.service.IProcessStartService;
@@ -34,6 +37,7 @@ import java.time.format.DateTimeFormatter;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 import java.util.function.Supplier;
 
@@ -47,6 +51,7 @@ public class ProcessStartServiceImpl implements IProcessStartService {
     private final FormInstanceMapper formInstanceMapper;
     private final ProcessInstanceMapper processInstanceMapper;
     private final TaskMapper taskMapper;
+    private final IConditionBranchRuntimeService conditionBranchRuntimeService;
     private final IFlowableService flowableService;
     private final IAssigneeResolveService assigneeResolveService;
     private final IInstanceStateService instanceStateService;
@@ -57,6 +62,7 @@ public class ProcessStartServiceImpl implements IProcessStartService {
     public ProcessStartServiceImpl(FormInstanceMapper formInstanceMapper,
             ProcessInstanceMapper processInstanceMapper,
             TaskMapper taskMapper,
+            IConditionBranchRuntimeService conditionBranchRuntimeService,
             IFlowableService flowableService,
             IAssigneeResolveService assigneeResolveService,
             IInstanceStateService instanceStateService,
@@ -66,6 +72,7 @@ public class ProcessStartServiceImpl implements IProcessStartService {
         this.formInstanceMapper = formInstanceMapper;
         this.processInstanceMapper = processInstanceMapper;
         this.taskMapper = taskMapper;
+        this.conditionBranchRuntimeService = conditionBranchRuntimeService;
         this.flowableService = flowableService;
         this.assigneeResolveService = assigneeResolveService;
         this.instanceStateService = instanceStateService;
@@ -94,12 +101,14 @@ public class ProcessStartServiceImpl implements IProcessStartService {
             formInstance.setProcessInstanceId(processInstance.getId());
             EntityFillUtils.fillAuditFields(formInstance, context, false);
             formInstanceMapper.updateById(formInstance);
-            assigneeResolveService.saveFirstAssigneeSnapshot(processInstance, req.getSelectedAssignees(), tenantId, context);
+            Optional<BranchMatchResult> branchMatch = conditionBranchRuntimeService.matchNextBranch(
+                    model, processInstance, formInstance, WorkflowConstants.VirtualNode.START, null, tenantId, context);
+            saveFirstAssigneeSnapshot(processInstance, branchMatch, req.getSelectedAssignees(), tenantId, context);
 
             FlowableStartResult flowableStartResult = flowableService.startProcessInstance(
                     model,
                     processInstance.getId(),
-                    buildFlowableVariables(processInstance, formInstance, context));
+                    buildFlowableVariables(processInstance, formInstance, context, branchMatch));
             processInstance.setFlowableProcessInstanceId(flowableStartResult.getProcessInstanceId());
             processInstance.setFlowableProcessDefinitionId(flowableStartResult.getProcessDefinitionId());
             createSubmittedStartTask(processInstance, tenantId, context);
@@ -223,14 +232,29 @@ public class ProcessStartServiceImpl implements IProcessStartService {
         return processInstance;
     }
 
-    private Map<String, Object> buildFlowableVariables(ProcessInstance processInstance, FormInstance formInstance, RequestContext context) {
+    private Map<String, Object> buildFlowableVariables(ProcessInstance processInstance,
+            FormInstance formInstance, RequestContext context, Optional<BranchMatchResult> branchMatch) {
         Map<String, Object> variables = new HashMap<>();
         variables.put("tenantId", processInstance.getTenantId());
         variables.put("processInstanceId", processInstance.getId());
         variables.put("formInstanceId", formInstance.getId());
         variables.put("starterUserId", context.getUserId());
         variables.put("starterUsername", context.getUsername());
+        variables.putAll(conditionBranchRuntimeService.buildFlowableVariables(branchMatch));
         return variables;
+    }
+
+    /**
+     * 发起后若直接进入条件分支，审批人快照应保存到命中的目标审批节点，而不是静态顺序中的第一个节点。
+     */
+    private void saveFirstAssigneeSnapshot(ProcessInstance processInstance, Optional<BranchMatchResult> branchMatch,
+            List<SelectedAssigneeReq> selectedAssignees, String tenantId, RequestContext context) {
+        if (branchMatch.isPresent()) {
+            assigneeResolveService.saveAssigneeSnapshotForNode(processInstance, branchMatch.get().getTargetNodeId(),
+                    selectedAssignees, tenantId, context);
+            return;
+        }
+        assigneeResolveService.saveFirstAssigneeSnapshot(processInstance, selectedAssignees, tenantId, context);
     }
 
     private void createStartDraftTask(ProcessInstance processInstance, String tenantId, RequestContext context) {

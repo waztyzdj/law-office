@@ -7,6 +7,7 @@ import com.lawoffice.framework.result.BaseResult;
 import com.lawoffice.system.entity.User;
 import com.lawoffice.util.EntityFillUtils;
 import com.lawoffice.workflow.constant.WorkflowConstants;
+import com.lawoffice.workflow.dto.BranchMatchResult;
 import com.lawoffice.workflow.dto.FlowableStartResult;
 import com.lawoffice.workflow.entity.FieldPermission;
 import com.lawoffice.workflow.entity.FormInstance;
@@ -19,8 +20,10 @@ import com.lawoffice.workflow.mapper.FormInstanceMapper;
 import com.lawoffice.workflow.mapper.ProcessInstanceMapper;
 import com.lawoffice.workflow.mapper.TaskCandidateMapper;
 import com.lawoffice.workflow.mapper.TaskMapper;
+import com.lawoffice.workflow.req.SelectedAssigneeReq;
 import com.lawoffice.workflow.req.TaskActionReq;
 import com.lawoffice.workflow.service.IAssigneeResolveService;
+import com.lawoffice.workflow.service.IConditionBranchRuntimeService;
 import com.lawoffice.workflow.service.IFlowableService;
 import com.lawoffice.workflow.service.IInstanceStateService;
 import com.lawoffice.workflow.service.IProcessNodeConfigService;
@@ -38,6 +41,7 @@ import java.time.LocalDateTime;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 import java.util.function.Supplier;
 
@@ -49,6 +53,7 @@ public class TaskActionServiceImpl implements ITaskActionService {
     private final ProcessInstanceMapper processInstanceMapper;
     private final TaskMapper taskMapper;
     private final TaskCandidateMapper taskCandidateMapper;
+    private final IConditionBranchRuntimeService conditionBranchRuntimeService;
     private final IFlowableService flowableService;
     private final IAssigneeResolveService assigneeResolveService;
     private final IInstanceStateService instanceStateService;
@@ -61,6 +66,7 @@ public class TaskActionServiceImpl implements ITaskActionService {
             ProcessInstanceMapper processInstanceMapper,
             TaskMapper taskMapper,
             TaskCandidateMapper taskCandidateMapper,
+            IConditionBranchRuntimeService conditionBranchRuntimeService,
             IFlowableService flowableService,
             IAssigneeResolveService assigneeResolveService,
             IInstanceStateService instanceStateService,
@@ -72,6 +78,7 @@ public class TaskActionServiceImpl implements ITaskActionService {
         this.processInstanceMapper = processInstanceMapper;
         this.taskMapper = taskMapper;
         this.taskCandidateMapper = taskCandidateMapper;
+        this.conditionBranchRuntimeService = conditionBranchRuntimeService;
         this.flowableService = flowableService;
         this.assigneeResolveService = assigneeResolveService;
         this.instanceStateService = instanceStateService;
@@ -142,11 +149,15 @@ public class TaskActionServiceImpl implements ITaskActionService {
                 completeAddSignTask(task, processInstance, formInstance, req, tenantId, context);
             } else {
                 ensureNoActiveAddSignChild(task);
+                Optional<BranchMatchResult> branchMatch = Optional.empty();
                 if (willAdvanceAfterApprove(task, tenantId)) {
-                    assigneeResolveService.saveNextAssigneeSnapshot(processInstance, task.getNodeId(),
+                    ProcessModel model = requirePublishedModel(processInstance.getProcessModelId(), tenantId);
+                    branchMatch = conditionBranchRuntimeService.matchNextBranch(
+                            model, processInstance, formInstance, task.getNodeId(), task, tenantId, context);
+                    saveNextAssigneeSnapshot(processInstance, task.getNodeId(), branchMatch,
                             req == null ? null : req.getSelectedAssignees(), tenantId, context);
                 }
-                completeApprove(task, processInstance, formInstance, req, tenantId, context);
+                completeApprove(task, processInstance, formInstance, req, tenantId, context, branchMatch);
             }
         } else if (WorkflowConstants.Action.REJECT.equals(action)) {
             ensureNotAddSignTask(task, "加签任务不允许不通过流程");
@@ -175,11 +186,14 @@ public class TaskActionServiceImpl implements ITaskActionService {
 
         ProcessModel model = requirePublishedModel(processInstance.getProcessModelId(), tenantId);
         checkStartPermission(model, context);
-        assigneeResolveService.saveFirstAssigneeSnapshot(processInstance, req == null ? null : req.getSelectedAssignees(), tenantId, context);
+        Optional<BranchMatchResult> branchMatch = conditionBranchRuntimeService.matchNextBranch(
+                model, processInstance, formInstance, WorkflowConstants.VirtualNode.START, null, tenantId, context);
+        saveFirstAssigneeSnapshot(processInstance, branchMatch,
+                req == null ? null : req.getSelectedAssignees(), tenantId, context);
         FlowableStartResult flowableStartResult = flowableService.startProcessInstance(
                 model,
                 processInstance.getId(),
-                buildFlowableVariables(processInstance, formInstance, context));
+                buildFlowableVariables(processInstance, formInstance, context, branchMatch));
         processInstance.setFlowableProcessInstanceId(flowableStartResult.getProcessInstanceId());
         processInstance.setFlowableProcessDefinitionId(flowableStartResult.getProcessDefinitionId());
         processInstance.setStatus(WorkflowConstants.Status.RUNNING);
@@ -367,16 +381,16 @@ public class TaskActionServiceImpl implements ITaskActionService {
     }
 
     private void completeApprove(Task task, ProcessInstance processInstance, FormInstance formInstance,
-            TaskActionReq req, String tenantId, RequestContext context) {
+            TaskActionReq req, String tenantId, RequestContext context, Optional<BranchMatchResult> branchMatch) {
         if (isCountersignTask(task)) {
-            completeCountersignApprove(task, processInstance, formInstance, req, tenantId, context);
+            completeCountersignApprove(task, processInstance, formInstance, req, tenantId, context, branchMatch);
             return;
         }
         if (isOrsignTask(task)) {
-            completeOrsignApprove(task, processInstance, formInstance, req, tenantId, context);
+            completeOrsignApprove(task, processInstance, formInstance, req, tenantId, context, branchMatch);
             return;
         }
-        completeFlowableTask(task, req, context);
+        completeFlowableTask(task, req, context, branchMatch);
         instanceStateService.markTaskDone(task, context);
         assigneeResolveService.syncCurrentTasks(processInstance, tenantId, context);
         if (!flowableService.isProcessInstanceActive(processInstance.getFlowableProcessInstanceId())) {
@@ -394,7 +408,7 @@ public class TaskActionServiceImpl implements ITaskActionService {
      * 会签通过只在最后一个同组任务完成时推进 Flowable，避免第一个办理人通过后流程提前进入下一节点。
      */
     private void completeCountersignApprove(Task task, ProcessInstance processInstance, FormInstance formInstance,
-            TaskActionReq req, String tenantId, RequestContext context) {
+            TaskActionReq req, String tenantId, RequestContext context, Optional<BranchMatchResult> branchMatch) {
         instanceStateService.markTaskDone(task, context);
         int completedCount = countGroupTasks(task, tenantId, WorkflowConstants.Status.DONE);
         updateGroupCompleted(task, completedCount, tenantId, context);
@@ -404,7 +418,7 @@ public class TaskActionServiceImpl implements ITaskActionService {
             processInstanceMapper.updateById(processInstance);
             return;
         }
-        completeFlowableTask(resolveFlowableAnchorTask(task, tenantId), req, context);
+        completeFlowableTask(resolveFlowableAnchorTask(task, tenantId), req, context, branchMatch);
         assigneeResolveService.syncCurrentTasks(processInstance, tenantId, context);
         if (!flowableService.isProcessInstanceActive(processInstance.getFlowableProcessInstanceId())) {
             processInstance.setStatus(WorkflowConstants.Status.APPROVED);
@@ -421,11 +435,11 @@ public class TaskActionServiceImpl implements ITaskActionService {
      * 或签任一人通过即可推进 Flowable，其它同组待办立即取消，防止旧待办继续提交造成重复流转。
      */
     private void completeOrsignApprove(Task task, ProcessInstance processInstance, FormInstance formInstance,
-            TaskActionReq req, String tenantId, RequestContext context) {
+            TaskActionReq req, String tenantId, RequestContext context, Optional<BranchMatchResult> branchMatch) {
         instanceStateService.markTaskDone(task, context);
         cancelSiblingGroupTodoTasks(task, tenantId, context);
         updateGroupCompleted(task, countGroupTasks(task, tenantId, WorkflowConstants.Status.DONE), tenantId, context);
-        completeFlowableTask(resolveFlowableAnchorTask(task, tenantId), req, context);
+        completeFlowableTask(resolveFlowableAnchorTask(task, tenantId), req, context, branchMatch);
         assigneeResolveService.syncCurrentTasks(processInstance, tenantId, context);
         if (!flowableService.isProcessInstanceActive(processInstance.getFlowableProcessInstanceId())) {
             processInstance.setStatus(WorkflowConstants.Status.APPROVED);
@@ -487,6 +501,33 @@ public class TaskActionServiceImpl implements ITaskActionService {
             return true;
         }
         return countGroupTasks(task, tenantId, WorkflowConstants.Status.DONE) + 1 >= resolveGroupTotal(task);
+    }
+
+    /**
+     * 条件分支命中时，下一审批人必须保存到真实目标节点；没有分支时沿用静态顺序节点。
+     */
+    private void saveNextAssigneeSnapshot(ProcessInstance processInstance, String currentNodeId,
+            Optional<BranchMatchResult> branchMatch, List<SelectedAssigneeReq> selectedAssignees,
+            String tenantId, RequestContext context) {
+        if (branchMatch.isPresent()) {
+            assigneeResolveService.saveAssigneeSnapshotForNode(processInstance, branchMatch.get().getTargetNodeId(),
+                    selectedAssignees, tenantId, context);
+            return;
+        }
+        assigneeResolveService.saveNextAssigneeSnapshot(processInstance, currentNodeId, selectedAssignees, tenantId, context);
+    }
+
+    /**
+     * 发起后紧接条件分支时，第一步审批人选择也应落到分支命中的目标节点。
+     */
+    private void saveFirstAssigneeSnapshot(ProcessInstance processInstance, Optional<BranchMatchResult> branchMatch,
+            List<SelectedAssigneeReq> selectedAssignees, String tenantId, RequestContext context) {
+        if (branchMatch.isPresent()) {
+            assigneeResolveService.saveAssigneeSnapshotForNode(processInstance, branchMatch.get().getTargetNodeId(),
+                    selectedAssignees, tenantId, context);
+            return;
+        }
+        assigneeResolveService.saveFirstAssigneeSnapshot(processInstance, selectedAssignees, tenantId, context);
     }
 
     private void ensureNotAddSignTask(Task task, String message) {
@@ -611,8 +652,11 @@ public class TaskActionServiceImpl implements ITaskActionService {
         return anchor;
     }
 
-    private void completeFlowableTask(Task task, TaskActionReq req, RequestContext context) {
-        flowableService.completeTask(task.getFlowableTaskId(), buildTaskVariables(task, req, context, WorkflowConstants.Action.APPROVE));
+    private void completeFlowableTask(Task task, TaskActionReq req, RequestContext context,
+            Optional<BranchMatchResult> branchMatch) {
+        Map<String, Object> variables = buildTaskVariables(task, req, context, WorkflowConstants.Action.APPROVE);
+        variables.putAll(conditionBranchRuntimeService.buildFlowableVariables(branchMatch));
+        flowableService.completeTask(task.getFlowableTaskId(), variables);
     }
 
     /**
@@ -959,13 +1003,15 @@ public class TaskActionServiceImpl implements ITaskActionService {
         processInstanceMapper.updateById(processInstance);
     }
 
-    private Map<String, Object> buildFlowableVariables(ProcessInstance processInstance, FormInstance formInstance, RequestContext context) {
+    private Map<String, Object> buildFlowableVariables(ProcessInstance processInstance,
+            FormInstance formInstance, RequestContext context, Optional<BranchMatchResult> branchMatch) {
         Map<String, Object> variables = new HashMap<>();
         variables.put("tenantId", processInstance.getTenantId());
         variables.put("processInstanceId", processInstance.getId());
         variables.put("formInstanceId", formInstance.getId());
         variables.put("starterUserId", context.getUserId());
         variables.put("starterUsername", context.getUsername());
+        variables.putAll(conditionBranchRuntimeService.buildFlowableVariables(branchMatch));
         return variables;
     }
 

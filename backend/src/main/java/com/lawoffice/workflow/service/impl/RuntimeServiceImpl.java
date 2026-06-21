@@ -4,6 +4,7 @@ import com.lawoffice.framework.dto.RequestContext;
 import com.lawoffice.framework.result.BaseResult;
 import com.lawoffice.framework.vo.PageVO;
 import com.lawoffice.workflow.req.AvailableProcessPageReq;
+import com.lawoffice.workflow.req.AssigneePreviewReq;
 import com.lawoffice.workflow.req.AttachmentBindReq;
 import com.lawoffice.workflow.req.BranchRecordReq;
 import com.lawoffice.workflow.req.CcPageReq;
@@ -21,6 +22,7 @@ import com.lawoffice.workflow.service.IRuntimeQueryService;
 import com.lawoffice.workflow.service.IRuntimeService;
 import com.lawoffice.workflow.service.ITaskActionService;
 import com.lawoffice.workflow.vo.AttachmentVO;
+import com.lawoffice.workflow.vo.AssigneeSelectNodeVO;
 import com.lawoffice.workflow.vo.AvailableProcessVO;
 import com.lawoffice.workflow.vo.BranchRecordVO;
 import com.lawoffice.workflow.vo.CcRecordVO;
@@ -116,6 +118,11 @@ public class RuntimeServiceImpl implements IRuntimeService {
     @Override
     public BaseResult<TaskFormVO> getTaskForm(String taskId, RequestContext context) {
         return runtimeQueryService.getTaskForm(taskId, context);
+    }
+
+    @Override
+    public BaseResult<List<AssigneeSelectNodeVO>> previewNextAssigneeSelectNodes(AssigneePreviewReq req, RequestContext context) {
+        return runtimeQueryService.previewNextAssigneeSelectNodes(req, context);
     }
 
     @Override

@@ -5,6 +5,7 @@ import com.lawoffice.framework.result.BaseResult;
 import com.lawoffice.framework.util.RequestContextUtils;
 import com.lawoffice.framework.vo.PageVO;
 import com.lawoffice.workflow.req.AttachmentBindReq;
+import com.lawoffice.workflow.req.AssigneePreviewReq;
 import com.lawoffice.workflow.req.AvailableProcessPageReq;
 import com.lawoffice.workflow.req.BranchRecordReq;
 import com.lawoffice.workflow.req.CcPageReq;
@@ -20,6 +21,7 @@ import com.lawoffice.workflow.req.TaskPageReq;
 import com.lawoffice.workflow.req.TaskUrgeReq;
 import com.lawoffice.workflow.service.IRuntimeService;
 import com.lawoffice.workflow.vo.AttachmentVO;
+import com.lawoffice.workflow.vo.AssigneeSelectNodeVO;
 import com.lawoffice.workflow.vo.AvailableProcessVO;
 import com.lawoffice.workflow.vo.BranchRecordVO;
 import com.lawoffice.workflow.vo.CcRecordVO;
@@ -134,6 +136,14 @@ public class RuntimeController {
             HttpServletRequest request) {
         RequestContext context = RequestContextUtils.buildContext(request);
         return runtimeService.getTaskForm(req == null ? null : req.getTaskId(), context);
+    }
+
+    @PostMapping("/assignee/preview")
+    @Operation(summary = "棰勫垽涓嬩竴瀹℃壒浜洪€夋嫨")
+    public BaseResult<List<AssigneeSelectNodeVO>> previewNextAssigneeSelectNodes(@RequestBody AssigneePreviewReq req,
+            HttpServletRequest request) {
+        RequestContext context = RequestContextUtils.buildContext(request);
+        return runtimeService.previewNextAssigneeSelectNodes(req, context);
     }
 
     @PostMapping("/task/approve")

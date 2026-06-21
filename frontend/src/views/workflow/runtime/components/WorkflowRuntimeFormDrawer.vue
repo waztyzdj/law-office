@@ -1,6 +1,7 @@
 ﻿<script setup lang="ts">
 import type {
   AvailableProcessInfo,
+  AssigneeSelectNodeInfo,
   InstanceDetailInfo,
   RuntimeTaskInfo,
   StartFormInfo,
@@ -18,6 +19,7 @@ import {
   getStartForm,
   getWorkflowInstanceDetail,
   getWorkflowTaskForm,
+  previewNextAssigneeSelectNodes,
 } from '#/api/workflow';
 import {
   formatApprovalProgress,
@@ -151,15 +153,7 @@ const {
   resetAssigneeSelection,
   runtimeFixedSelectNodes,
   selectedAssignees,
-} = useRuntimeAssigneeSelection({
-  mode,
-  startAssigneeSelectNodes: computed(() => startForm.value?.assigneeSelectNodes ?? []),
-  taskAssigneeSelectNodes: computed(() =>
-    shouldSelectNextAssigneeOnApprove.value
-      ? (taskForm.value?.assigneeSelectNodes ?? [])
-      : [],
-  ),
-});
+} = useRuntimeAssigneeSelection();
 
 const { processProgressNodes } = useRuntimeProgressNodes(detail);
 
@@ -197,6 +191,7 @@ const {
   onClose: () => drawerApi.close(),
   onSuccess: () => emit('success'),
   openNextAssigneeSelect,
+  previewNextAssigneeSelectNodes: previewAssigneeSelectNodes,
   resolveApprovalComment,
   taskForm,
   validateApprovalComment,
@@ -248,6 +243,32 @@ function resetState(payload: DrawerPayload) {
   resetAssigneeSelection();
   resetRuntimeActions();
   drawerApi.setState({ title: drawerTitle.value });
+}
+
+async function previewAssigneeSelectNodes(
+  payload: { formDataJson?: string; processModelId?: string; taskId?: string },
+): Promise<AssigneeSelectNodeInfo[]> {
+  if (mode.value === 'todo' && !shouldSelectNextAssigneeOnApprove.value) {
+    return [];
+  }
+  if (mode.value === 'start') {
+    const processModelId = payload.processModelId ?? currentProcess.value?.id;
+    if (!processModelId) {
+      return [];
+    }
+    return previewNextAssigneeSelectNodes({
+      formDataJson: payload.formDataJson,
+      processModelId,
+    });
+  }
+  const taskId = payload.taskId ?? taskForm.value?.taskId;
+  if (!taskId) {
+    return [];
+  }
+  return previewNextAssigneeSelectNodes({
+    formDataJson: payload.formDataJson,
+    taskId,
+  });
 }
 
 async function open(payload: DrawerPayload) {

@@ -1,6 +1,7 @@
 import type { Ref } from 'vue';
 
 import type {
+  AssigneeSelectNodeInfo,
   AvailableProcessInfo,
   InstanceDetailInfo,
   SelectedAssigneeReq,
@@ -47,7 +48,13 @@ interface UseRuntimeTaskActionsOptions {
   isStartMode: Ref<boolean>;
   onClose: () => void;
   onSuccess: () => void;
-  openNextAssigneeSelect: (payload: PendingSubmitPayload) => boolean;
+  openNextAssigneeSelect: (
+    payload: PendingSubmitPayload,
+    nodes: AssigneeSelectNodeInfo[],
+  ) => boolean;
+  previewNextAssigneeSelectNodes: (
+    payload: PendingSubmitPayload,
+  ) => Promise<AssigneeSelectNodeInfo[]>;
   taskForm: Ref<TaskFormInfo | undefined>;
   validateApprovalComment: () => boolean;
   validateTitle: () => boolean;
@@ -107,7 +114,8 @@ export function useRuntimeTaskActions(options: UseRuntimeTaskActionsOptions) {
         instanceTitle: options.instanceTitle.value.trim(),
         processModelId: options.currentProcess.value.id,
       };
-      if (options.openNextAssigneeSelect(payload)) {
+      const nextAssigneeNodes = await options.previewNextAssigneeSelectNodes(payload);
+      if (options.openNextAssigneeSelect(payload, nextAssigneeNodes)) {
         return;
       }
       await submitStartPayload(payload);
@@ -136,7 +144,8 @@ export function useRuntimeTaskActions(options: UseRuntimeTaskActionsOptions) {
         formDataJson: await options.collectFormDataJson(true),
         taskId: options.taskForm.value.taskId,
       };
-      if (options.openNextAssigneeSelect(payload)) {
+      const nextAssigneeNodes = await options.previewNextAssigneeSelectNodes(payload);
+      if (options.openNextAssigneeSelect(payload, nextAssigneeNodes)) {
         return;
       }
       await submitApprovePayload(payload);

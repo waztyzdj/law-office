@@ -56,7 +56,11 @@ export const startScopeTypeOptions = Object.entries(startScopeTypeMap).map(
 
 export const todoTaskStatusOptions = [{ label: '待办', value: 'todo' }];
 
-export const doneTaskStatusOptions = [{ label: '已办', value: 'done' }];
+export const doneTaskStatusOptions = [
+  { label: '已办', value: 'done' },
+  { label: '已退回', value: 'returned' },
+  { label: '已转办', value: 'transferred' },
+];
 
 export const taskTypeMap: Record<string, string> = {
   add_sign: '加签',
