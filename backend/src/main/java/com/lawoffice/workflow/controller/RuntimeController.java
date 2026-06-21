@@ -7,7 +7,6 @@ import com.lawoffice.framework.vo.PageVO;
 import com.lawoffice.workflow.req.AttachmentBindReq;
 import com.lawoffice.workflow.req.AssigneePreviewReq;
 import com.lawoffice.workflow.req.AvailableProcessPageReq;
-import com.lawoffice.workflow.req.BranchRecordReq;
 import com.lawoffice.workflow.req.CcPageReq;
 import com.lawoffice.workflow.req.CcReadReq;
 import com.lawoffice.workflow.req.CcSendReq;
@@ -24,7 +23,6 @@ import com.lawoffice.workflow.service.IRuntimeService;
 import com.lawoffice.workflow.vo.AttachmentVO;
 import com.lawoffice.workflow.vo.AssigneeSelectNodeVO;
 import com.lawoffice.workflow.vo.AvailableProcessVO;
-import com.lawoffice.workflow.vo.BranchRecordVO;
 import com.lawoffice.workflow.vo.CcRecordVO;
 import com.lawoffice.workflow.vo.InstanceDiagramVO;
 import com.lawoffice.workflow.vo.InstanceDetailVO;
@@ -140,7 +138,7 @@ public class RuntimeController {
     }
 
     @PostMapping("/assignee/preview")
-    @Operation(summary = "棰勫垽涓嬩竴瀹℃壒浜洪€夋嫨")
+    @Operation(summary = "预判下一审批人选择")
     public BaseResult<List<AssigneeSelectNodeVO>> previewNextAssigneeSelectNodes(@RequestBody AssigneePreviewReq req,
             HttpServletRequest request) {
         RequestContext context = RequestContextUtils.buildContext(request);
@@ -256,22 +254,6 @@ public class RuntimeController {
             HttpServletRequest request) {
         RequestContext context = RequestContextUtils.buildContext(request);
         return runtimeService.deleteAttachment(req == null ? null : req.getId(), context);
-    }
-
-    @PostMapping("/branch/record")
-    @Operation(summary = "记录分支命中")
-    public BaseResult<BranchRecordVO> recordBranch(@RequestBody BranchRecordReq req,
-            HttpServletRequest request) {
-        RequestContext context = RequestContextUtils.buildContext(request);
-        return runtimeService.recordBranch(req, context);
-    }
-
-    @PostMapping("/branch/list")
-    @Operation(summary = "查询分支记录")
-    public BaseResult<List<BranchRecordVO>> listBranches(@RequestBody InstanceReq req,
-            HttpServletRequest request) {
-        RequestContext context = RequestContextUtils.buildContext(request);
-        return runtimeService.listBranches(req == null ? null : req.getId(), context);
     }
 
     @PostMapping("/instance/diagram")

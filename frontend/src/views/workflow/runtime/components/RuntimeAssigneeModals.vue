@@ -127,30 +127,6 @@ const excludedActionUserIds = computed(() =>
 </template>
 
 <style scoped>
-:global(.workflow-user-picker-modal-wrap) {
-  align-items: center;
-  display: flex;
-  justify-content: center;
-}
-
-:global(.workflow-user-picker-modal-wrap .ant-modal) {
-  max-width: 960px;
-  top: 0;
-}
-
-:global(.workflow-user-picker-modal-wrap .ant-modal-content) {
-  display: flex;
-  flex-direction: column;
-  height: 640px;
-}
-
-:global(.workflow-user-picker-modal-wrap .ant-modal-body) {
-  display: flex;
-  flex: 1;
-  min-height: 0;
-  overflow: hidden;
-}
-
 :global(.workflow-assignee-select-modal-wrap .ant-modal-content) {
   display: flex;
   flex-direction: column;

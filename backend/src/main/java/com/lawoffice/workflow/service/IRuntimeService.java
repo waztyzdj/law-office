@@ -6,7 +6,6 @@ import com.lawoffice.framework.vo.PageVO;
 import com.lawoffice.workflow.req.AvailableProcessPageReq;
 import com.lawoffice.workflow.req.AssigneePreviewReq;
 import com.lawoffice.workflow.req.AttachmentBindReq;
-import com.lawoffice.workflow.req.BranchRecordReq;
 import com.lawoffice.workflow.req.CcPageReq;
 import com.lawoffice.workflow.req.StartedInstancePageReq;
 import com.lawoffice.workflow.req.StartProcessReq;
@@ -15,7 +14,6 @@ import com.lawoffice.workflow.req.TaskPageReq;
 import com.lawoffice.workflow.vo.AttachmentVO;
 import com.lawoffice.workflow.vo.AssigneeSelectNodeVO;
 import com.lawoffice.workflow.vo.AvailableProcessVO;
-import com.lawoffice.workflow.vo.BranchRecordVO;
 import com.lawoffice.workflow.vo.CcRecordVO;
 import com.lawoffice.workflow.vo.InstanceDiagramVO;
 import com.lawoffice.workflow.vo.InstanceDetailVO;
@@ -269,24 +267,6 @@ public interface IRuntimeService {
      * @return 删除结果
      */
     BaseResult<Void> deleteAttachment(String attachmentId, RequestContext context);
-
-    /**
-     * 记录审批实例条件分支命中。
-     *
-     * @param req 分支命中请求
-     * @param context 当前请求上下文
-     * @return 分支命中记录
-     */
-    BaseResult<BranchRecordVO> recordBranch(BranchRecordReq req, RequestContext context);
-
-    /**
-     * 查询审批实例条件分支命中记录。
-     *
-     * @param processInstanceId 流程实例ID
-     * @param context 当前请求上下文
-     * @return 分支命中记录
-     */
-    BaseResult<List<BranchRecordVO>> listBranches(String processInstanceId, RequestContext context);
 
     /**
      * 查询审批实例流程图数据。
