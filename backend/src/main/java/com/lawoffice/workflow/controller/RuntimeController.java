@@ -10,6 +10,7 @@ import com.lawoffice.workflow.req.AvailableProcessPageReq;
 import com.lawoffice.workflow.req.BranchRecordReq;
 import com.lawoffice.workflow.req.CcPageReq;
 import com.lawoffice.workflow.req.CcReadReq;
+import com.lawoffice.workflow.req.CcSendReq;
 import com.lawoffice.workflow.req.InstanceDiagramReq;
 import com.lawoffice.workflow.req.InstanceReq;
 import com.lawoffice.workflow.req.StartFormReq;
@@ -215,6 +216,14 @@ public class RuntimeController {
     public BaseResult<CcRecordVO> markCcRead(@RequestBody CcReadReq req, HttpServletRequest request) {
         RequestContext context = RequestContextUtils.buildContext(request);
         return runtimeService.markCcRead(req == null ? null : req.getId(), context);
+    }
+
+    @PostMapping("/cc/send")
+    @Operation(summary = "手动抄送")
+    public BaseResult<List<CcRecordVO>> sendCc(@RequestBody CcSendReq req, HttpServletRequest request) {
+        RequestContext context = RequestContextUtils.buildContext(request);
+        return runtimeService.sendCc(req == null ? null : req.getProcessInstanceId(),
+                req == null ? null : req.getReceiverUserIds(), context);
     }
 
     @PostMapping("/task/urge")

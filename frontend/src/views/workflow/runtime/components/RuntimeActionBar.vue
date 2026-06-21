@@ -5,6 +5,8 @@ import { Button } from 'ant-design-vue';
 
 interface Props {
   actionPermissions?: RuntimeActionPermissions;
+  canCc: boolean;
+  ccSubmitting: boolean;
   isStartDraftTask: boolean;
   isStartMode: boolean;
   isTodoMode: boolean;
@@ -18,6 +20,7 @@ const emit = defineEmits<{
   action: [action: WorkflowAction];
   approve: [];
   cancel: [];
+  cc: [];
   reject: [];
   saveStartDraft: [];
   saveStartDraftTask: [];
@@ -92,7 +95,16 @@ const emit = defineEmits<{
       </Button>
     </template>
     <Button
+      v-if="canCc"
       :disabled="saving || submitting"
+      :loading="ccSubmitting"
+      :type="isTodoMode ? 'default' : 'primary'"
+      @click="emit('cc')"
+    >
+      抄送
+    </Button>
+    <Button
+      :disabled="saving || submitting || ccSubmitting"
       @click="emit('cancel')"
     >
       取消

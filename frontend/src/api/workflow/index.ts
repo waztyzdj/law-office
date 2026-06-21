@@ -230,6 +230,11 @@ export interface WorkflowCcPageReq extends BasePageReq {
   status?: string;
 }
 
+export interface WorkflowCcSendReq {
+  processInstanceId?: string;
+  receiverUserIds?: string[];
+}
+
 export interface StartFormInfo {
   assigneeSelectNodes?: AssigneeSelectNodeInfo[];
   fieldPermissions?: RuntimeFieldPermissionInfo[];
@@ -533,6 +538,8 @@ export const pageWorkflowCcRecords = (params: WorkflowCcPageReq) =>
   );
 export const markWorkflowCcRead = (id: string) =>
   requestClient.post<WorkflowCcRecordInfo>('/workflow/cc/read', { id });
+export const sendWorkflowCc = (params: WorkflowCcSendReq) =>
+  requestClient.post<WorkflowCcRecordInfo[]>('/workflow/cc/send', params);
 export const getWorkflowInstanceDetail = (id: string) =>
   requestClient.post<InstanceDetailInfo>('/workflow/instance/detail', { id });
 export const listWorkflowInstanceRecords = (id: string) =>

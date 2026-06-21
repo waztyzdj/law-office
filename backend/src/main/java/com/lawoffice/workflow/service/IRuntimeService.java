@@ -223,6 +223,17 @@ public interface IRuntimeService {
     BaseResult<CcRecordVO> markCcRead(String ccRecordId, RequestContext context);
 
     /**
+     * 手动抄送审批实例给指定人员。
+     *
+     * @param processInstanceId 流程实例ID
+     * @param receiverUserIds 接收人用户ID列表
+     * @param context 当前请求上下文
+     * @return 抄送记录列表
+     */
+    BaseResult<List<CcRecordVO>> sendCc(String processInstanceId, List<String> receiverUserIds,
+            RequestContext context);
+
+    /**
      * 催办待处理任务。
      *
      * @param taskId 任务ID

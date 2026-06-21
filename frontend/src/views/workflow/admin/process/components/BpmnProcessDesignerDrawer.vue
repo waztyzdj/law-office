@@ -169,10 +169,6 @@ interface BpmnModdle {
   create: (type: string, properties: Record<string, unknown>) => unknown;
 }
 
-interface BpmnSelection {
-  select: (element: BpmnElement | BpmnElement[]) => void;
-}
-
 type BpmnToolTarget = BpmnElement | BpmnElement[] | undefined;
 type BpmnToolAction = (
   event: Event,
@@ -747,7 +743,7 @@ function bindModelerEvents() {
   });
 }
 
-function setActiveNode(nodeId: string, syncCanvas = false) {
+function setActiveNode(nodeId: string) {
   if (!nodeId) {
     return;
   }
@@ -756,22 +752,6 @@ function setActiveNode(nodeId: string, syncCanvas = false) {
     return;
   }
   activeNodeId.value = nodeId;
-  if (syncCanvas) {
-    selectCanvasElement(nodeId);
-  }
-}
-
-function selectCanvasElement(nodeId: string) {
-  const elementRegistry = modeler.value?.get('elementRegistry') as
-    | BpmnElementRegistry
-    | undefined;
-  const selection = modeler.value?.get('selection') as
-    | BpmnSelection
-    | undefined;
-  const element = elementRegistry?.get(nodeId);
-  if (element) {
-    selection?.select(element);
-  }
 }
 
 function extractBpmnUserTasks() {

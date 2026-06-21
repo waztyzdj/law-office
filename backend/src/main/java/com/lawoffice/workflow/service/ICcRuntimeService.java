@@ -8,6 +8,8 @@ import com.lawoffice.workflow.entity.Task;
 import com.lawoffice.workflow.req.CcPageReq;
 import com.lawoffice.workflow.vo.CcRecordVO;
 
+import java.util.List;
+
 /**
  * 审批抄送运行时服务。
  */
@@ -30,6 +32,17 @@ public interface ICcRuntimeService {
      * @return 标记后的抄送记录
      */
     BaseResult<CcRecordVO> markRead(String ccRecordId, RequestContext context);
+
+    /**
+     * 由有实例查看权的运行时用户手动抄送流程实例。
+     *
+     * @param processInstanceId 流程实例ID
+     * @param receiverUserIds 接收人用户ID列表
+     * @param context 请求上下文
+     * @return 抄送记录列表
+     */
+    BaseResult<List<CcRecordVO>> sendManual(String processInstanceId, List<String> receiverUserIds,
+            RequestContext context);
 
     /**
      * 按流程配置触发抄送。

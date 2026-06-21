@@ -171,6 +171,12 @@ public class RuntimeServiceImpl implements IRuntimeService {
     }
 
     @Override
+    public BaseResult<List<CcRecordVO>> sendCc(String processInstanceId, List<String> receiverUserIds,
+            RequestContext context) {
+        return ccRuntimeService.sendManual(processInstanceId, receiverUserIds, context);
+    }
+
+    @Override
     public BaseResult<ReminderRecordVO> urgeTask(String taskId, String remark, RequestContext context) {
         return reminderRuntimeService.urgeTask(taskId, remark, context);
     }

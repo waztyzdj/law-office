@@ -7,20 +7,23 @@ import type {
   StartFormInfo,
   TaskFormInfo,
 } from '#/api/workflow';
+import type { UserInfo } from '#/api/system/user';
 import type { DrawerMode } from './runtimeTypes';
 
 import { computed, ref } from 'vue';
 
 import { useVbenDrawer } from '@vben/common-ui';
 
-import { Modal, Select, Space, Spin, Tag } from 'ant-design-vue';
+import { message, Modal, Select, Space, Spin, Tag } from 'ant-design-vue';
 
 import {
   getStartForm,
   getWorkflowInstanceDetail,
   getWorkflowTaskForm,
   previewNextAssigneeSelectNodes,
+  sendWorkflowCc,
 } from '#/api/workflow';
+import UserPickerPanel from '#/components/user-picker/UserPickerPanel.vue';
 import {
   formatApprovalProgress,
   getApprovalModeMeta,
@@ -57,6 +60,9 @@ const detail = ref<InstanceDetailInfo>();
 const activeTab = ref('records');
 const loading = ref(false);
 const drawerOpened = ref(false);
+const manualCcOpen = ref(false);
+const manualCcSelectedUsers = ref<UserInfo[]>([]);
+const manualCcSubmitting = ref(false);
 let runtimeRenderFrameId: number | undefined;
 const actionPermissions = computed(() => taskForm.value?.actionPermissions);
 const returnNodeOptions = computed(() =>
@@ -108,6 +114,7 @@ const shouldSelectNextAssigneeOnApprove = computed(() => {
   const total = taskForm.value.groupTotal ?? 1;
   return completed + 1 >= total;
 });
+const canManualCc = computed(() => Boolean(detail.value?.processInstance?.id));
 
 const {
   approvalComment,
@@ -239,6 +246,9 @@ function resetState(payload: DrawerPayload) {
   detail.value = undefined;
   activeTab.value = 'records';
   drawerOpened.value = false;
+  manualCcOpen.value = false;
+  manualCcSelectedUsers.value = [];
+  manualCcSubmitting.value = false;
   resetRuntimeFormData(payload.process);
   resetAssigneeSelection();
   resetRuntimeActions();
@@ -327,6 +337,43 @@ async function handleAssigneeSelectConfirm() {
   );
 }
 
+function openManualCcPicker() {
+  manualCcSelectedUsers.value = [];
+  manualCcOpen.value = true;
+}
+
+function closeManualCcPicker() {
+  manualCcOpen.value = false;
+  manualCcSelectedUsers.value = [];
+}
+
+async function handleManualCcConfirm() {
+  const processInstanceId = detail.value?.processInstance?.id;
+  if (!processInstanceId) {
+    return;
+  }
+  const receiverUserIds = manualCcSelectedUsers.value
+    .map((user) => user.id)
+    .filter(Boolean) as string[];
+  if (receiverUserIds.length === 0) {
+    message.warning('请选择抄送人员');
+    return;
+  }
+  manualCcSubmitting.value = true;
+  try {
+    await sendWorkflowCc({
+      processInstanceId,
+      receiverUserIds,
+    });
+    message.success('已发送抄送');
+    closeManualCcPicker();
+    detail.value = await getWorkflowInstanceDetail(processInstanceId);
+    emit('success');
+  } finally {
+    manualCcSubmitting.value = false;
+  }
+}
+
 defineExpose({
   open,
 });
@@ -388,8 +435,10 @@ defineExpose({
         </div>
 
         <RuntimeActionBar
-          v-if="showRuntimeActions"
+          v-if="showRuntimeActions || canManualCc"
           :action-permissions="actionPermissions"
+          :can-cc="canManualCc"
+          :cc-submitting="manualCcSubmitting"
           :is-start-draft-task="isStartDraftTask"
           :is-start-mode="isStartMode"
           :is-todo-mode="isTodoMode"
@@ -398,6 +447,7 @@ defineExpose({
           @action="handleRuntimeAction"
           @approve="handleApprove"
           @cancel="drawerApi.close()"
+          @cc="openManualCcPicker"
           @reject="handleReject"
           @save-start-draft="handleSaveStartDraft"
           @save-start-draft-task="handleSaveStartDraftTask"
@@ -448,6 +498,26 @@ defineExpose({
       @assignee-select-cancel="closeAssigneeSelectModal"
       @assignee-select-confirm="handleAssigneeSelectConfirm"
     />
+
+    <Modal
+      v-model:open="manualCcOpen"
+      :confirm-loading="manualCcSubmitting"
+      :destroy-on-close="false"
+      :width="960"
+      cancel-text="取消"
+      ok-text="确定并发送"
+      title="选择抄送人员"
+      wrap-class-name="workflow-user-picker-modal-wrap"
+      @cancel="closeManualCcPicker"
+      @ok="handleManualCcConfirm"
+    >
+      <UserPickerPanel
+        mode="multiple"
+        org-only
+        :selected-users="manualCcSelectedUsers"
+        @update:selected-users="(users) => (manualCcSelectedUsers = users)"
+      />
+    </Modal>
   </Drawer>
 </template>
 
@@ -492,6 +562,30 @@ defineExpose({
 .task-context-title {
   color: #111827;
   font-weight: 500;
+}
+
+:global(.workflow-user-picker-modal-wrap) {
+  align-items: center;
+  display: flex;
+  justify-content: center;
+}
+
+:global(.workflow-user-picker-modal-wrap .ant-modal) {
+  max-width: 960px;
+  top: 0;
+}
+
+:global(.workflow-user-picker-modal-wrap .ant-modal-content) {
+  display: flex;
+  flex-direction: column;
+  height: 640px;
+}
+
+:global(.workflow-user-picker-modal-wrap .ant-modal-body) {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
 }
 
 .runtime-form-section {

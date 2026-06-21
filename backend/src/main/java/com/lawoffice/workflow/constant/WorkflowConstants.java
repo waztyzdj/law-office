@@ -184,6 +184,13 @@ public final class WorkflowConstants {
         }
     }
 
+    public static final class CcSourceType {
+        public static final String RUNTIME_SELECT = "runtime_select";
+
+        private CcSourceType() {
+        }
+    }
+
     public static final class RemindType {
         public static final String URGE = "urge";
         public static final String TIMEOUT = "timeout";

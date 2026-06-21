@@ -32,6 +32,7 @@ import com.lawoffice.workflow.mapper.ProcessNodeConfigMapper;
 import com.lawoffice.workflow.req.CcPageReq;
 import com.lawoffice.workflow.service.IAssigneeResolveService;
 import com.lawoffice.workflow.service.ICcRuntimeService;
+import com.lawoffice.workflow.service.IRuntimeAccessService;
 import com.lawoffice.workflow.vo.CcRecordVO;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -59,6 +60,7 @@ public class CcRuntimeServiceImpl implements ICcRuntimeService {
     private final UserDepartMapper userDepartMapper;
     private final UserRoleMapper userRoleMapper;
     private final IAssigneeResolveService assigneeResolveService;
+    private final IRuntimeAccessService runtimeAccessService;
     private final IMessageService messageService;
 
     public CcRuntimeServiceImpl(CcRecordMapper ccRecordMapper,
@@ -68,6 +70,7 @@ public class CcRuntimeServiceImpl implements ICcRuntimeService {
             UserDepartMapper userDepartMapper,
             UserRoleMapper userRoleMapper,
             IAssigneeResolveService assigneeResolveService,
+            IRuntimeAccessService runtimeAccessService,
             IMessageService messageService) {
         this.ccRecordMapper = ccRecordMapper;
         this.processInstanceMapper = processInstanceMapper;
@@ -76,6 +79,7 @@ public class CcRuntimeServiceImpl implements ICcRuntimeService {
         this.userDepartMapper = userDepartMapper;
         this.userRoleMapper = userRoleMapper;
         this.assigneeResolveService = assigneeResolveService;
+        this.runtimeAccessService = runtimeAccessService;
         this.messageService = messageService;
     }
 
@@ -131,6 +135,41 @@ public class CcRuntimeServiceImpl implements ICcRuntimeService {
             return BaseResult.error(400, e.getMessage());
         } catch (Exception e) {
             return BaseResult.error("标记抄送已读失败: " + e.getMessage());
+        }
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public BaseResult<List<CcRecordVO>> sendManual(String processInstanceId, List<String> receiverUserIds,
+            RequestContext context) {
+        try {
+            String tenantId = RuntimeSupport.requireTenantId(context);
+            String userId = RuntimeSupport.requireUserId(context);
+            ProcessInstance processInstance = requireProcessInstance(processInstanceId, tenantId);
+            runtimeAccessService.ensureInstanceAccess(processInstance, context);
+            Map<String, User> users = assigneeResolveService.loadTenantActiveUsers(
+                    normalizeReceiverUserIds(receiverUserIds), tenantId);
+            if (users.isEmpty()) {
+                throw new IllegalArgumentException("请选择有效抄送人员");
+            }
+            Map<String, CcReceiver> receivers = new LinkedHashMap<>();
+            for (User user : users.values()) {
+                receivers.put(user.getId(), new CcReceiver(
+                        user,
+                        WorkflowConstants.CcTriggerAction.MANUAL,
+                        WorkflowConstants.CcSourceType.RUNTIME_SELECT,
+                        userId,
+                        null,
+                        null));
+            }
+            List<CcRecord> records = upsertCcRecords(processInstance, null,
+                    WorkflowConstants.CcTriggerAction.MANUAL, tenantId, context, receivers);
+            sendCcMessage(processInstance, records, context);
+            return BaseResult.success(buildCcRecordVOsForInstance(records, processInstance, tenantId));
+        } catch (IllegalArgumentException e) {
+            return BaseResult.error(400, e.getMessage());
+        } catch (Exception e) {
+            return BaseResult.error("手动抄送失败: " + e.getMessage());
         }
     }
 
@@ -208,6 +247,18 @@ public class CcRuntimeServiceImpl implements ICcRuntimeService {
                 .collect(Collectors.toMap(ProcessModel::getId, item -> item, (left, right) -> left));
         return records.stream()
                 .map(record -> buildCcRecordVO(record, instanceMap.get(record.getProcessInstanceId()), modelMap))
+                .toList();
+    }
+
+    private List<CcRecordVO> buildCcRecordVOsForInstance(List<CcRecord> records, ProcessInstance instance, String tenantId) {
+        ProcessModel model = processModelMapper.selectOne(new QueryWrapper<ProcessModel>()
+                .eq("id", instance.getProcessModelId())
+                .eq("tenant_id", tenantId)
+                .eq("delete_flag", 0)
+                .last("limit 1"));
+        Map<String, ProcessModel> modelMap = model == null ? Map.of() : Map.of(model.getId(), model);
+        return records.stream()
+                .map(record -> buildCcRecordVO(record, instance, modelMap))
                 .toList();
     }
 
@@ -481,6 +532,30 @@ public class CcRuntimeServiceImpl implements ICcRuntimeService {
             throw new IllegalArgumentException("抄送记录不存在或无权访问");
         }
         return record;
+    }
+
+    private ProcessInstance requireProcessInstance(String processInstanceId, String tenantId) {
+        if (!StringUtils.hasText(processInstanceId)) {
+            throw new IllegalArgumentException("流程实例ID不能为空");
+        }
+        ProcessInstance processInstance = processInstanceMapper.selectOne(new QueryWrapper<ProcessInstance>()
+                .eq("id", processInstanceId)
+                .eq("tenant_id", tenantId)
+                .eq("delete_flag", 0));
+        if (processInstance == null) {
+            throw new IllegalArgumentException("流程实例不存在");
+        }
+        return processInstance;
+    }
+
+    private List<String> normalizeReceiverUserIds(List<String> receiverUserIds) {
+        if (receiverUserIds == null) {
+            return List.of();
+        }
+        return receiverUserIds.stream()
+                .filter(StringUtils::hasText)
+                .distinct()
+                .toList();
     }
 
     private JsonNode parseCcJson(String ccJson) {
