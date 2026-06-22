@@ -6,12 +6,14 @@ import { Button } from 'ant-design-vue';
 interface Props {
   actionPermissions?: RuntimeActionPermissions;
   canCc: boolean;
+  canWithdraw: boolean;
   ccSubmitting: boolean;
   isStartDraftTask: boolean;
   isStartMode: boolean;
   isTodoMode: boolean;
   saving: boolean;
   submitting: boolean;
+  withdrawSubmitting: boolean;
 }
 
 defineProps<Props>();
@@ -25,6 +27,7 @@ const emit = defineEmits<{
   saveStartDraft: [];
   saveStartDraftTask: [];
   submitStart: [];
+  withdraw: [];
 }>();
 </script>
 
@@ -102,6 +105,15 @@ const emit = defineEmits<{
       @click="emit('cc')"
     >
       抄送
+    </Button>
+    <Button
+      v-if="canWithdraw"
+      :disabled="saving || submitting || ccSubmitting || withdrawSubmitting"
+      :loading="withdrawSubmitting"
+      danger
+      @click="emit('withdraw')"
+    >
+      撤回
     </Button>
     <Button
       :disabled="saving || submitting || ccSubmitting"

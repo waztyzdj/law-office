@@ -29,4 +29,5 @@ public class ProcessInstanceVO extends BaseVO {
     private LocalDateTime endTime;
     private String currentTaskNames;
     private String currentAssigneeNames;
+    private Boolean canWithdraw;
 }

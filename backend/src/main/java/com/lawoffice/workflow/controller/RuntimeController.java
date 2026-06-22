@@ -201,6 +201,14 @@ public class RuntimeController {
         return runtimeService.addSign(req == null ? null : req.getTaskId(), req, context);
     }
 
+    @PostMapping("/task/withdraw")
+    @Operation(summary = "发起人撤回")
+    public BaseResult<TaskActionVO> withdraw(@RequestBody(required = false) InstanceReq req,
+            HttpServletRequest request) {
+        RequestContext context = RequestContextUtils.buildContext(request);
+        return runtimeService.withdraw(req == null ? null : req.getId(), context);
+    }
+
     @PostMapping("/cc/page")
     @Operation(summary = "我的抄送")
     public BaseResult<PageVO<CcRecordVO>> pageCc(@RequestBody(required = false) CcPageReq req,

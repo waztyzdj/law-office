@@ -38,4 +38,6 @@ public class StartedInstanceVO extends BaseVO {
     private String currentTaskNames;
 
     private String currentAssigneeNames;
+
+    private Boolean canWithdraw;
 }

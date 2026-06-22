@@ -97,7 +97,7 @@ function formatRecordComment(record: OperationRecordInfo) {
 }
 
 function isProcessFinished(status?: string) {
-  return ['approved', 'rejected', 'terminated'].includes(status || '');
+  return ['approved', 'rejected', 'terminated', 'withdrawn'].includes(status || '');
 }
 
 function getProcessEndComment(status?: string) {

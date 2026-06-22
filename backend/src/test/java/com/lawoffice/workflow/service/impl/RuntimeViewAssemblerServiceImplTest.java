@@ -4,11 +4,14 @@ import com.baomidou.mybatisplus.core.conditions.Wrapper;
 import com.lawoffice.workflow.constant.WorkflowConstants;
 import com.lawoffice.workflow.entity.FieldPermission;
 import com.lawoffice.workflow.entity.FormInstance;
+import com.lawoffice.workflow.entity.OperationRecord;
 import com.lawoffice.workflow.entity.ProcessInstance;
+import com.lawoffice.workflow.entity.ProcessModel;
 import com.lawoffice.workflow.entity.ProcessNodeConfig;
 import com.lawoffice.workflow.entity.Task;
 import com.lawoffice.workflow.mapper.FormDefinitionMapper;
 import com.lawoffice.workflow.mapper.FormInstanceMapper;
+import com.lawoffice.workflow.mapper.OperationRecordMapper;
 import com.lawoffice.workflow.mapper.ProcessInstanceMapper;
 import com.lawoffice.workflow.mapper.ProcessModelMapper;
 import com.lawoffice.workflow.mapper.TaskCandidateMapper;
@@ -17,6 +20,7 @@ import com.lawoffice.workflow.service.IAssigneeResolveService;
 import com.lawoffice.workflow.service.IProcessNodeConfigService;
 import com.lawoffice.workflow.vo.AssigneeSelectNodeVO;
 import com.lawoffice.workflow.vo.RuntimeTaskVO;
+import com.lawoffice.workflow.vo.StartedInstanceVO;
 import com.lawoffice.workflow.vo.TaskFormVO;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -50,6 +54,8 @@ class RuntimeViewAssemblerServiceImplTest {
     @Mock
     private FormInstanceMapper formInstanceMapper;
     @Mock
+    private OperationRecordMapper operationRecordMapper;
+    @Mock
     private ProcessInstanceMapper processInstanceMapper;
     @Mock
     private TaskCandidateMapper taskCandidateMapper;
@@ -68,12 +74,36 @@ class RuntimeViewAssemblerServiceImplTest {
                 processModelMapper,
                 formDefinitionMapper,
                 formInstanceMapper,
+                operationRecordMapper,
                 processInstanceMapper,
                 taskCandidateMapper,
                 taskMapper,
                 assigneeResolveService,
                 processNodeConfigService
         );
+    }
+
+    @Test
+    void shouldMarkStartedInstanceWithdrawableOnlyBeforeApproverHandled() {
+        ProcessInstance processInstance = processInstance();
+        ProcessModel processModel = new ProcessModel();
+        processModel.setId(PROCESS_MODEL_ID);
+        processModel.setProcessName("请假流程");
+        OperationRecord handledRecord = new OperationRecord();
+        handledRecord.setProcessInstanceId(processInstance.getId());
+        handledRecord.setAction(WorkflowConstants.Action.APPROVE);
+
+        when(processModelMapper.selectList(any(Wrapper.class))).thenReturn(List.of(processModel));
+        when(formInstanceMapper.selectList(any(Wrapper.class))).thenReturn(List.of());
+        when(operationRecordMapper.selectList(any(Wrapper.class))).thenReturn(List.of());
+        List<StartedInstanceVO> withdrawableRecords = service.buildStartedInstanceRecords(List.of(processInstance), TENANT_ID);
+
+        assertTrue(withdrawableRecords.get(0).getCanWithdraw());
+
+        when(operationRecordMapper.selectList(any(Wrapper.class))).thenReturn(List.of(handledRecord));
+        List<StartedInstanceVO> blockedRecords = service.buildStartedInstanceRecords(List.of(processInstance), TENANT_ID);
+
+        assertFalse(blockedRecords.get(0).getCanWithdraw());
     }
 
     @Test
@@ -235,6 +265,7 @@ class RuntimeViewAssemblerServiceImplTest {
         processInstance.setStarterUserId("starter-1");
         processInstance.setStarterUsername("starter");
         processInstance.setStarterRealname("发起人");
+        processInstance.setStatus(WorkflowConstants.Status.RUNNING);
         return processInstance;
     }
 

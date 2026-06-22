@@ -18,6 +18,7 @@ export const workflowStatusMap: Record<string, WorkflowMeta> = {
   terminated: { color: 'error', label: '已终止' },
   todo: { color: 'warning', label: '待办' },
   transferred: { color: 'processing', label: '已转办' },
+  withdrawn: { color: 'default', label: '已撤回' },
 };
 
 export const designerTypeMap: Record<string, string> = {
@@ -104,12 +105,14 @@ export const workflowActionMap: Record<string, WorkflowMeta> = {
   start: { color: 'blue', label: '发起' },
   system_complete: { color: 'default', label: '系统完成' },
   transfer: { color: 'cyan', label: '转办' },
+  withdraw: { color: 'default', label: '撤回' },
 };
 
 export const processInstanceStatusOptions = [
   { label: '审批中', value: 'running' },
   { label: '已通过', value: 'approved' },
   { label: '不通过', value: 'rejected' },
+  { label: '已撤回', value: 'withdrawn' },
   { label: '已终止', value: 'terminated' },
 ];
 

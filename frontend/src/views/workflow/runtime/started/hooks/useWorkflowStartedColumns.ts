@@ -13,7 +13,7 @@ import { defineTableColumns } from '#/composables/Table';
 import WorkflowStatusTag from '../../../components/WorkflowStatusTag.vue';
 import { processInstanceStatusOptions } from '../../../components/status';
 
-const finishedStatuses = new Set(['approved', 'rejected', 'terminated']);
+const finishedStatuses = new Set(['approved', 'rejected', 'terminated', 'withdrawn']);
 
 function isFinished(status?: string) {
   return finishedStatuses.has(status || '');
@@ -84,7 +84,16 @@ export function getWorkflowStartedColumns(
           h(
             Space,
             { size: 'middle' },
-            () => [h('a', { onClick: () => emit('detail', record) }, '详情')],
+            () => [
+              h('a', { onClick: () => emit('detail', record) }, '详情'),
+              record.canWithdraw
+                ? h(
+                    'a',
+                    { class: 'text-red-500', onClick: () => emit('withdraw', record) },
+                    '撤回',
+                  )
+                : null,
+            ],
           ),
         fixed: 'right' as const,
         hasFilter: false,

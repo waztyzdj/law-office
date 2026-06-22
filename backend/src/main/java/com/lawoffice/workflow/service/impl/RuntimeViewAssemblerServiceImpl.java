@@ -15,6 +15,7 @@ import com.lawoffice.workflow.entity.Task;
 import com.lawoffice.workflow.entity.TaskCandidate;
 import com.lawoffice.workflow.mapper.FormDefinitionMapper;
 import com.lawoffice.workflow.mapper.FormInstanceMapper;
+import com.lawoffice.workflow.mapper.OperationRecordMapper;
 import com.lawoffice.workflow.mapper.ProcessInstanceMapper;
 import com.lawoffice.workflow.mapper.ProcessModelMapper;
 import com.lawoffice.workflow.mapper.TaskCandidateMapper;
@@ -51,6 +52,7 @@ public class RuntimeViewAssemblerServiceImpl implements IRuntimeViewAssemblerSer
     private final ProcessModelMapper processModelMapper;
     private final FormDefinitionMapper formDefinitionMapper;
     private final FormInstanceMapper formInstanceMapper;
+    private final OperationRecordMapper operationRecordMapper;
     private final ProcessInstanceMapper processInstanceMapper;
     private final TaskCandidateMapper taskCandidateMapper;
     private final TaskMapper taskMapper;
@@ -60,6 +62,7 @@ public class RuntimeViewAssemblerServiceImpl implements IRuntimeViewAssemblerSer
     public RuntimeViewAssemblerServiceImpl(ProcessModelMapper processModelMapper,
             FormDefinitionMapper formDefinitionMapper,
             FormInstanceMapper formInstanceMapper,
+            OperationRecordMapper operationRecordMapper,
             ProcessInstanceMapper processInstanceMapper,
             TaskCandidateMapper taskCandidateMapper,
             TaskMapper taskMapper,
@@ -68,6 +71,7 @@ public class RuntimeViewAssemblerServiceImpl implements IRuntimeViewAssemblerSer
         this.processModelMapper = processModelMapper;
         this.formDefinitionMapper = formDefinitionMapper;
         this.formInstanceMapper = formInstanceMapper;
+        this.operationRecordMapper = operationRecordMapper;
         this.processInstanceMapper = processInstanceMapper;
         this.taskCandidateMapper = taskCandidateMapper;
         this.taskMapper = taskMapper;
@@ -129,11 +133,13 @@ public class RuntimeViewAssemblerServiceImpl implements IRuntimeViewAssemblerSer
                             .eq("delete_flag", 0))
                     .forEach(formInstance -> formInstanceMap.put(formInstance.getId(), formInstance));
         }
+        Set<String> withdrawableInstanceIds = resolveWithdrawableInstanceIds(instances, tenantId);
         return instances.stream()
                 .map(instance -> buildStartedInstanceVO(
                         instance,
                         processModelMap.get(instance.getProcessModelId()),
-                        formInstanceMap.get(instance.getFormInstanceId())))
+                        formInstanceMap.get(instance.getFormInstanceId()),
+                        withdrawableInstanceIds.contains(instance.getId())))
                 .toList();
     }
 
@@ -164,7 +170,7 @@ public class RuntimeViewAssemblerServiceImpl implements IRuntimeViewAssemblerSer
     public InstanceDetailVO buildInstanceDetail(ProcessInstance processInstance, FormInstance formInstance,
             List<Task> currentTasks, List<OperationRecord> records, List<CcRecord> ccRecords) {
         InstanceDetailVO vo = new InstanceDetailVO();
-        vo.setProcessInstance(buildProcessInstanceVO(processInstance));
+        vo.setProcessInstance(buildProcessInstanceVO(processInstance, canWithdraw(processInstance, records)));
         vo.setFormInstance(buildFormInstanceVO(formInstance));
         Map<String, String> candidateNamesByTaskId = buildCandidateNamesByTaskId(currentTasks, processInstance.getTenantId());
         vo.setCurrentTasks(currentTasks.stream()
@@ -323,7 +329,7 @@ public class RuntimeViewAssemblerServiceImpl implements IRuntimeViewAssemblerSer
     }
 
     private StartedInstanceVO buildStartedInstanceVO(ProcessInstance instance, ProcessModel processModel,
-            FormInstance formInstance) {
+            FormInstance formInstance, boolean canWithdraw) {
         StartedInstanceVO vo = new StartedInstanceVO();
         vo.setId(instance.getId());
         vo.setCreateTime(instance.getCreateTime());
@@ -341,6 +347,7 @@ public class RuntimeViewAssemblerServiceImpl implements IRuntimeViewAssemblerSer
         vo.setEndTime(instance.getEndTime());
         vo.setCurrentTaskNames(instance.getCurrentTaskNames());
         vo.setCurrentAssigneeNames(instance.getCurrentAssigneeNames());
+        vo.setCanWithdraw(canWithdraw);
         if (processModel != null) {
             vo.setProcessName(processModel.getProcessName());
         }
@@ -350,7 +357,7 @@ public class RuntimeViewAssemblerServiceImpl implements IRuntimeViewAssemblerSer
         return vo;
     }
 
-    private ProcessInstanceVO buildProcessInstanceVO(ProcessInstance processInstance) {
+    private ProcessInstanceVO buildProcessInstanceVO(ProcessInstance processInstance, boolean canWithdraw) {
         ProcessInstanceVO vo = new ProcessInstanceVO();
         vo.setId(processInstance.getId());
         vo.setCreateTime(processInstance.getCreateTime());
@@ -374,7 +381,53 @@ public class RuntimeViewAssemblerServiceImpl implements IRuntimeViewAssemblerSer
         vo.setEndTime(processInstance.getEndTime());
         vo.setCurrentTaskNames(processInstance.getCurrentTaskNames());
         vo.setCurrentAssigneeNames(processInstance.getCurrentAssigneeNames());
+        vo.setCanWithdraw(canWithdraw);
         return vo;
+    }
+
+    /**
+     * 撤回按钮必须由后端业务规则决定：运行中且尚未出现审批办理类记录时才可撤回。
+     */
+    private Set<String> resolveWithdrawableInstanceIds(List<ProcessInstance> instances, String tenantId) {
+        Set<String> runningInstanceIds = instances.stream()
+                .filter(instance -> WorkflowConstants.Status.RUNNING.equals(instance.getStatus()))
+                .map(ProcessInstance::getId)
+                .filter(StringUtils::hasText)
+                .collect(java.util.stream.Collectors.toSet());
+        if (runningInstanceIds.isEmpty()) {
+            return Set.of();
+        }
+        Set<String> handledInstanceIds = operationRecordMapper.selectList(new QueryWrapper<OperationRecord>()
+                        .select("process_instance_id")
+                        .eq("tenant_id", tenantId)
+                        .in("process_instance_id", runningInstanceIds)
+                        .in("action", withdrawBlockingActions())
+                        .eq("delete_flag", 0))
+                .stream()
+                .map(OperationRecord::getProcessInstanceId)
+                .filter(StringUtils::hasText)
+                .collect(java.util.stream.Collectors.toSet());
+        runningInstanceIds.removeAll(handledInstanceIds);
+        return runningInstanceIds;
+    }
+
+    private boolean canWithdraw(ProcessInstance processInstance, List<OperationRecord> records) {
+        if (!WorkflowConstants.Status.RUNNING.equals(processInstance.getStatus())) {
+            return false;
+        }
+        return records.stream()
+                .map(OperationRecord::getAction)
+                .noneMatch(withdrawBlockingActions()::contains);
+    }
+
+    private Set<String> withdrawBlockingActions() {
+        return Set.of(
+                WorkflowConstants.Action.APPROVE,
+                WorkflowConstants.Action.REJECT,
+                WorkflowConstants.Action.RETURN,
+                WorkflowConstants.Action.TRANSFER,
+                WorkflowConstants.Action.ADD_SIGN
+        );
     }
 
     private FormInstanceVO buildFormInstanceVO(FormInstance formInstance) {

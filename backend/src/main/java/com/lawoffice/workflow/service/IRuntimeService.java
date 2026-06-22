@@ -185,6 +185,15 @@ public interface IRuntimeService {
     BaseResult<TaskActionVO> addSign(String taskId, TaskActionReq req, RequestContext context);
 
     /**
+     * 发起人撤回自己发起且尚未被审批人办理的流程实例。
+     *
+     * @param processInstanceId 流程实例ID
+     * @param context 当前请求上下文
+     * @return 撤回结果
+     */
+    BaseResult<TaskActionVO> withdraw(String processInstanceId, RequestContext context);
+
+    /**
      * 查询审批详情聚合数据。
      *
      * @param id 审批实例ID

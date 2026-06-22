@@ -7,6 +7,7 @@ import { Empty, Tabs, Tag, Timeline } from 'ant-design-vue';
 import {
   ccTriggerActionMap,
   getApprovalModeMeta,
+  getStatusMeta,
   getWorkflowActionMeta,
 } from '../../components/status';
 
@@ -34,6 +35,12 @@ function getProgressNodeColor(node: ProcessProgressNode) {
     return 'blue';
   }
   if (node.status === 'end') {
+    if (node.resultStatus === 'withdrawn') {
+      return 'gray';
+    }
+    if (node.resultStatus === 'rejected' || node.resultStatus === 'terminated') {
+      return 'red';
+    }
     return 'green';
   }
   return getTimelineColor(node.action);
@@ -98,17 +105,23 @@ function getCcTriggerLabel(triggerAction?: string) {
                 >
                   {{ getWorkflowActionMeta(node.action).label }}
                 </Tag>
+                <Tag
+                  v-if="node.status === 'end' && node.resultStatus"
+                  :color="getStatusMeta(node.resultStatus).color"
+                >
+                  {{ getStatusMeta(node.resultStatus).label }}
+                </Tag>
               </div>
               <div
-                v-if="node.status !== 'end'"
+                v-if="node.status !== 'end' || node.time"
                 class="progress-node-meta"
               >
-                <span>处理人：{{ node.actor || '-' }}</span>
+                <span v-if="node.status !== 'end'">处理人：{{ node.actor || '-' }}</span>
                 <span v-if="node.groupProgress">进度：{{ node.groupProgress }}</span>
                 <span>时间：{{ node.time || '-' }}</span>
               </div>
               <div
-                v-if="node.comment && node.status !== 'end'"
+                v-if="node.comment"
                 class="progress-node-comment"
               >
                 {{ node.comment }}

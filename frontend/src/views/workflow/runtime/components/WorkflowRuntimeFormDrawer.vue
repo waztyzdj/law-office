@@ -22,6 +22,7 @@ import {
   getWorkflowTaskForm,
   previewNextAssigneeSelectNodes,
   sendWorkflowCc,
+  withdrawWorkflowInstance,
 } from '#/api/workflow';
 import UserPickerPanel from '#/components/user-picker/UserPickerPanel.vue';
 import {
@@ -63,6 +64,7 @@ const drawerOpened = ref(false);
 const manualCcOpen = ref(false);
 const manualCcSelectedUsers = ref<UserInfo[]>([]);
 const manualCcSubmitting = ref(false);
+const withdrawSubmitting = ref(false);
 let runtimeRenderFrameId: number | undefined;
 const actionPermissions = computed(() => taskForm.value?.actionPermissions);
 const returnNodeOptions = computed(() =>
@@ -115,6 +117,9 @@ const shouldSelectNextAssigneeOnApprove = computed(() => {
   return completed + 1 >= total;
 });
 const canManualCc = computed(() => Boolean(detail.value?.processInstance?.id));
+const canWithdraw = computed(
+  () => mode.value === 'started' && Boolean(detail.value?.processInstance?.canWithdraw),
+);
 
 const {
   approvalComment,
@@ -249,6 +254,7 @@ function resetState(payload: DrawerPayload) {
   manualCcOpen.value = false;
   manualCcSelectedUsers.value = [];
   manualCcSubmitting.value = false;
+  withdrawSubmitting.value = false;
   resetRuntimeFormData(payload.process);
   resetAssigneeSelection();
   resetRuntimeActions();
@@ -374,6 +380,30 @@ async function handleManualCcConfirm() {
   }
 }
 
+function handleWithdraw() {
+  const processInstanceId = detail.value?.processInstance?.id;
+  if (!processInstanceId) {
+    return;
+  }
+  Modal.confirm({
+    title: '确认撤回该审批？',
+    content: '撤回后流程将结束，当前审批人不能继续办理。',
+    okButtonProps: { danger: true },
+    okText: '确认撤回',
+    async onOk() {
+      withdrawSubmitting.value = true;
+      try {
+        await withdrawWorkflowInstance(processInstanceId);
+        message.success('已撤回');
+        detail.value = await getWorkflowInstanceDetail(processInstanceId);
+        emit('success');
+      } finally {
+        withdrawSubmitting.value = false;
+      }
+    },
+  });
+}
+
 defineExpose({
   open,
 });
@@ -435,15 +465,17 @@ defineExpose({
         </div>
 
         <RuntimeActionBar
-          v-if="showRuntimeActions || canManualCc"
+          v-if="showRuntimeActions || canManualCc || canWithdraw"
           :action-permissions="actionPermissions"
           :can-cc="canManualCc"
+          :can-withdraw="canWithdraw"
           :cc-submitting="manualCcSubmitting"
           :is-start-draft-task="isStartDraftTask"
           :is-start-mode="isStartMode"
           :is-todo-mode="isTodoMode"
           :saving="saving"
           :submitting="submitting"
+          :withdraw-submitting="withdrawSubmitting"
           @action="handleRuntimeAction"
           @approve="handleApprove"
           @cancel="drawerApi.close()"
@@ -452,6 +484,7 @@ defineExpose({
           @save-start-draft="handleSaveStartDraft"
           @save-start-draft-task="handleSaveStartDraftTask"
           @submit-start="handleStartSubmit"
+          @withdraw="handleWithdraw"
         />
       </div>
       <div

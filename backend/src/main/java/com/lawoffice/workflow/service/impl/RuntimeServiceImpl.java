@@ -19,6 +19,7 @@ import com.lawoffice.workflow.service.IReminderRuntimeService;
 import com.lawoffice.workflow.service.IRuntimeQueryService;
 import com.lawoffice.workflow.service.IRuntimeService;
 import com.lawoffice.workflow.service.ITaskActionService;
+import com.lawoffice.workflow.service.IWithdrawRuntimeService;
 import com.lawoffice.workflow.vo.AttachmentVO;
 import com.lawoffice.workflow.vo.AssigneeSelectNodeVO;
 import com.lawoffice.workflow.vo.AvailableProcessVO;
@@ -47,6 +48,7 @@ public class RuntimeServiceImpl implements IRuntimeService {
     private final IReminderRuntimeService reminderRuntimeService;
     private final IAttachmentRuntimeService attachmentRuntimeService;
     private final IDiagramService diagramService;
+    private final IWithdrawRuntimeService withdrawRuntimeService;
 
     public RuntimeServiceImpl(IRuntimeQueryService runtimeQueryService,
             ITaskActionService taskActionService,
@@ -54,7 +56,8 @@ public class RuntimeServiceImpl implements IRuntimeService {
             ICcRuntimeService ccRuntimeService,
             IReminderRuntimeService reminderRuntimeService,
             IAttachmentRuntimeService attachmentRuntimeService,
-            IDiagramService diagramService) {
+            IDiagramService diagramService,
+            IWithdrawRuntimeService withdrawRuntimeService) {
         this.runtimeQueryService = runtimeQueryService;
         this.taskActionService = taskActionService;
         this.processStartService = processStartService;
@@ -62,6 +65,7 @@ public class RuntimeServiceImpl implements IRuntimeService {
         this.reminderRuntimeService = reminderRuntimeService;
         this.attachmentRuntimeService = attachmentRuntimeService;
         this.diagramService = diagramService;
+        this.withdrawRuntimeService = withdrawRuntimeService;
     }
 
     @Override
@@ -142,6 +146,11 @@ public class RuntimeServiceImpl implements IRuntimeService {
     @Override
     public BaseResult<TaskActionVO> addSign(String taskId, TaskActionReq req, RequestContext context) {
         return taskActionService.addSign(taskId, req, context);
+    }
+
+    @Override
+    public BaseResult<TaskActionVO> withdraw(String processInstanceId, RequestContext context) {
+        return withdrawRuntimeService.withdraw(processInstanceId, context);
     }
 
     @Override

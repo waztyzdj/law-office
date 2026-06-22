@@ -167,6 +167,7 @@ export interface RuntimeTaskPageReq extends BasePageReq {
 }
 
 export interface StartedInstanceInfo {
+  canWithdraw?: boolean;
   id?: string;
   businessKey?: string;
   currentAssigneeNames?: string;
@@ -371,6 +372,7 @@ export interface FormInstanceInfo {
 }
 
 export interface ProcessInstanceInfo {
+  canWithdraw?: boolean;
   currentAssigneeNames?: string;
   currentTaskNames?: string;
   endTime?: string;
@@ -564,6 +566,8 @@ export const returnWorkflowTask = (data: TaskActionReq) =>
   requestClient.post<TaskActionResult>('/workflow/task/return', data);
 export const addSignWorkflowTask = (data: TaskActionReq) =>
   requestClient.post<TaskActionResult>('/workflow/task/add-sign', data);
+export const withdrawWorkflowInstance = (id: string) =>
+  requestClient.post<TaskActionResult>('/workflow/task/withdraw', { id });
 
 function normalizeAvailableProcessPageReq(
   params: AvailableProcessPageReq,

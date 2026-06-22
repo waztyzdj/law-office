@@ -1,8 +1,11 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue';
 
+import { message, Modal } from 'ant-design-vue';
+
 import type { StartedInstanceInfo } from '#/api/workflow';
 
+import { withdrawWorkflowInstance } from '#/api/workflow';
 import WorkflowRuntimeFormDrawer from '../components/WorkflowRuntimeFormDrawer.vue';
 import WorkflowStartedTable from './components/WorkflowStartedTable.vue';
 import { useWorkflowStartedTable } from './hooks/useWorkflowStartedTable';
@@ -22,6 +25,23 @@ function handleDetail(record: StartedInstanceInfo) {
   drawerRef.value?.open({ instanceId: record.id, mode: 'started' });
 }
 
+function handleWithdraw(record: StartedInstanceInfo) {
+  if (!record.id) {
+    return;
+  }
+  Modal.confirm({
+    title: '确认撤回该审批？',
+    content: '撤回后流程将结束，当前审批人不能继续办理。',
+    okButtonProps: { danger: true },
+    okText: '确认撤回',
+    async onOk() {
+      await withdrawWorkflowInstance(record.id!);
+      message.success('已撤回');
+      await loadData();
+    },
+  });
+}
+
 onMounted(loadData);
 </script>
 
@@ -34,6 +54,7 @@ onMounted(loadData);
       :pagination="pagination"
       @change="handleTableChange"
       @detail="handleDetail"
+      @withdraw="handleWithdraw"
     />
     <WorkflowRuntimeFormDrawer
       ref="drawerRef"
