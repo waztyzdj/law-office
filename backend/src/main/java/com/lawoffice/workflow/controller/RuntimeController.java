@@ -234,9 +234,9 @@ public class RuntimeController {
 
     @PostMapping("/task/urge")
     @Operation(summary = "催办任务")
-    public BaseResult<ReminderRecordVO> urgeTask(@RequestBody TaskUrgeReq req, HttpServletRequest request) {
+    public BaseResult<List<ReminderRecordVO>> urgeTask(@RequestBody TaskUrgeReq req, HttpServletRequest request) {
         RequestContext context = RequestContextUtils.buildContext(request);
-        return runtimeService.urgeTask(req == null ? null : req.getTaskId(),
+        return runtimeService.urge(req == null ? null : req.getProcessInstanceId(),
                 req == null ? null : req.getRemark(), context);
     }
 

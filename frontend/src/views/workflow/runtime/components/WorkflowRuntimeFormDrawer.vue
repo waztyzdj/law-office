@@ -14,7 +14,7 @@ import { computed, ref } from 'vue';
 
 import { useVbenDrawer } from '@vben/common-ui';
 
-import { message, Modal, Select, Space, Spin, Tag } from 'ant-design-vue';
+import { Alert, message, Modal, Select, Space, Spin, Tag } from 'ant-design-vue';
 
 import {
   getStartForm,
@@ -22,6 +22,7 @@ import {
   getWorkflowTaskForm,
   previewNextAssigneeSelectNodes,
   sendWorkflowCc,
+  urgeWorkflowInstance,
   withdrawWorkflowInstance,
 } from '#/api/workflow';
 import UserPickerPanel from '#/components/user-picker/UserPickerPanel.vue';
@@ -43,6 +44,7 @@ import { workflowActionTitleMap } from './runtimeTypes';
 interface DrawerPayload {
   instanceId?: string;
   mode: DrawerMode;
+  notice?: string;
   process?: AvailableProcessInfo;
   task?: RuntimeTaskInfo;
   taskId?: string;
@@ -64,6 +66,8 @@ const drawerOpened = ref(false);
 const manualCcOpen = ref(false);
 const manualCcSelectedUsers = ref<UserInfo[]>([]);
 const manualCcSubmitting = ref(false);
+const runtimeNotice = ref('');
+const urgeSubmitting = ref(false);
 const withdrawSubmitting = ref(false);
 let runtimeRenderFrameId: number | undefined;
 const actionPermissions = computed(() => taskForm.value?.actionPermissions);
@@ -117,6 +121,9 @@ const shouldSelectNextAssigneeOnApprove = computed(() => {
   return completed + 1 >= total;
 });
 const canManualCc = computed(() => Boolean(detail.value?.processInstance?.id));
+const canUrge = computed(
+  () => mode.value === 'started' && Boolean(detail.value?.processInstance?.canUrge),
+);
 const canWithdraw = computed(
   () => mode.value === 'started' && Boolean(detail.value?.processInstance?.canWithdraw),
 );
@@ -254,6 +261,8 @@ function resetState(payload: DrawerPayload) {
   manualCcOpen.value = false;
   manualCcSelectedUsers.value = [];
   manualCcSubmitting.value = false;
+  runtimeNotice.value = payload.notice ?? '';
+  urgeSubmitting.value = false;
   withdrawSubmitting.value = false;
   resetRuntimeFormData(payload.process);
   resetAssigneeSelection();
@@ -404,6 +413,22 @@ function handleWithdraw() {
   });
 }
 
+async function handleUrge() {
+  const processInstanceId = detail.value?.processInstance?.id;
+  if (!processInstanceId) {
+    return;
+  }
+  urgeSubmitting.value = true;
+  try {
+    await urgeWorkflowInstance(processInstanceId);
+    message.success('已催办');
+    detail.value = await getWorkflowInstanceDetail(processInstanceId);
+    emit('success');
+  } finally {
+    urgeSubmitting.value = false;
+  }
+}
+
 defineExpose({
   open,
 });
@@ -416,6 +441,13 @@ defineExpose({
         v-if="runtimeContentReady"
         class="runtime-drawer-body"
       >
+        <Alert
+          v-if="runtimeNotice"
+          class="runtime-notice"
+          show-icon
+          type="warning"
+          :message="runtimeNotice"
+        />
         <div
           v-if="showTaskContext"
           class="task-context-bar"
@@ -465,9 +497,10 @@ defineExpose({
         </div>
 
         <RuntimeActionBar
-          v-if="showRuntimeActions || canManualCc || canWithdraw"
+          v-if="showRuntimeActions || canManualCc || canUrge || canWithdraw"
           :action-permissions="actionPermissions"
           :can-cc="canManualCc"
+          :can-urge="canUrge"
           :can-withdraw="canWithdraw"
           :cc-submitting="manualCcSubmitting"
           :is-start-draft-task="isStartDraftTask"
@@ -475,6 +508,7 @@ defineExpose({
           :is-todo-mode="isTodoMode"
           :saving="saving"
           :submitting="submitting"
+          :urge-submitting="urgeSubmitting"
           :withdraw-submitting="withdrawSubmitting"
           @action="handleRuntimeAction"
           @approve="handleApprove"
@@ -484,6 +518,7 @@ defineExpose({
           @save-start-draft="handleSaveStartDraft"
           @save-start-draft-task="handleSaveStartDraftTask"
           @submit-start="handleStartSubmit"
+          @urge="handleUrge"
           @withdraw="handleWithdraw"
         />
       </div>
@@ -571,6 +606,10 @@ defineExpose({
   flex-direction: column;
   height: 100%;
   min-height: 0;
+}
+
+.runtime-notice {
+  margin-bottom: 12px;
 }
 
 .runtime-drawer-placeholder {

@@ -199,6 +199,13 @@ public final class WorkflowConstants {
         }
     }
 
+    public static final class Reminder {
+        public static final int URGE_INTERVAL_MINUTES = 10;
+
+        private Reminder() {
+        }
+    }
+
     public static final class AttachmentStatus {
         public static final String ACTIVE = "active";
         public static final String DELETED = "deleted";

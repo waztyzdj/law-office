@@ -11,6 +11,7 @@ import com.lawoffice.workflow.entity.OperationRecord;
 import com.lawoffice.workflow.entity.ProcessInstance;
 import com.lawoffice.workflow.entity.ProcessModel;
 import com.lawoffice.workflow.entity.ProcessNodeConfig;
+import com.lawoffice.workflow.entity.ReminderRecord;
 import com.lawoffice.workflow.entity.Task;
 import com.lawoffice.workflow.entity.TaskCandidate;
 import com.lawoffice.workflow.mapper.FormDefinitionMapper;
@@ -18,6 +19,7 @@ import com.lawoffice.workflow.mapper.FormInstanceMapper;
 import com.lawoffice.workflow.mapper.OperationRecordMapper;
 import com.lawoffice.workflow.mapper.ProcessInstanceMapper;
 import com.lawoffice.workflow.mapper.ProcessModelMapper;
+import com.lawoffice.workflow.mapper.ReminderRecordMapper;
 import com.lawoffice.workflow.mapper.TaskCandidateMapper;
 import com.lawoffice.workflow.mapper.TaskMapper;
 import com.lawoffice.workflow.service.IAssigneeResolveService;
@@ -39,6 +41,7 @@ import com.lawoffice.workflow.vo.TaskReturnNodeVO;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -56,6 +59,7 @@ public class RuntimeViewAssemblerServiceImpl implements IRuntimeViewAssemblerSer
     private final ProcessInstanceMapper processInstanceMapper;
     private final TaskCandidateMapper taskCandidateMapper;
     private final TaskMapper taskMapper;
+    private final ReminderRecordMapper reminderRecordMapper;
     private final IAssigneeResolveService assigneeResolveService;
     private final IProcessNodeConfigService processNodeConfigService;
 
@@ -66,6 +70,7 @@ public class RuntimeViewAssemblerServiceImpl implements IRuntimeViewAssemblerSer
             ProcessInstanceMapper processInstanceMapper,
             TaskCandidateMapper taskCandidateMapper,
             TaskMapper taskMapper,
+            ReminderRecordMapper reminderRecordMapper,
             IAssigneeResolveService assigneeResolveService,
             IProcessNodeConfigService processNodeConfigService) {
         this.processModelMapper = processModelMapper;
@@ -75,6 +80,7 @@ public class RuntimeViewAssemblerServiceImpl implements IRuntimeViewAssemblerSer
         this.processInstanceMapper = processInstanceMapper;
         this.taskCandidateMapper = taskCandidateMapper;
         this.taskMapper = taskMapper;
+        this.reminderRecordMapper = reminderRecordMapper;
         this.assigneeResolveService = assigneeResolveService;
         this.processNodeConfigService = processNodeConfigService;
     }
@@ -134,12 +140,14 @@ public class RuntimeViewAssemblerServiceImpl implements IRuntimeViewAssemblerSer
                     .forEach(formInstance -> formInstanceMap.put(formInstance.getId(), formInstance));
         }
         Set<String> withdrawableInstanceIds = resolveWithdrawableInstanceIds(instances, tenantId);
+        Set<String> urgeableInstanceIds = resolveUrgeableInstanceIds(instances, tenantId);
         return instances.stream()
                 .map(instance -> buildStartedInstanceVO(
                         instance,
                         processModelMap.get(instance.getProcessModelId()),
                         formInstanceMap.get(instance.getFormInstanceId()),
-                        withdrawableInstanceIds.contains(instance.getId())))
+                        withdrawableInstanceIds.contains(instance.getId()),
+                        urgeableInstanceIds.contains(instance.getId())))
                 .toList();
     }
 
@@ -168,9 +176,11 @@ public class RuntimeViewAssemblerServiceImpl implements IRuntimeViewAssemblerSer
 
     @Override
     public InstanceDetailVO buildInstanceDetail(ProcessInstance processInstance, FormInstance formInstance,
-            List<Task> currentTasks, List<OperationRecord> records, List<CcRecord> ccRecords) {
+            List<Task> currentTasks, List<OperationRecord> records, List<CcRecord> ccRecords,
+            RequestContext context) {
         InstanceDetailVO vo = new InstanceDetailVO();
-        vo.setProcessInstance(buildProcessInstanceVO(processInstance, canWithdraw(processInstance, records)));
+        vo.setProcessInstance(buildProcessInstanceVO(processInstance, canWithdraw(processInstance, records),
+                canUrge(processInstance, currentTasks, context)));
         vo.setFormInstance(buildFormInstanceVO(formInstance));
         Map<String, String> candidateNamesByTaskId = buildCandidateNamesByTaskId(currentTasks, processInstance.getTenantId());
         vo.setCurrentTasks(currentTasks.stream()
@@ -329,7 +339,7 @@ public class RuntimeViewAssemblerServiceImpl implements IRuntimeViewAssemblerSer
     }
 
     private StartedInstanceVO buildStartedInstanceVO(ProcessInstance instance, ProcessModel processModel,
-            FormInstance formInstance, boolean canWithdraw) {
+            FormInstance formInstance, boolean canWithdraw, boolean canUrge) {
         StartedInstanceVO vo = new StartedInstanceVO();
         vo.setId(instance.getId());
         vo.setCreateTime(instance.getCreateTime());
@@ -348,6 +358,7 @@ public class RuntimeViewAssemblerServiceImpl implements IRuntimeViewAssemblerSer
         vo.setCurrentTaskNames(instance.getCurrentTaskNames());
         vo.setCurrentAssigneeNames(instance.getCurrentAssigneeNames());
         vo.setCanWithdraw(canWithdraw);
+        vo.setCanUrge(canUrge);
         if (processModel != null) {
             vo.setProcessName(processModel.getProcessName());
         }
@@ -357,7 +368,8 @@ public class RuntimeViewAssemblerServiceImpl implements IRuntimeViewAssemblerSer
         return vo;
     }
 
-    private ProcessInstanceVO buildProcessInstanceVO(ProcessInstance processInstance, boolean canWithdraw) {
+    private ProcessInstanceVO buildProcessInstanceVO(ProcessInstance processInstance, boolean canWithdraw,
+            boolean canUrge) {
         ProcessInstanceVO vo = new ProcessInstanceVO();
         vo.setId(processInstance.getId());
         vo.setCreateTime(processInstance.getCreateTime());
@@ -382,6 +394,7 @@ public class RuntimeViewAssemblerServiceImpl implements IRuntimeViewAssemblerSer
         vo.setCurrentTaskNames(processInstance.getCurrentTaskNames());
         vo.setCurrentAssigneeNames(processInstance.getCurrentAssigneeNames());
         vo.setCanWithdraw(canWithdraw);
+        vo.setCanUrge(canUrge);
         return vo;
     }
 
@@ -418,6 +431,76 @@ public class RuntimeViewAssemblerServiceImpl implements IRuntimeViewAssemblerSer
         return records.stream()
                 .map(OperationRecord::getAction)
                 .noneMatch(withdrawBlockingActions()::contains);
+    }
+
+    private Set<String> resolveUrgeableInstanceIds(List<ProcessInstance> instances, String tenantId) {
+        Set<String> runningInstanceIds = instances.stream()
+                .filter(instance -> WorkflowConstants.Status.RUNNING.equals(instance.getStatus()))
+                .map(ProcessInstance::getId)
+                .filter(StringUtils::hasText)
+                .collect(java.util.stream.Collectors.toSet());
+        if (runningInstanceIds.isEmpty()) {
+            return Set.of();
+        }
+        List<Task> todoTasks = taskMapper.selectList(new QueryWrapper<Task>()
+                .select("id", "process_instance_id")
+                .eq("tenant_id", tenantId)
+                .in("process_instance_id", runningInstanceIds)
+                .eq("status", WorkflowConstants.Status.TODO)
+                .eq("delete_flag", 0));
+        if (todoTasks.isEmpty()) {
+            return Set.of();
+        }
+        Set<String> recentlyUrgedTaskIds = resolveRecentlyUrgedTaskIds(todoTasks, tenantId);
+        Set<String> recentlyUrgedInstanceIds = todoTasks.stream()
+                .filter(task -> recentlyUrgedTaskIds.contains(task.getId()))
+                .map(Task::getProcessInstanceId)
+                .filter(StringUtils::hasText)
+                .collect(java.util.stream.Collectors.toSet());
+        return todoTasks.stream()
+                .map(Task::getProcessInstanceId)
+                .filter(StringUtils::hasText)
+                .filter(instanceId -> !recentlyUrgedInstanceIds.contains(instanceId))
+                .collect(java.util.stream.Collectors.toSet());
+    }
+
+    private boolean canUrge(ProcessInstance processInstance, List<Task> currentTasks, RequestContext context) {
+        if (!WorkflowConstants.Status.RUNNING.equals(processInstance.getStatus())) {
+            return false;
+        }
+        if (context == null || !StringUtils.hasText(processInstance.getStarterUserId())
+                || !processInstance.getStarterUserId().equals(context.getUserId())) {
+            return false;
+        }
+        List<Task> todoTasks = currentTasks.stream()
+                .filter(task -> WorkflowConstants.Status.TODO.equals(task.getStatus()))
+                .toList();
+        if (todoTasks.isEmpty()) {
+            return false;
+        }
+        return resolveRecentlyUrgedTaskIds(todoTasks, processInstance.getTenantId()).isEmpty();
+    }
+
+    private Set<String> resolveRecentlyUrgedTaskIds(List<Task> tasks, String tenantId) {
+        Set<String> taskIds = tasks.stream()
+                .map(Task::getId)
+                .filter(StringUtils::hasText)
+                .collect(java.util.stream.Collectors.toSet());
+        if (taskIds.isEmpty()) {
+            return Set.of();
+        }
+        LocalDateTime since = LocalDateTime.now().minusMinutes(WorkflowConstants.Reminder.URGE_INTERVAL_MINUTES);
+        return reminderRecordMapper.selectList(new QueryWrapper<ReminderRecord>()
+                        .select("task_id")
+                        .eq("tenant_id", tenantId)
+                        .in("task_id", taskIds)
+                        .eq("remind_type", WorkflowConstants.RemindType.URGE)
+                        .ge("operate_time", since)
+                        .eq("delete_flag", 0))
+                .stream()
+                .map(ReminderRecord::getTaskId)
+                .filter(StringUtils::hasText)
+                .collect(java.util.stream.Collectors.toSet());
     }
 
     private Set<String> withdrawBlockingActions() {

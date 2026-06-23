@@ -105,6 +105,7 @@ export const workflowActionMap: Record<string, WorkflowMeta> = {
   start: { color: 'blue', label: '发起' },
   system_complete: { color: 'default', label: '系统完成' },
   transfer: { color: 'cyan', label: '转办' },
+  urge: { color: 'orange', label: '催办' },
   withdraw: { color: 'default', label: '撤回' },
 };
 

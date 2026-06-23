@@ -86,6 +86,9 @@ export function getWorkflowStartedColumns(
             { size: 'middle' },
             () => [
               h('a', { onClick: () => emit('detail', record) }, '详情'),
+              record.canUrge
+                ? h('a', { onClick: () => emit('urge', record) }, '催办')
+                : null,
               record.canWithdraw
                 ? h(
                     'a',
@@ -97,7 +100,7 @@ export function getWorkflowStartedColumns(
           ),
         fixed: 'right' as const,
         hasFilter: false,
-        width: 120,
+        width: 160,
       },
       title: '操作',
     },

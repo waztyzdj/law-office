@@ -30,4 +30,5 @@ public class ProcessInstanceVO extends BaseVO {
     private String currentTaskNames;
     private String currentAssigneeNames;
     private Boolean canWithdraw;
+    private Boolean canUrge;
 }

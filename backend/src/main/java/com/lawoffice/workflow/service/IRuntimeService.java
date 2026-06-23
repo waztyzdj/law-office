@@ -241,14 +241,14 @@ public interface IRuntimeService {
             RequestContext context);
 
     /**
-     * 催办待处理任务。
+     * 发起人催办当前有效待办，不改变流程状态或任务状态。
      *
-     * @param taskId 任务ID
+     * @param processInstanceId 流程实例ID
      * @param remark 催办备注
      * @param context 当前请求上下文
-     * @return 催办记录
+     * @return 催办记录列表
      */
-    BaseResult<ReminderRecordVO> urgeTask(String taskId, String remark, RequestContext context);
+    BaseResult<List<ReminderRecordVO>> urge(String processInstanceId, String remark, RequestContext context);
 
     /**
      * 查询审批实例附件。

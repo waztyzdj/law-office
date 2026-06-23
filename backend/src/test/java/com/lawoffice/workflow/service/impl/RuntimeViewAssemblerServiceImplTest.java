@@ -14,6 +14,7 @@ import com.lawoffice.workflow.mapper.FormInstanceMapper;
 import com.lawoffice.workflow.mapper.OperationRecordMapper;
 import com.lawoffice.workflow.mapper.ProcessInstanceMapper;
 import com.lawoffice.workflow.mapper.ProcessModelMapper;
+import com.lawoffice.workflow.mapper.ReminderRecordMapper;
 import com.lawoffice.workflow.mapper.TaskCandidateMapper;
 import com.lawoffice.workflow.mapper.TaskMapper;
 import com.lawoffice.workflow.service.IAssigneeResolveService;
@@ -56,6 +57,8 @@ class RuntimeViewAssemblerServiceImplTest {
     @Mock
     private OperationRecordMapper operationRecordMapper;
     @Mock
+    private ReminderRecordMapper reminderRecordMapper;
+    @Mock
     private ProcessInstanceMapper processInstanceMapper;
     @Mock
     private TaskCandidateMapper taskCandidateMapper;
@@ -78,6 +81,7 @@ class RuntimeViewAssemblerServiceImplTest {
                 processInstanceMapper,
                 taskCandidateMapper,
                 taskMapper,
+                reminderRecordMapper,
                 assigneeResolveService,
                 processNodeConfigService
         );
@@ -96,9 +100,12 @@ class RuntimeViewAssemblerServiceImplTest {
         when(processModelMapper.selectList(any(Wrapper.class))).thenReturn(List.of(processModel));
         when(formInstanceMapper.selectList(any(Wrapper.class))).thenReturn(List.of());
         when(operationRecordMapper.selectList(any(Wrapper.class))).thenReturn(List.of());
+        when(taskMapper.selectList(any(Wrapper.class))).thenReturn(List.of(task(WorkflowConstants.TaskType.NORMAL, "approve_1")));
+        when(reminderRecordMapper.selectList(any(Wrapper.class))).thenReturn(List.of());
         List<StartedInstanceVO> withdrawableRecords = service.buildStartedInstanceRecords(List.of(processInstance), TENANT_ID);
 
         assertTrue(withdrawableRecords.get(0).getCanWithdraw());
+        assertTrue(withdrawableRecords.get(0).getCanUrge());
 
         when(operationRecordMapper.selectList(any(Wrapper.class))).thenReturn(List.of(handledRecord));
         List<StartedInstanceVO> blockedRecords = service.buildStartedInstanceRecords(List.of(processInstance), TENANT_ID);

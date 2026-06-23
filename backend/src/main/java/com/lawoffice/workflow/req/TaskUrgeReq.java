@@ -8,6 +8,8 @@ import lombok.EqualsAndHashCode;
 @EqualsAndHashCode(callSuper = true)
 public class TaskUrgeReq extends BaseReq {
 
+    private String processInstanceId;
+
     private String taskId;
 
     private String remark;

@@ -19,6 +19,7 @@ const props = defineProps<Props>();
 const emit = defineEmits<{
   change: [pag: any, filters: any, sorter: any];
   detail: [record: StartedInstanceInfo];
+  urge: [record: StartedInstanceInfo];
   withdraw: [record: StartedInstanceInfo];
 }>();
 

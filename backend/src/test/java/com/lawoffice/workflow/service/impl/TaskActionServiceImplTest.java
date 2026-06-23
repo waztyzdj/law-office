@@ -4,15 +4,18 @@ import com.baomidou.mybatisplus.core.conditions.Wrapper;
 import com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper;
 import com.lawoffice.framework.dto.RequestContext;
 import com.lawoffice.framework.result.BaseResult;
+import com.lawoffice.message.mapper.SysMessageActionMapper;
 import com.lawoffice.system.entity.User;
 import com.lawoffice.workflow.constant.WorkflowConstants;
 import com.lawoffice.workflow.entity.FieldPermission;
 import com.lawoffice.workflow.entity.FormInstance;
 import com.lawoffice.workflow.entity.ProcessInstance;
 import com.lawoffice.workflow.entity.ProcessNodeConfig;
+import com.lawoffice.workflow.entity.ReminderRecord;
 import com.lawoffice.workflow.entity.Task;
 import com.lawoffice.workflow.mapper.FormInstanceMapper;
 import com.lawoffice.workflow.mapper.ProcessInstanceMapper;
+import com.lawoffice.workflow.mapper.ReminderRecordMapper;
 import com.lawoffice.workflow.mapper.TaskCandidateMapper;
 import com.lawoffice.workflow.mapper.TaskMapper;
 import com.lawoffice.workflow.req.TaskActionReq;
@@ -75,6 +78,10 @@ class TaskActionServiceImplTest {
     @Mock
     private TaskCandidateMapper taskCandidateMapper;
     @Mock
+    private ReminderRecordMapper reminderRecordMapper;
+    @Mock
+    private SysMessageActionMapper sysMessageActionMapper;
+    @Mock
     private IConditionBranchRuntimeService conditionBranchRuntimeService;
     @Mock
     private ICcRuntimeService ccRuntimeService;
@@ -103,6 +110,8 @@ class TaskActionServiceImplTest {
                 processInstanceMapper,
                 taskMapper,
                 taskCandidateMapper,
+                reminderRecordMapper,
+                sysMessageActionMapper,
                 conditionBranchRuntimeService,
                 ccRuntimeService,
                 flowableService,
@@ -151,9 +160,11 @@ class TaskActionServiceImplTest {
         mockCommonLookup(task);
         Task transferredSibling = siblingTask("task-4", "user-4");
         transferredSibling.setStatus(WorkflowConstants.Status.TRANSFERRED);
-        when(taskMapper.selectList(any(Wrapper.class))).thenReturn(List.of(siblingTask(), transferredSibling));
+        when(taskMapper.selectList(any(Wrapper.class)))
+                .thenReturn(List.of(siblingTask(), transferredSibling), List.of(addSignTask("task-5", "task-4")));
         when(taskMapper.selectCount(any(Wrapper.class))).thenReturn(0L, 1L);
         when(taskMapper.selectOne(any(Wrapper.class))).thenReturn(anchor);
+        when(reminderRecordMapper.selectList(any(Wrapper.class))).thenReturn(List.of(reminderRecord("message-1")));
         when(flowableService.isProcessInstanceActive(FLOWABLE_INSTANCE_ID)).thenReturn(true);
 
         BaseResult<TaskActionVO> result = service.approve(task.getId(), req(), context);
@@ -162,13 +173,16 @@ class TaskActionServiceImplTest {
         verify(instanceStateService).markTaskDone(same(task), same(context));
         verify(flowableService).completeTask(eq(FLOWABLE_TASK_ID), anyMap());
         ArgumentCaptor<Wrapper> selectWrapperCaptor = ArgumentCaptor.forClass(Wrapper.class);
-        verify(taskMapper).selectList(selectWrapperCaptor.capture());
-        assertTrue(selectWrapperCaptor.getValue().getSqlSegment().contains("status IN"));
+        verify(taskMapper, times(2)).selectList(selectWrapperCaptor.capture());
+        assertTrue(selectWrapperCaptor.getAllValues().get(0).getSqlSegment().contains("status IN"));
         ArgumentCaptor<UpdateWrapper> updateWrapperCaptor = ArgumentCaptor.forClass(UpdateWrapper.class);
         verify(taskMapper, times(3)).update(eq(null), updateWrapperCaptor.capture());
         assertTrue(updateWrapperCaptor.getAllValues().stream()
                 .map(UpdateWrapper::getSqlSegment)
                 .anyMatch(segment -> segment.contains("parent_task_id")));
+        ArgumentCaptor<UpdateWrapper> messageActionUpdateCaptor = ArgumentCaptor.forClass(UpdateWrapper.class);
+        verify(sysMessageActionMapper).update(eq(null), messageActionUpdateCaptor.capture());
+        assertTrue(messageActionUpdateCaptor.getValue().getSqlSegment().contains("biz_type"));
         verify(assigneeResolveService).syncCurrentTasks(same(processInstance), eq(TENANT_ID), same(context));
     }
 
@@ -366,6 +380,13 @@ class TaskActionServiceImplTest {
         task.setTaskType(WorkflowConstants.TaskType.ADD_SIGN);
         task.setStatus(WorkflowConstants.Status.TODO);
         return task;
+    }
+
+    private ReminderRecord reminderRecord(String messageId) {
+        ReminderRecord record = new ReminderRecord();
+        record.setMessageId(messageId);
+        record.setRemindType(WorkflowConstants.RemindType.URGE);
+        return record;
     }
 
     private ProcessNodeConfig nodeConfig(Integer allowTransfer, Integer allowAddSign) {

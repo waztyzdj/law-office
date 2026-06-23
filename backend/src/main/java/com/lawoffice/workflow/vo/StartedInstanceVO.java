@@ -40,4 +40,6 @@ public class StartedInstanceVO extends BaseVO {
     private String currentAssigneeNames;
 
     private Boolean canWithdraw;
+
+    private Boolean canUrge;
 }

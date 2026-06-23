@@ -180,8 +180,8 @@ public class RuntimeServiceImpl implements IRuntimeService {
     }
 
     @Override
-    public BaseResult<ReminderRecordVO> urgeTask(String taskId, String remark, RequestContext context) {
-        return reminderRuntimeService.urgeTask(taskId, remark, context);
+    public BaseResult<List<ReminderRecordVO>> urge(String processInstanceId, String remark, RequestContext context) {
+        return reminderRuntimeService.urge(processInstanceId, remark, context);
     }
 
     @Override

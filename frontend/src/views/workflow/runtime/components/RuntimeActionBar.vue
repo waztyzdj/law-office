@@ -6,6 +6,7 @@ import { Button } from 'ant-design-vue';
 interface Props {
   actionPermissions?: RuntimeActionPermissions;
   canCc: boolean;
+  canUrge: boolean;
   canWithdraw: boolean;
   ccSubmitting: boolean;
   isStartDraftTask: boolean;
@@ -13,6 +14,7 @@ interface Props {
   isTodoMode: boolean;
   saving: boolean;
   submitting: boolean;
+  urgeSubmitting: boolean;
   withdrawSubmitting: boolean;
 }
 
@@ -27,6 +29,7 @@ const emit = defineEmits<{
   saveStartDraft: [];
   saveStartDraftTask: [];
   submitStart: [];
+  urge: [];
   withdraw: [];
 }>();
 </script>
@@ -99,7 +102,7 @@ const emit = defineEmits<{
     </template>
     <Button
       v-if="canCc"
-      :disabled="saving || submitting"
+      :disabled="saving || submitting || urgeSubmitting"
       :loading="ccSubmitting"
       :type="isTodoMode ? 'default' : 'primary'"
       @click="emit('cc')"
@@ -107,8 +110,16 @@ const emit = defineEmits<{
       抄送
     </Button>
     <Button
+      v-if="canUrge"
+      :disabled="saving || submitting || ccSubmitting || urgeSubmitting || withdrawSubmitting"
+      :loading="urgeSubmitting"
+      @click="emit('urge')"
+    >
+      催办
+    </Button>
+    <Button
       v-if="canWithdraw"
-      :disabled="saving || submitting || ccSubmitting || withdrawSubmitting"
+      :disabled="saving || submitting || ccSubmitting || urgeSubmitting || withdrawSubmitting"
       :loading="withdrawSubmitting"
       danger
       @click="emit('withdraw')"
@@ -116,7 +127,7 @@ const emit = defineEmits<{
       撤回
     </Button>
     <Button
-      :disabled="saving || submitting || ccSubmitting"
+      :disabled="saving || submitting || ccSubmitting || urgeSubmitting"
       @click="emit('cancel')"
     >
       取消

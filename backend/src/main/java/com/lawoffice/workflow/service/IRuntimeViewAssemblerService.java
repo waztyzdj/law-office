@@ -63,7 +63,8 @@ public interface IRuntimeViewAssemblerService {
      * @return 审批实例详情
      */
     InstanceDetailVO buildInstanceDetail(ProcessInstance processInstance, FormInstance formInstance,
-            List<Task> currentTasks, List<OperationRecord> records, List<CcRecord> ccRecords);
+            List<Task> currentTasks, List<OperationRecord> records, List<CcRecord> ccRecords,
+            RequestContext context);
 
     /**
      * 组装操作记录VO。

@@ -381,7 +381,7 @@ public class RuntimeQueryServiceImpl implements IRuntimeQueryService {
             List<OperationRecord> records = listOperationRecords(processInstance.getId(), tenantId);
             List<CcRecord> ccRecords = listCcRecords(processInstance.getId(), tenantId);
             return BaseResult.success(runtimeViewAssemblerService.buildInstanceDetail(
-                    processInstance, formInstance, currentTasks, records, ccRecords));
+                    processInstance, formInstance, currentTasks, records, ccRecords, context));
         } catch (IllegalArgumentException e) {
             return BaseResult.error(400, e.getMessage());
         } catch (Exception e) {

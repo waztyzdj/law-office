@@ -5,7 +5,7 @@ import { message, Modal } from 'ant-design-vue';
 
 import type { StartedInstanceInfo } from '#/api/workflow';
 
-import { withdrawWorkflowInstance } from '#/api/workflow';
+import { urgeWorkflowInstance, withdrawWorkflowInstance } from '#/api/workflow';
 import WorkflowRuntimeFormDrawer from '../components/WorkflowRuntimeFormDrawer.vue';
 import WorkflowStartedTable from './components/WorkflowStartedTable.vue';
 import { useWorkflowStartedTable } from './hooks/useWorkflowStartedTable';
@@ -42,6 +42,15 @@ function handleWithdraw(record: StartedInstanceInfo) {
   });
 }
 
+async function handleUrge(record: StartedInstanceInfo) {
+  if (!record.id) {
+    return;
+  }
+  await urgeWorkflowInstance(record.id);
+  message.success('已催办');
+  await loadData();
+}
+
 onMounted(loadData);
 </script>
 
@@ -54,6 +63,7 @@ onMounted(loadData);
       :pagination="pagination"
       @change="handleTableChange"
       @detail="handleDetail"
+      @urge="handleUrge"
       @withdraw="handleWithdraw"
     />
     <WorkflowRuntimeFormDrawer

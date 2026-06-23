@@ -4,6 +4,8 @@ import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper;
 import com.lawoffice.framework.dto.RequestContext;
 import com.lawoffice.framework.result.BaseResult;
+import com.lawoffice.message.entity.SysMessageAction;
+import com.lawoffice.message.mapper.SysMessageActionMapper;
 import com.lawoffice.system.entity.User;
 import com.lawoffice.util.EntityFillUtils;
 import com.lawoffice.workflow.constant.WorkflowConstants;
@@ -14,10 +16,12 @@ import com.lawoffice.workflow.entity.FormInstance;
 import com.lawoffice.workflow.entity.ProcessInstance;
 import com.lawoffice.workflow.entity.ProcessModel;
 import com.lawoffice.workflow.entity.ProcessNodeConfig;
+import com.lawoffice.workflow.entity.ReminderRecord;
 import com.lawoffice.workflow.entity.Task;
 import com.lawoffice.workflow.entity.TaskCandidate;
 import com.lawoffice.workflow.mapper.FormInstanceMapper;
 import com.lawoffice.workflow.mapper.ProcessInstanceMapper;
+import com.lawoffice.workflow.mapper.ReminderRecordMapper;
 import com.lawoffice.workflow.mapper.TaskCandidateMapper;
 import com.lawoffice.workflow.mapper.TaskMapper;
 import com.lawoffice.workflow.req.SelectedAssigneeReq;
@@ -39,6 +43,7 @@ import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.util.StringUtils;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -54,6 +59,8 @@ public class TaskActionServiceImpl implements ITaskActionService {
     private final ProcessInstanceMapper processInstanceMapper;
     private final TaskMapper taskMapper;
     private final TaskCandidateMapper taskCandidateMapper;
+    private final ReminderRecordMapper reminderRecordMapper;
+    private final SysMessageActionMapper sysMessageActionMapper;
     private final IConditionBranchRuntimeService conditionBranchRuntimeService;
     private final ICcRuntimeService ccRuntimeService;
     private final IFlowableService flowableService;
@@ -68,6 +75,8 @@ public class TaskActionServiceImpl implements ITaskActionService {
             ProcessInstanceMapper processInstanceMapper,
             TaskMapper taskMapper,
             TaskCandidateMapper taskCandidateMapper,
+            ReminderRecordMapper reminderRecordMapper,
+            SysMessageActionMapper sysMessageActionMapper,
             IConditionBranchRuntimeService conditionBranchRuntimeService,
             ICcRuntimeService ccRuntimeService,
             IFlowableService flowableService,
@@ -81,6 +90,8 @@ public class TaskActionServiceImpl implements ITaskActionService {
         this.processInstanceMapper = processInstanceMapper;
         this.taskMapper = taskMapper;
         this.taskCandidateMapper = taskCandidateMapper;
+        this.reminderRecordMapper = reminderRecordMapper;
+        this.sysMessageActionMapper = sysMessageActionMapper;
         this.conditionBranchRuntimeService = conditionBranchRuntimeService;
         this.ccRuntimeService = ccRuntimeService;
         this.flowableService = flowableService;
@@ -703,7 +714,10 @@ public class TaskActionServiceImpl implements ITaskActionService {
         if (canceledTaskIds.isEmpty()) {
             return;
         }
-        cancelActiveAddSignChildren(canceledTaskIds, tenantId, context);
+        List<String> canceledAddSignChildIds = cancelActiveAddSignChildren(canceledTaskIds, tenantId, context);
+        List<String> expiredReminderTaskIds = new ArrayList<>(canceledTaskIds);
+        expiredReminderTaskIds.addAll(canceledAddSignChildIds);
+        expireUrgeMessageActions(expiredReminderTaskIds, tenantId, context);
         cancelTasksByIds(canceledTaskIds, tenantId, context);
         cancelCandidatesByTaskIds(canceledTaskIds, tenantId, context);
     }
@@ -713,9 +727,22 @@ public class TaskActionServiceImpl implements ITaskActionService {
      * 发起加签的父任务会处于 transferred 状态，因此父任务 ID 范围必须包含 transferred sibling。
      * 否则旧加签完成会恢复已取消父任务，造成当前节点和下一节点并行办理。
      */
-    private void cancelActiveAddSignChildren(List<String> parentTaskIds, String tenantId, RequestContext context) {
+    private List<String> cancelActiveAddSignChildren(List<String> parentTaskIds, String tenantId, RequestContext context) {
         if (parentTaskIds == null || parentTaskIds.isEmpty()) {
-            return;
+            return List.of();
+        }
+        List<String> childTaskIds = taskMapper.selectList(new QueryWrapper<Task>()
+                        .select("id")
+                        .eq("tenant_id", tenantId)
+                        .in("parent_task_id", parentTaskIds)
+                        .eq("task_type", WorkflowConstants.TaskType.ADD_SIGN)
+                        .eq("status", WorkflowConstants.Status.TODO)
+                        .eq("delete_flag", 0))
+                .stream()
+                .map(Task::getId)
+                .toList();
+        if (childTaskIds.isEmpty()) {
+            return List.of();
         }
         taskMapper.update(null, new UpdateWrapper<Task>()
                 .eq("tenant_id", tenantId)
@@ -724,6 +751,39 @@ public class TaskActionServiceImpl implements ITaskActionService {
                 .eq("status", WorkflowConstants.Status.TODO)
                 .eq("delete_flag", 0)
                 .set("status", WorkflowConstants.Status.CANCELED)
+                .set("update_by", context.getUsername())
+                .set("update_time", LocalDateTime.now()));
+        return childTaskIds;
+    }
+
+    /**
+     * After an or-sign sibling task is canceled, its urge message remains as history and only opens detail.
+     */
+    private void expireUrgeMessageActions(List<String> taskIds, String tenantId, RequestContext context) {
+        if (taskIds == null || taskIds.isEmpty()) {
+            return;
+        }
+        List<String> messageIds = reminderRecordMapper.selectList(new QueryWrapper<ReminderRecord>()
+                        .select("message_id")
+                        .eq("tenant_id", tenantId)
+                        .in("task_id", taskIds)
+                        .eq("remind_type", WorkflowConstants.RemindType.URGE)
+                        .isNotNull("message_id")
+                        .eq("delete_flag", 0))
+                .stream()
+                .map(ReminderRecord::getMessageId)
+                .filter(StringUtils::hasText)
+                .distinct()
+                .toList();
+        if (messageIds.isEmpty()) {
+            return;
+        }
+        sysMessageActionMapper.update(null, new UpdateWrapper<SysMessageAction>()
+                .eq("tenant_id", tenantId)
+                .in("message_id", messageIds)
+                .eq("biz_type", "workflow_urge")
+                .eq("delete_flag", 0)
+                .set("action_name", "\u67e5\u770b\u8be6\u60c5")
                 .set("update_by", context.getUsername())
                 .set("update_time", LocalDateTime.now()));
     }
