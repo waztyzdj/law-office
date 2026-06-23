@@ -52,6 +52,7 @@ interface SimpleNode {
   id: string;
   name: string;
   rejectPolicy?: string;
+  timeoutConfig?: TimeoutConfig;
   type: 'approver' | 'gateway';
 }
 
@@ -87,6 +88,14 @@ interface CcConfig {
     targetIds?: string[];
     targetType: string;
   }>;
+}
+
+interface TimeoutConfig {
+  channels?: string[];
+  enabled: boolean;
+  maxRemindCount: number;
+  remindIntervalMinutes: number;
+  timeoutMinutes: number;
 }
 
 type ApprovalMode = 'single' | 'countersign' | 'orsign';
@@ -126,7 +135,7 @@ const [Drawer, drawerApi] = useVbenDrawer({
   zIndex: 1001,
 });
 
-function parseJsonValue<T>(json: string | undefined, fallback: T): T {
+function parseJsonValue<T>(json: null | string | undefined, fallback: T): T {
   if (!json) {
     return fallback;
   }
@@ -162,8 +171,50 @@ function normalizeNode(raw: Record<string, any>, index: number): SimpleNode {
     id: raw.id || raw.nodeId || `approve_${index + 1}`,
     name: raw.name || raw.nodeName || `审批节点${index + 1}`,
     rejectPolicy: raw.rejectPolicy || 'terminate',
+    timeoutConfig: normalizeTimeoutConfig(raw.timeoutConfig || raw.timeoutJson),
     type: 'approver',
   };
+}
+
+function normalizeTimeoutConfig(value: unknown): TimeoutConfig {
+  const parsed =
+    typeof value === 'string'
+      ? parseJsonValue<Record<string, unknown>>(value, {})
+      : ((value || {}) as Record<string, unknown>);
+  const timeoutMinutes = Number(
+    parsed.timeoutMinutes ?? parsed.durationMinutes ?? 0,
+  );
+  const remindIntervalMinutes = Number(
+    parsed.remindIntervalMinutes ?? parsed.intervalMinutes ?? 60,
+  );
+  const maxRemindCount = Number(parsed.maxRemindCount ?? 3);
+  return {
+    channels: ['site'],
+    enabled: Boolean(parsed.enabled) && timeoutMinutes > 0,
+    maxRemindCount: Number.isFinite(maxRemindCount)
+      ? Math.max(1, maxRemindCount)
+      : 3,
+    remindIntervalMinutes: Number.isFinite(remindIntervalMinutes)
+      ? Math.max(1, remindIntervalMinutes)
+      : 60,
+    timeoutMinutes: Number.isFinite(timeoutMinutes)
+      ? Math.max(0, timeoutMinutes)
+      : 0,
+  };
+}
+
+function buildTimeoutJson(config: TimeoutConfig | undefined) {
+  const normalized = normalizeTimeoutConfig(config || {});
+  if (!normalized.enabled) {
+    return null;
+  }
+  return JSON.stringify({
+    channels: ['site'],
+    enabled: true,
+    maxRemindCount: normalized.maxRemindCount,
+    remindIntervalMinutes: normalized.remindIntervalMinutes,
+    timeoutMinutes: normalized.timeoutMinutes,
+  });
 }
 
 function normalizeApprovalMode(value: unknown): ApprovalMode {
@@ -264,6 +315,10 @@ function buildNodesFromProcess(process: WorkflowProcessModelInfo, configs: Workf
           name: item.nodeName,
           type: item.nodeType,
           rejectPolicy: item.rejectPolicy,
+          timeoutConfig: parseJsonValue<TimeoutConfig | undefined>(
+            item.timeoutJson,
+            undefined,
+          ),
         },
         index,
       ),
@@ -297,6 +352,7 @@ function buildNodeJson() {
               id: node.id,
               name: node.name,
               rejectPolicy: node.rejectPolicy,
+              timeoutConfig: normalizeTimeoutConfig(node.timeoutConfig),
               type: 'approver',
             },
       ),
@@ -374,6 +430,7 @@ function createApproverNode(): SimpleNode {
     id: `approve_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
     name: `审批节点${nextIndex}`,
     rejectPolicy: 'terminate',
+    timeoutConfig: normalizeTimeoutConfig({}),
     type: 'approver',
   };
 }
@@ -644,6 +701,7 @@ async function saveNodeConfigs(processId: string) {
       processModelId: processId,
       rejectPolicy: node.rejectPolicy || 'terminate',
       sortOrder: (index + 1) * 10,
+      timeoutJson: buildTimeoutJson(node.timeoutConfig),
     });
   }
 }
@@ -874,6 +932,68 @@ defineExpose({
                     >
                       加签
                     </Checkbox>
+                  </Space>
+                </FormItem>
+                <FormItem label="超时提醒">
+                  <Space
+                    direction="vertical"
+                    size="small"
+                    class="w-full"
+                  >
+                    <Checkbox
+                      v-model:checked="node.timeoutConfig!.enabled"
+                      :disabled="isPublished"
+                    >
+                      启用超时提醒
+                    </Checkbox>
+                    <div
+                      v-if="node.timeoutConfig?.enabled"
+                      class="timeout-config-grid"
+                    >
+                      <div class="timeout-config-item">
+                        <InputNumber
+                          v-model:value="node.timeoutConfig.timeoutMinutes"
+                          :disabled="isPublished"
+                          :min="1"
+                          addon-before="超时"
+                          addon-after="分钟"
+                          class="w-full"
+                        />
+                        <div class="timeout-config-help">
+                          待办到达后超过该时长未处理，触发首轮提醒。
+                        </div>
+                      </div>
+                      <div class="timeout-config-item">
+                        <InputNumber
+                          v-model:value="node.timeoutConfig.remindIntervalMinutes"
+                          :disabled="isPublished"
+                          :min="1"
+                          addon-before="间隔"
+                          addon-after="分钟"
+                          class="w-full"
+                        />
+                        <div class="timeout-config-help">
+                          上一轮提醒后仍未处理，至少等待该间隔再提醒。
+                        </div>
+                      </div>
+                      <div class="timeout-config-item">
+                        <InputNumber
+                          v-model:value="node.timeoutConfig.maxRemindCount"
+                          :disabled="isPublished"
+                          :min="1"
+                          addon-before="最多"
+                          addon-after="次"
+                          class="w-full"
+                        />
+                        <div class="timeout-config-help">
+                          同一个待办最多发送的超时提醒轮数。
+                        </div>
+                      </div>
+                      <Input
+                        disabled
+                        value="站内消息"
+                      />
+                    </div>
                   </Space>
                 </FormItem>
                 <Divider />
@@ -1189,12 +1309,30 @@ defineExpose({
   justify-self: start;
 }
 
+.timeout-config-grid {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.timeout-config-item {
+  min-width: 0;
+}
+
+.timeout-config-help {
+  color: #6b7280;
+  font-size: 12px;
+  line-height: 18px;
+  margin-top: 4px;
+}
+
 .w-full {
   width: 100%;
 }
 
 @media (max-width: 900px) {
-  .branch-grid {
+  .branch-grid,
+  .timeout-config-grid {
     grid-template-columns: 1fr;
   }
 

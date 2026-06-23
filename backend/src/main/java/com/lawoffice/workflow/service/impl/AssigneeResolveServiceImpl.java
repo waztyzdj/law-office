@@ -811,18 +811,19 @@ public class AssigneeResolveServiceImpl implements IAssigneeResolveService {
             ProcessNodeConfig nodeConfig, List<ResolvedAssignee> assignees, RequestContext context) {
         String approvalMode = normalizeApprovalMode(nodeConfig.getApprovalMode());
         if (!isMultiApprovalMode(approvalMode)) {
-            createSingleRuntimeTask(processInstance, flowableTask, approvalMode, assignees, context);
+            createSingleRuntimeTask(processInstance, flowableTask, nodeConfig, approvalMode, assignees, context);
             return;
         }
-        createGroupRuntimeTasks(processInstance, flowableTask, approvalMode, assignees, context);
+        createGroupRuntimeTasks(processInstance, flowableTask, nodeConfig, approvalMode, assignees, context);
     }
 
     /**
      * 单人审批保留一期语义：解析出一人时直接分配，解析出多人时仍作为候选抢办处理。
      */
     private void createSingleRuntimeTask(ProcessInstance processInstance, FlowableTaskInfo flowableTask,
-            String approvalMode, List<ResolvedAssignee> assignees, RequestContext context) {
-        Task task = buildBaseTask(processInstance, flowableTask, WorkflowConstants.TaskType.NORMAL, approvalMode);
+            ProcessNodeConfig nodeConfig, String approvalMode, List<ResolvedAssignee> assignees,
+            RequestContext context) {
+        Task task = buildBaseTask(processInstance, flowableTask, nodeConfig, WorkflowConstants.TaskType.NORMAL, approvalMode);
         if (assignees.size() == 1) {
             fillTaskAssignee(task, assignees.get(0));
         }
@@ -838,12 +839,13 @@ public class AssigneeResolveServiceImpl implements IAssigneeResolveService {
      * 其它任务使用本地 Flowable 标识是为了避开 wf_task 的唯一索引，真实引擎任务由组内锚点任务保存。
      */
     private void createGroupRuntimeTasks(ProcessInstance processInstance, FlowableTaskInfo flowableTask,
-            String approvalMode, List<ResolvedAssignee> assignees, RequestContext context) {
+            ProcessNodeConfig nodeConfig, String approvalMode, List<ResolvedAssignee> assignees,
+            RequestContext context) {
         String groupId = newId();
         String anchorTaskId = null;
         for (int i = 0; i < assignees.size(); i++) {
             ResolvedAssignee assignee = assignees.get(i);
-            Task task = buildBaseTask(processInstance, flowableTask, approvalMode, approvalMode);
+            Task task = buildBaseTask(processInstance, flowableTask, nodeConfig, approvalMode, approvalMode);
             task.setId(newId());
             task.setTaskGroupId(groupId);
             task.setGroupTotal(assignees.size());
@@ -860,7 +862,7 @@ public class AssigneeResolveServiceImpl implements IAssigneeResolveService {
         }
     }
 
-    private Task buildBaseTask(ProcessInstance processInstance, FlowableTaskInfo flowableTask,
+    private Task buildBaseTask(ProcessInstance processInstance, FlowableTaskInfo flowableTask, ProcessNodeConfig nodeConfig,
             String taskType, String approvalMode) {
         Task task = new Task();
         task.setTenantId(processInstance.getTenantId());
@@ -872,7 +874,30 @@ public class AssigneeResolveServiceImpl implements IAssigneeResolveService {
         task.setApprovalMode(approvalMode);
         task.setOwnerUsername(flowableTask.getOwner());
         task.setStatus(WorkflowConstants.Status.TODO);
+        task.setDueTime(resolveDueTime(nodeConfig));
+        task.setRemindCount(0);
         return task;
+    }
+
+    /**
+     * 超时提醒以业务待办创建时间为起点，提前写入截止时间便于定时扫描走任务索引。
+     */
+    private LocalDateTime resolveDueTime(ProcessNodeConfig nodeConfig) {
+        if (nodeConfig == null || !StringUtils.hasText(nodeConfig.getTimeoutJson())) {
+            return null;
+        }
+        try {
+            JsonNode root = OBJECT_MAPPER.readTree(nodeConfig.getTimeoutJson());
+            if (!root.path("enabled").asBoolean(true)) {
+                return null;
+            }
+            int minutes = root.has("timeoutMinutes")
+                    ? root.path("timeoutMinutes").asInt(0)
+                    : root.path("durationMinutes").asInt(0);
+            return minutes > 0 ? LocalDateTime.now().plusMinutes(minutes) : null;
+        } catch (Exception e) {
+            return null;
+        }
     }
 
     private void fillTaskAssignee(Task task, ResolvedAssignee assignee) {

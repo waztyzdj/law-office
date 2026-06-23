@@ -91,6 +91,7 @@ interface NodeConfigDraft {
   ccConfig?: CcConfig;
   id?: string;
   rejectPolicy: string;
+  timeoutConfig: TimeoutConfig;
 }
 
 interface BranchCondition {
@@ -121,6 +122,14 @@ interface CcConfig {
     targetIds?: string[];
     targetType: string;
   }>;
+}
+
+interface TimeoutConfig {
+  channels?: string[];
+  enabled: boolean;
+  maxRemindCount: number;
+  remindIntervalMinutes: number;
+  timeoutMinutes: number;
 }
 
 interface BpmnElementRegistry {
@@ -477,7 +486,7 @@ function escapeXml(value: string) {
     .replaceAll("'", '&apos;');
 }
 
-function parseJsonValue<T>(json: string | undefined, fallback: T): T {
+function parseJsonValue<T>(json: null | string | undefined, fallback: T): T {
   if (!json) {
     return fallback;
   }
@@ -486,6 +495,47 @@ function parseJsonValue<T>(json: string | undefined, fallback: T): T {
   } catch {
     return fallback;
   }
+}
+
+function normalizeTimeoutConfig(value: unknown): TimeoutConfig {
+  const parsed =
+    typeof value === 'string'
+      ? parseJsonValue<Record<string, unknown>>(value, {})
+      : ((value || {}) as Record<string, unknown>);
+  const timeoutMinutes = Number(
+    parsed.timeoutMinutes ?? parsed.durationMinutes ?? 0,
+  );
+  const remindIntervalMinutes = Number(
+    parsed.remindIntervalMinutes ?? parsed.intervalMinutes ?? 60,
+  );
+  const maxRemindCount = Number(parsed.maxRemindCount ?? 3);
+  return {
+    channels: ['site'],
+    enabled: Boolean(parsed.enabled) && timeoutMinutes > 0,
+    maxRemindCount: Number.isFinite(maxRemindCount)
+      ? Math.max(1, maxRemindCount)
+      : 3,
+    remindIntervalMinutes: Number.isFinite(remindIntervalMinutes)
+      ? Math.max(1, remindIntervalMinutes)
+      : 60,
+    timeoutMinutes: Number.isFinite(timeoutMinutes)
+      ? Math.max(0, timeoutMinutes)
+      : 0,
+  };
+}
+
+function buildTimeoutJson(config: TimeoutConfig | undefined) {
+  const normalized = normalizeTimeoutConfig(config || {});
+  if (!normalized.enabled) {
+    return null;
+  }
+  return JSON.stringify({
+    channels: ['site'],
+    enabled: true,
+    maxRemindCount: normalized.maxRemindCount,
+    remindIntervalMinutes: normalized.remindIntervalMinutes,
+    timeoutMinutes: normalized.timeoutMinutes,
+  });
 }
 
 function isBpmnUserTaskElement(element: BpmnElement | undefined) {
@@ -532,6 +582,7 @@ function buildNodeConfigDraft(
     assigneeType,
     id: config?.id,
     rejectPolicy: config?.rejectPolicy || 'terminate',
+    timeoutConfig: normalizeTimeoutConfig(config?.timeoutJson),
   };
 }
 
@@ -1054,6 +1105,7 @@ async function saveNodeConfigs(processId: string) {
       processModelId: processId,
       rejectPolicy: config?.rejectPolicy || 'terminate',
       sortOrder: (index + 1) * 10,
+      timeoutJson: buildTimeoutJson(config?.timeoutConfig),
     });
   }
 }
@@ -1299,6 +1351,68 @@ defineExpose({
                         >
                           加签
                         </Checkbox>
+                      </Space>
+                    </FormItem>
+                    <FormItem label="超时提醒">
+                      <Space
+                        direction="vertical"
+                        size="small"
+                        class="w-full"
+                      >
+                        <Checkbox
+                          v-model:checked="activeNodeConfig.timeoutConfig.enabled"
+                          :disabled="isPublished"
+                        >
+                          启用超时提醒
+                        </Checkbox>
+                        <div
+                          v-if="activeNodeConfig.timeoutConfig.enabled"
+                          class="timeout-config-grid"
+                        >
+                          <div class="timeout-config-item">
+                            <InputNumber
+                              v-model:value="activeNodeConfig.timeoutConfig.timeoutMinutes"
+                              :disabled="isPublished"
+                              :min="1"
+                              addon-before="超时"
+                              addon-after="分钟"
+                              class="w-full"
+                            />
+                            <div class="timeout-config-help">
+                              待办到达后超过该时长未处理，触发首轮提醒。
+                            </div>
+                          </div>
+                          <div class="timeout-config-item">
+                            <InputNumber
+                              v-model:value="activeNodeConfig.timeoutConfig.remindIntervalMinutes"
+                              :disabled="isPublished"
+                              :min="1"
+                              addon-before="间隔"
+                              addon-after="分钟"
+                              class="w-full"
+                            />
+                            <div class="timeout-config-help">
+                              上一轮提醒后仍未处理，至少等待该间隔再提醒。
+                            </div>
+                          </div>
+                          <div class="timeout-config-item">
+                            <InputNumber
+                              v-model:value="activeNodeConfig.timeoutConfig.maxRemindCount"
+                              :disabled="isPublished"
+                              :min="1"
+                              addon-before="最多"
+                              addon-after="次"
+                              class="w-full"
+                            />
+                            <div class="timeout-config-help">
+                              同一个待办最多发送的超时提醒轮数。
+                            </div>
+                          </div>
+                          <Input
+                            disabled
+                            value="站内消息"
+                          />
+                        </div>
                       </Space>
                     </FormItem>
                   </Tabs.TabPane>
@@ -1564,6 +1678,23 @@ defineExpose({
   display: flex;
   flex-direction: column;
   gap: 8px;
+}
+
+.timeout-config-grid {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: 1fr;
+}
+
+.timeout-config-item {
+  min-width: 0;
+}
+
+.timeout-config-help {
+  color: #6b7280;
+  font-size: 12px;
+  line-height: 18px;
+  margin-top: 4px;
 }
 
 .condition-control,

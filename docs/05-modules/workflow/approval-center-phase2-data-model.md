@@ -129,9 +129,10 @@
 ```json
 {
   "enabled": true,
-  "durationMinutes": 1440,
+  "timeoutMinutes": 1440,
   "remindIntervalMinutes": 1440,
-  "maxRemindCount": 3
+  "maxRemindCount": 3,
+  "channels": ["site"]
 }
 ```
 
@@ -214,7 +215,7 @@
 
 - `task_group_id` 用于会签/或签批量取消、完成判断和流程图展示。
 - `group_completed` 是摘要字段，真实完成判断以同组 `wf_task` 状态为准，避免并发下只信冗余值。
-- `due_time` 由节点 `timeout_json.durationMinutes` 和任务创建时间计算。
+- `due_time` 由节点 `timeout_json.timeoutMinutes` 和任务创建时间计算；兼容历史设计中的 `durationMinutes`。
 - `last_remind_time`、`remind_count` 只用于超时提醒防重复；催办记录在 `wf_reminder_record`。
 
 `task_type` 枚举扩展：

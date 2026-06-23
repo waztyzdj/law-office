@@ -80,7 +80,7 @@ export interface WorkflowProcessNodeConfigInfo {
   rejectPolicy?: string;
   sortOrder?: number;
   tenantId?: string;
-  timeoutJson?: string;
+  timeoutJson?: null | string;
 }
 
 export interface WorkflowFieldPermissionInfo {

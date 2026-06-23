@@ -60,6 +60,7 @@ public class ProcessNodeConfigServiceImpl extends AbstractWorkflowConfigServiceI
             "is_false"
     );
     private static final Set<String> BRANCH_LOGICS = Set.of("and", "or");
+    private static final Set<String> TIMEOUT_CHANNELS = Set.of("site");
     private static final Pattern BRANCH_ID_PATTERN = Pattern.compile("^[A-Za-z0-9_-]+$");
 
     private final ProcessModelMapper processModelMapper;
@@ -190,6 +191,11 @@ public class ProcessNodeConfigServiceImpl extends AbstractWorkflowConfigServiceI
     private void normalize(ProcessNodeConfig config) {
         config.setNodeId(trimToNull(config.getNodeId()));
         config.setNodeName(trimToNull(config.getNodeName()));
+        config.setAssigneeJson(trimToNull(config.getAssigneeJson()));
+        config.setBranchJson(trimToNull(config.getBranchJson()));
+        config.setCcJson(trimToNull(config.getCcJson()));
+        config.setTimeoutJson(trimToNull(config.getTimeoutJson()));
+        config.setAttachmentJson(trimToNull(config.getAttachmentJson()));
         if (!StringUtils.hasText(config.getNodeType())) {
             config.setNodeType(WorkflowConstants.NodeType.APPROVER);
         }
@@ -390,11 +396,36 @@ public class ProcessNodeConfigServiceImpl extends AbstractWorkflowConfigServiceI
             return;
         }
         JsonNode root = parseJson(timeoutJson, "超时提醒配置JSON");
-        if (root.has("durationMinutes") && root.path("durationMinutes").asInt(0) < 0) {
+        boolean enabled = root.path("enabled").asBoolean(true);
+        int timeoutMinutes = root.has("timeoutMinutes")
+                ? root.path("timeoutMinutes").asInt(0)
+                : root.path("durationMinutes").asInt(0);
+        if (timeoutMinutes < 0) {
             throw new IllegalArgumentException("超时时长不能小于0");
+        }
+        int intervalMinutes = root.has("remindIntervalMinutes")
+                ? root.path("remindIntervalMinutes").asInt(0)
+                : root.path("intervalMinutes").asInt(0);
+        if (intervalMinutes < 0) {
+            throw new IllegalArgumentException("超时提醒间隔不能小于0");
         }
         if (root.has("maxRemindCount") && root.path("maxRemindCount").asInt(0) < 0) {
             throw new IllegalArgumentException("最大提醒次数不能小于0");
+        }
+        if (enabled && timeoutMinutes == 0) {
+            throw new IllegalArgumentException("开启超时提醒时超时时长必须大于0");
+        }
+        JsonNode channels = root.get("channels");
+        if (channels == null) {
+            return;
+        }
+        if (!channels.isArray()) {
+            throw new IllegalArgumentException("超时提醒通道必须为数组");
+        }
+        for (JsonNode channel : channels) {
+            if (!channel.isTextual() || !TIMEOUT_CHANNELS.contains(channel.asText())) {
+                throw new IllegalArgumentException("超时提醒当前只支持站内消息");
+            }
         }
     }
 

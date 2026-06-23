@@ -4,6 +4,7 @@ import type {
   MessageAttachmentInfo,
   MessageDetailInfo,
 } from '#/api/message/message';
+import type { LocationQueryRaw } from 'vue-router';
 
 import { computed, nextTick, ref } from 'vue';
 import { useRouter } from 'vue-router';
@@ -26,6 +27,7 @@ import {
   getInboxMessageDetail,
   getSentMessageDetail,
 } from '#/api/message/message';
+import WorkflowRuntimeFormDrawer from '#/views/workflow/runtime/components/WorkflowRuntimeFormDrawer.vue';
 
 import {
   getOptionLabel,
@@ -47,6 +49,8 @@ const loading = ref(false);
 const detail = ref<MessageDetailInfo>({});
 const downloadingFileIds = ref<string[]>([]);
 const mode = ref<DetailMode>('inbox');
+const workflowDrawerRef = ref<InstanceType<typeof WorkflowRuntimeFormDrawer>>();
+const expiredTodoNotice = '该待办已被处理或已失效，当前为流程详情。';
 
 const drawerTitle = computed(() => detail.value.title || '消息详情');
 const receiverText = computed(() =>
@@ -65,18 +69,94 @@ const [Drawer, drawerApi] = useVbenDrawer({
   title: drawerTitle.value,
 });
 
-function parseRouteQuery(routeQuery?: string) {
+function parseRouteQuery(routeQuery?: string): LocationQueryRaw | undefined {
   if (!routeQuery) {
     return undefined;
   }
 
   try {
-    const query = JSON.parse(routeQuery);
-    return typeof query === 'object' && query ? query : undefined;
+    const query = JSON.parse(routeQuery) as unknown;
+    if (!query || typeof query !== 'object' || Array.isArray(query)) {
+      return undefined;
+    }
+    return Object.entries(query as Record<string, unknown>).reduce<LocationQueryRaw>(
+      (result, [key, value]) => {
+        if (value === undefined || value === null) {
+          return result;
+        }
+        if (Array.isArray(value)) {
+          result[key] = value
+            .filter(
+              (item) =>
+                typeof item === 'string' ||
+                typeof item === 'number' ||
+                typeof item === 'boolean',
+            )
+            .map(String);
+          return result;
+        }
+        if (
+          typeof value === 'string' ||
+          typeof value === 'number' ||
+          typeof value === 'boolean'
+        ) {
+          result[key] = String(value);
+        }
+        return result;
+      },
+      {},
+    );
   } catch {
     message.warning('路由参数格式不正确，已按普通页面打开');
     return undefined;
   }
+}
+
+function getRouteQueryValue(value: unknown) {
+  if (Array.isArray(value)) {
+    return value.find((item) => typeof item === 'string') ?? '';
+  }
+  return typeof value === 'string' ? value : '';
+}
+
+function isWorkflowTodoAction(action: MessageActionInfo, path: string) {
+  if (
+    action.bizType === 'workflow_urge' ||
+    action.bizType === 'workflow_timeout'
+  ) {
+    return true;
+  }
+  return path === '/workflow/todo/detail' || path === '/workflow/todo';
+}
+
+async function openWorkflowTodoDetail(query?: LocationQueryRaw) {
+  const taskId = getRouteQueryValue(query?.taskId);
+  const instanceId = getRouteQueryValue(query?.instanceId);
+  if (!taskId && !instanceId) {
+    message.warning('缺少审批任务参数');
+    return;
+  }
+
+  drawerApi.close();
+  await nextTick();
+
+  if (taskId) {
+    try {
+      await workflowDrawerRef.value?.open({ mode: 'todo', taskId });
+      return;
+    } catch {
+      if (!instanceId) {
+        message.warning('该待办已失效或无权办理');
+        return;
+      }
+    }
+  }
+
+  await workflowDrawerRef.value?.open({
+    instanceId,
+    mode: 'detail',
+    notice: expiredTodoNotice,
+  });
 }
 
 function openExternal(url?: string, newWindow = true) {
@@ -92,9 +172,14 @@ async function openInternal(action: MessageActionInfo) {
     message.warning('内部路径为空');
     return;
   }
+  const query = parseRouteQuery(action.routeQuery);
+  if (isWorkflowTodoAction(action, action.routePath)) {
+    await openWorkflowTodoDetail(query);
+    return;
+  }
   const route = {
     path: action.routePath,
-    query: parseRouteQuery(action.routeQuery),
+    query,
   };
   if (action.openType === 2) {
     const resolved = router.resolve(route);
@@ -277,6 +362,7 @@ defineExpose({
       </div>
     </Spin>
   </Drawer>
+  <WorkflowRuntimeFormDrawer ref="workflowDrawerRef" />
 </template>
 
 <style scoped>
