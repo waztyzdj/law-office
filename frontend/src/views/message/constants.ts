@@ -20,6 +20,18 @@ export const workflowResultMessageTypeOption: SelectOption = {
   value: 'workflow_result',
 };
 
+export const workflowWithdrawMessageTypeOption: SelectOption = {
+  color: 'orange',
+  label: '撤回提醒',
+  value: 'workflow_withdraw',
+};
+
+export const workflowUrgeMessageTypeOption: SelectOption = {
+  color: 'gold',
+  label: '催办提醒',
+  value: 'workflow_urge',
+};
+
 export const priorityOptions: SelectOption[] = [
   { color: 'default', label: '普通', value: 1 },
   { color: 'orange', label: '重要', value: 2 },
@@ -66,6 +78,12 @@ export function getMessageTypeMeta(
   }
   if (bizType === 'workflow_result') {
     return workflowResultMessageTypeOption;
+  }
+  if (bizType === 'workflow_withdraw') {
+    return workflowWithdrawMessageTypeOption;
+  }
+  if (bizType === 'workflow_urge') {
+    return workflowUrgeMessageTypeOption;
   }
   return (
     messageTypeOptions.find((option) => option.value === messageType) ?? {
