@@ -18,6 +18,7 @@ import com.lawoffice.workflow.mapper.ProcessInstanceMapper;
 import com.lawoffice.workflow.mapper.TaskCandidateMapper;
 import com.lawoffice.workflow.mapper.TaskMapper;
 import com.lawoffice.workflow.service.IFlowableService;
+import com.lawoffice.workflow.service.IProcessResultNotificationService;
 import com.lawoffice.workflow.vo.TaskActionVO;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -61,6 +62,8 @@ class WithdrawRuntimeServiceImplTest {
     private IFlowableService flowableService;
     @Mock
     private IMessageService messageService;
+    @Mock
+    private IProcessResultNotificationService processResultNotificationService;
 
     private WithdrawRuntimeServiceImpl service;
     private RequestContext context;
@@ -75,7 +78,8 @@ class WithdrawRuntimeServiceImplTest {
                 taskCandidateMapper,
                 taskMapper,
                 flowableService,
-                messageService
+                messageService,
+                processResultNotificationService
         );
         context = RequestContext.builder()
                 .tenantId(TENANT_ID)
@@ -110,7 +114,8 @@ class WithdrawRuntimeServiceImplTest {
         ArgumentCaptor<OperationRecord> recordCaptor = ArgumentCaptor.forClass(OperationRecord.class);
         verify(operationRecordMapper).insert(recordCaptor.capture());
         assertEquals(WorkflowConstants.Action.WITHDRAW, recordCaptor.getValue().getAction());
-        verify(messageService).sendMessage(any(SendMessageReq.class), eq("starter"));
+        verify(messageService, never()).sendMessage(any(SendMessageReq.class), eq("starter"));
+        verify(processResultNotificationService).sendProcessResultMessage(processInstance, context);
     }
 
     @Test

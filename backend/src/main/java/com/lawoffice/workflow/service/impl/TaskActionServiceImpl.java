@@ -31,6 +31,7 @@ import com.lawoffice.workflow.service.ICcRuntimeService;
 import com.lawoffice.workflow.service.IConditionBranchRuntimeService;
 import com.lawoffice.workflow.service.IFlowableService;
 import com.lawoffice.workflow.service.IInstanceStateService;
+import com.lawoffice.workflow.service.IProcessResultNotificationService;
 import com.lawoffice.workflow.service.IProcessNodeConfigService;
 import com.lawoffice.workflow.service.ITaskActionService;
 import com.lawoffice.workflow.service.ITaskNotificationService;
@@ -68,6 +69,7 @@ public class TaskActionServiceImpl implements ITaskActionService {
     private final IAssigneeResolveService assigneeResolveService;
     private final IInstanceStateService instanceStateService;
     private final IProcessNodeConfigService processNodeConfigService;
+    private final IProcessResultNotificationService processResultNotificationService;
     private final ITaskNotificationService taskNotificationService;
     private final IWorkflowFormDataService workflowFormDataService;
     private final IWorkflowRuntimeLookupService workflowRuntimeLookupService;
@@ -85,6 +87,7 @@ public class TaskActionServiceImpl implements ITaskActionService {
             IAssigneeResolveService assigneeResolveService,
             IInstanceStateService instanceStateService,
             IProcessNodeConfigService processNodeConfigService,
+            IProcessResultNotificationService processResultNotificationService,
             ITaskNotificationService taskNotificationService,
             IWorkflowFormDataService workflowFormDataService,
             IWorkflowRuntimeLookupService workflowRuntimeLookupService,
@@ -101,6 +104,7 @@ public class TaskActionServiceImpl implements ITaskActionService {
         this.assigneeResolveService = assigneeResolveService;
         this.instanceStateService = instanceStateService;
         this.processNodeConfigService = processNodeConfigService;
+        this.processResultNotificationService = processResultNotificationService;
         this.taskNotificationService = taskNotificationService;
         this.workflowFormDataService = workflowFormDataService;
         this.workflowRuntimeLookupService = workflowRuntimeLookupService;
@@ -196,6 +200,7 @@ public class TaskActionServiceImpl implements ITaskActionService {
         if (isProcessFinished(processInstance)) {
             ccRuntimeService.triggerConfiguredCc(processInstance, task,
                     WorkflowConstants.CcTriggerAction.PROCESS_FINISHED, tenantId, context);
+            processResultNotificationService.sendProcessResultMessage(processInstance, context);
         }
         return buildTaskActionResult(task, processInstance);
     }

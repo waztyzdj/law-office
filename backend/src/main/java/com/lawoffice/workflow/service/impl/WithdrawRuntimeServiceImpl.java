@@ -23,6 +23,7 @@ import com.lawoffice.workflow.mapper.ProcessInstanceMapper;
 import com.lawoffice.workflow.mapper.TaskCandidateMapper;
 import com.lawoffice.workflow.mapper.TaskMapper;
 import com.lawoffice.workflow.service.IFlowableService;
+import com.lawoffice.workflow.service.IProcessResultNotificationService;
 import com.lawoffice.workflow.service.IWithdrawRuntimeService;
 import com.lawoffice.workflow.vo.TaskActionVO;
 import lombok.extern.slf4j.Slf4j;
@@ -54,6 +55,7 @@ public class WithdrawRuntimeServiceImpl implements IWithdrawRuntimeService {
     private final TaskMapper taskMapper;
     private final IFlowableService flowableService;
     private final IMessageService messageService;
+    private final IProcessResultNotificationService processResultNotificationService;
 
     public WithdrawRuntimeServiceImpl(FormInstanceMapper formInstanceMapper,
             OperationRecordMapper operationRecordMapper,
@@ -62,7 +64,8 @@ public class WithdrawRuntimeServiceImpl implements IWithdrawRuntimeService {
             TaskCandidateMapper taskCandidateMapper,
             TaskMapper taskMapper,
             IFlowableService flowableService,
-            IMessageService messageService) {
+            IMessageService messageService,
+            IProcessResultNotificationService processResultNotificationService) {
         this.formInstanceMapper = formInstanceMapper;
         this.operationRecordMapper = operationRecordMapper;
         this.processInstanceAssigneeMapper = processInstanceAssigneeMapper;
@@ -71,6 +74,7 @@ public class WithdrawRuntimeServiceImpl implements IWithdrawRuntimeService {
         this.taskMapper = taskMapper;
         this.flowableService = flowableService;
         this.messageService = messageService;
+        this.processResultNotificationService = processResultNotificationService;
     }
 
     @Override
@@ -96,6 +100,7 @@ public class WithdrawRuntimeServiceImpl implements IWithdrawRuntimeService {
             archiveFormInstance(formInstance, context);
             createWithdrawRecord(processInstance, formInstance, todoTasks.get(0), tenantId, context);
             sendWithdrawMessage(processInstance, receiverUserIds, context);
+            processResultNotificationService.sendProcessResultMessage(processInstance, context);
 
             return BaseResult.success(buildResult(processInstance));
         } catch (IllegalArgumentException e) {
@@ -191,9 +196,6 @@ public class WithdrawRuntimeServiceImpl implements IWithdrawRuntimeService {
     private List<String> collectReceiverUserIds(ProcessInstance processInstance, List<Task> todoTasks, String tenantId) {
         List<String> taskIds = todoTasks.stream().map(Task::getId).toList();
         List<String> receivers = new java.util.ArrayList<>();
-        if (StringUtils.hasText(processInstance.getStarterUserId())) {
-            receivers.add(processInstance.getStarterUserId());
-        }
         todoTasks.stream()
                 .map(Task::getAssigneeUserId)
                 .filter(StringUtils::hasText)

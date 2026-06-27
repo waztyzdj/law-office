@@ -14,6 +14,12 @@ export const workflowCcMessageTypeOption: SelectOption = {
   value: 'workflow_cc',
 };
 
+export const workflowResultMessageTypeOption: SelectOption = {
+  color: 'green',
+  label: '审批结果提醒',
+  value: 'workflow_result',
+};
+
 export const priorityOptions: SelectOption[] = [
   { color: 'default', label: '普通', value: 1 },
   { color: 'orange', label: '重要', value: 2 },
@@ -57,6 +63,9 @@ export function getMessageTypeMeta(
 ): SelectOption {
   if (bizType === 'workflow_cc') {
     return workflowCcMessageTypeOption;
+  }
+  if (bizType === 'workflow_result') {
+    return workflowResultMessageTypeOption;
   }
   return (
     messageTypeOptions.find((option) => option.value === messageType) ?? {

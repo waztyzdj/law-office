@@ -26,6 +26,7 @@ import com.lawoffice.workflow.service.IConditionBranchRuntimeService;
 import com.lawoffice.workflow.service.IFlowableService;
 import com.lawoffice.workflow.service.IInstanceStateService;
 import com.lawoffice.workflow.service.IProcessNodeConfigService;
+import com.lawoffice.workflow.service.IProcessResultNotificationService;
 import com.lawoffice.workflow.service.ITaskNotificationService;
 import com.lawoffice.workflow.service.IWorkflowFormDataService;
 import com.lawoffice.workflow.service.IWorkflowRuntimeLookupService;
@@ -96,6 +97,8 @@ class TaskActionServiceImplTest {
     @Mock
     private IProcessNodeConfigService processNodeConfigService;
     @Mock
+    private IProcessResultNotificationService processResultNotificationService;
+    @Mock
     private ITaskNotificationService taskNotificationService;
     @Mock
     private IWorkflowFormDataService workflowFormDataService;
@@ -122,6 +125,7 @@ class TaskActionServiceImplTest {
                 assigneeResolveService,
                 instanceStateService,
                 processNodeConfigService,
+                processResultNotificationService,
                 taskNotificationService,
                 workflowFormDataService,
                 workflowRuntimeLookupService,

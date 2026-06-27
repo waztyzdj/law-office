@@ -130,8 +130,8 @@ function isWorkflowTodoAction(action: MessageActionInfo, path: string) {
   return path === '/workflow/todo/detail' || path === '/workflow/todo';
 }
 
-function isWorkflowCcAction(action: MessageActionInfo) {
-  return action.bizType === 'workflow_cc';
+function isWorkflowDetailAction(action: MessageActionInfo) {
+  return action.bizType === 'workflow_cc' || action.bizType === 'workflow_result';
 }
 
 function getActionBizType() {
@@ -201,7 +201,7 @@ async function openInternal(action: MessageActionInfo) {
     await openWorkflowTodoDetail(query);
     return;
   }
-  if (isWorkflowCcAction(action)) {
+  if (isWorkflowDetailAction(action)) {
     await openWorkflowDetail(query);
     return;
   }
