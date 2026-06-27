@@ -20,6 +20,7 @@ import {
   RadioGroup,
   Select,
   Space,
+  Tabs,
   Tag,
   message,
 } from 'ant-design-vue';
@@ -885,122 +886,141 @@ defineExpose({
               layout="vertical"
             >
               <template v-if="node.type === 'approver'">
-                <WorkflowAssigneeSelector
-                  v-model="node.assigneeJson"
-                  v-model:type="node.assigneeType"
-                  :disabled="isPublished"
-                />
-                <FormItem label="办理策略">
-                  <RadioGroup
-                    v-model:value="node.approvalMode"
-                    :disabled="isPublished"
-                    :options="approvalModeOptions"
-                    button-style="solid"
-                    option-type="button"
-                    @change="handleApprovalModeChange(node)"
-                  />
-                </FormItem>
-                <FormItem
-                  v-if="node.approvalMode !== 'single'"
-                  label="执行人确定方式"
+                <Tabs
+                  class="node-config-tabs"
+                  size="small"
                 >
-                  <RadioGroup
-                    v-model:value="node.assigneeResolveMode"
-                    :disabled="isPublished"
-                    :options="assigneeResolveModeOptions"
-                    button-style="solid"
-                    option-type="button"
-                  />
-                </FormItem>
-                <FormItem label="节点动作">
-                  <Space wrap>
-                    <Checkbox
-                      v-model:checked="node.allowTransfer"
-                      :disabled="isPublished"
-                    >
-                      转办
-                    </Checkbox>
-                    <Checkbox
-                      v-model:checked="node.allowReturn"
-                      :disabled="isPublished"
-                    >
-                      退回
-                    </Checkbox>
-                    <Checkbox
-                      v-model:checked="node.allowAddSign"
-                      :disabled="isPublished"
-                    >
-                      加签
-                    </Checkbox>
-                  </Space>
-                </FormItem>
-                <FormItem label="超时提醒">
-                  <Space
-                    direction="vertical"
-                    size="small"
-                    class="w-full"
+                  <Tabs.TabPane
+                    key="assignee"
+                    tab="审批人配置"
                   >
-                    <Checkbox
-                      v-model:checked="node.timeoutConfig!.enabled"
+                    <WorkflowAssigneeSelector
+                      v-model="node.assigneeJson"
+                      v-model:type="node.assigneeType"
                       :disabled="isPublished"
-                    >
-                      启用超时提醒
-                    </Checkbox>
-                    <div
-                      v-if="node.timeoutConfig?.enabled"
-                      class="timeout-config-grid"
-                    >
-                      <div class="timeout-config-item">
-                        <InputNumber
-                          v-model:value="node.timeoutConfig.timeoutMinutes"
-                          :disabled="isPublished"
-                          :min="1"
-                          addon-before="超时"
-                          addon-after="分钟"
-                          class="w-full"
-                        />
-                        <div class="timeout-config-help">
-                          待办到达后超过该时长未处理，触发首轮提醒。
-                        </div>
-                      </div>
-                      <div class="timeout-config-item">
-                        <InputNumber
-                          v-model:value="node.timeoutConfig.remindIntervalMinutes"
-                          :disabled="isPublished"
-                          :min="1"
-                          addon-before="间隔"
-                          addon-after="分钟"
-                          class="w-full"
-                        />
-                        <div class="timeout-config-help">
-                          上一轮提醒后仍未处理，至少等待该间隔再提醒。
-                        </div>
-                      </div>
-                      <div class="timeout-config-item">
-                        <InputNumber
-                          v-model:value="node.timeoutConfig.maxRemindCount"
-                          :disabled="isPublished"
-                          :min="1"
-                          addon-before="最多"
-                          addon-after="次"
-                          class="w-full"
-                        />
-                        <div class="timeout-config-help">
-                          同一个待办最多发送的超时提醒轮数。
-                        </div>
-                      </div>
-                      <Input
-                        disabled
-                        value="站内消息"
+                    />
+                    <FormItem label="办理策略">
+                      <RadioGroup
+                        v-model:value="node.approvalMode"
+                        :disabled="isPublished"
+                        :options="approvalModeOptions"
+                        button-style="solid"
+                        option-type="button"
+                        @change="handleApprovalModeChange(node)"
                       />
-                    </div>
-                  </Space>
-                </FormItem>
-                <Divider />
-                <WorkflowCcConfigEditor
-                  v-model="node.ccConfig"
-                  :disabled="isPublished"
-                />
+                    </FormItem>
+                    <FormItem
+                      v-if="node.approvalMode !== 'single'"
+                      label="执行人确定方式"
+                    >
+                      <RadioGroup
+                        v-model:value="node.assigneeResolveMode"
+                        :disabled="isPublished"
+                        :options="assigneeResolveModeOptions"
+                        button-style="solid"
+                        option-type="button"
+                      />
+                    </FormItem>
+                  </Tabs.TabPane>
+                  <Tabs.TabPane
+                    key="cc"
+                    tab="抄送配置"
+                  >
+                    <WorkflowCcConfigEditor
+                      v-model="node.ccConfig"
+                      :disabled="isPublished"
+                    />
+                  </Tabs.TabPane>
+                  <Tabs.TabPane
+                    key="actions"
+                    tab="节点动作"
+                  >
+                    <FormItem label="节点动作">
+                      <Space wrap>
+                        <Checkbox
+                          v-model:checked="node.allowTransfer"
+                          :disabled="isPublished"
+                        >
+                          转办
+                        </Checkbox>
+                        <Checkbox
+                          v-model:checked="node.allowReturn"
+                          :disabled="isPublished"
+                        >
+                          退回
+                        </Checkbox>
+                        <Checkbox
+                          v-model:checked="node.allowAddSign"
+                          :disabled="isPublished"
+                        >
+                          加签
+                        </Checkbox>
+                      </Space>
+                    </FormItem>
+                    <FormItem label="超时提醒">
+                      <Space
+                        direction="vertical"
+                        size="small"
+                        class="w-full"
+                      >
+                        <Checkbox
+                          v-model:checked="node.timeoutConfig!.enabled"
+                          :disabled="isPublished"
+                        >
+                          启用超时提醒
+                        </Checkbox>
+                        <div
+                          v-if="node.timeoutConfig?.enabled"
+                          class="timeout-config-grid"
+                        >
+                          <div class="timeout-config-item">
+                            <InputNumber
+                              v-model:value="node.timeoutConfig.timeoutMinutes"
+                              :disabled="isPublished"
+                              :min="1"
+                              addon-before="超时"
+                              addon-after="分钟"
+                              class="w-full"
+                            />
+                            <div class="timeout-config-help">
+                              待办到达后超过该时长未处理，触发首轮提醒。
+                            </div>
+                          </div>
+                          <div class="timeout-config-item">
+                            <InputNumber
+                              v-model:value="node.timeoutConfig.remindIntervalMinutes"
+                              :disabled="isPublished"
+                              :min="1"
+                              addon-before="间隔"
+                              addon-after="分钟"
+                              class="w-full"
+                            />
+                            <div class="timeout-config-help">
+                              上一轮提醒后仍未处理，至少等待该间隔再提醒。
+                            </div>
+                          </div>
+                          <div class="timeout-config-item">
+                            <InputNumber
+                              v-model:value="node.timeoutConfig.maxRemindCount"
+                              :disabled="isPublished"
+                              :min="1"
+                              addon-before="最多"
+                              addon-after="次"
+                              class="w-full"
+                            />
+                            <div class="timeout-config-help">
+                              同一个待办最多发送的超时提醒轮数。
+                            </div>
+                          </div>
+                          <Input
+                            disabled
+                            value="站内消息"
+                          />
+                        </div>
+                      </Space>
+                    </FormItem>
+                  </Tabs.TabPane>
+                </Tabs>
               </template>
               <template v-else>
                 <div class="branch-list">
