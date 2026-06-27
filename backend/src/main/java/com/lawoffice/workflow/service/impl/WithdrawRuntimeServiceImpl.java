@@ -24,6 +24,7 @@ import com.lawoffice.workflow.mapper.TaskCandidateMapper;
 import com.lawoffice.workflow.mapper.TaskMapper;
 import com.lawoffice.workflow.service.IFlowableService;
 import com.lawoffice.workflow.service.IProcessResultNotificationService;
+import com.lawoffice.workflow.service.ITaskNotificationService;
 import com.lawoffice.workflow.service.IWithdrawRuntimeService;
 import com.lawoffice.workflow.vo.TaskActionVO;
 import lombok.extern.slf4j.Slf4j;
@@ -56,6 +57,7 @@ public class WithdrawRuntimeServiceImpl implements IWithdrawRuntimeService {
     private final IFlowableService flowableService;
     private final IMessageService messageService;
     private final IProcessResultNotificationService processResultNotificationService;
+    private final ITaskNotificationService taskNotificationService;
 
     public WithdrawRuntimeServiceImpl(FormInstanceMapper formInstanceMapper,
             OperationRecordMapper operationRecordMapper,
@@ -65,7 +67,8 @@ public class WithdrawRuntimeServiceImpl implements IWithdrawRuntimeService {
             TaskMapper taskMapper,
             IFlowableService flowableService,
             IMessageService messageService,
-            IProcessResultNotificationService processResultNotificationService) {
+            IProcessResultNotificationService processResultNotificationService,
+            ITaskNotificationService taskNotificationService) {
         this.formInstanceMapper = formInstanceMapper;
         this.operationRecordMapper = operationRecordMapper;
         this.processInstanceAssigneeMapper = processInstanceAssigneeMapper;
@@ -75,6 +78,7 @@ public class WithdrawRuntimeServiceImpl implements IWithdrawRuntimeService {
         this.flowableService = flowableService;
         this.messageService = messageService;
         this.processResultNotificationService = processResultNotificationService;
+        this.taskNotificationService = taskNotificationService;
     }
 
     @Override
@@ -179,6 +183,7 @@ public class WithdrawRuntimeServiceImpl implements IWithdrawRuntimeService {
                 .set("complete_time", LocalDateTime.now())
                 .set("update_by", context.getUsername())
                 .set("update_time", LocalDateTime.now()));
+        taskNotificationService.expireTodoMessageActions(taskIds, tenantId, context);
     }
 
     private void cancelCandidates(List<Task> todoTasks, String tenantId, RequestContext context) {
