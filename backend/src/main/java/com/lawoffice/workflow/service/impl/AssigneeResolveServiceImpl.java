@@ -35,6 +35,7 @@ import com.lawoffice.workflow.req.SelectedAssigneeReq;
 import com.lawoffice.workflow.service.IAssigneeResolveService;
 import com.lawoffice.workflow.service.IFlowableService;
 import com.lawoffice.workflow.service.IInstanceStateService;
+import com.lawoffice.workflow.service.ITaskNotificationService;
 import com.lawoffice.workflow.vo.AssigneeOptionVO;
 import com.lawoffice.workflow.vo.AssigneeSelectNodeVO;
 import org.springframework.stereotype.Service;
@@ -75,6 +76,7 @@ public class AssigneeResolveServiceImpl implements IAssigneeResolveService {
     private final DepartRoleMapper departRoleMapper;
     private final IFlowableService flowableService;
     private final IInstanceStateService instanceStateService;
+    private final ITaskNotificationService taskNotificationService;
     private final ProcessInstanceAssigneeMapper processInstanceAssigneeMapper;
     private final ProcessModelMapper processModelMapper;
     private final ProcessNodeConfigMapper processNodeConfigMapper;
@@ -89,6 +91,7 @@ public class AssigneeResolveServiceImpl implements IAssigneeResolveService {
             DepartRoleMapper departRoleMapper,
             IFlowableService flowableService,
             IInstanceStateService instanceStateService,
+            ITaskNotificationService taskNotificationService,
             ProcessInstanceAssigneeMapper processInstanceAssigneeMapper,
             ProcessModelMapper processModelMapper,
             ProcessNodeConfigMapper processNodeConfigMapper,
@@ -102,6 +105,7 @@ public class AssigneeResolveServiceImpl implements IAssigneeResolveService {
         this.departRoleMapper = departRoleMapper;
         this.flowableService = flowableService;
         this.instanceStateService = instanceStateService;
+        this.taskNotificationService = taskNotificationService;
         this.processInstanceAssigneeMapper = processInstanceAssigneeMapper;
         this.processModelMapper = processModelMapper;
         this.processNodeConfigMapper = processNodeConfigMapper;
@@ -832,6 +836,8 @@ public class AssigneeResolveServiceImpl implements IAssigneeResolveService {
         if (assignees.size() > 1) {
             createTaskCandidates(task, assignees, context);
         }
+        taskNotificationService.sendTodoArrivalMessage(processInstance, task,
+                assignees.stream().map(ResolvedAssignee::userId).toList(), context);
     }
 
     /**
@@ -859,6 +865,7 @@ public class AssigneeResolveServiceImpl implements IAssigneeResolveService {
             fillTaskAssignee(task, assignee);
             EntityFillUtils.fillAuditFields(task, context, true);
             taskMapper.insert(task);
+            taskNotificationService.sendTodoArrivalMessage(processInstance, task, context);
         }
     }
 

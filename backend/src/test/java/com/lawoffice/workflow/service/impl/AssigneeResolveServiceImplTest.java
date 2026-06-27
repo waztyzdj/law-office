@@ -25,6 +25,7 @@ import com.lawoffice.workflow.mapper.TaskCandidateMapper;
 import com.lawoffice.workflow.mapper.TaskMapper;
 import com.lawoffice.workflow.service.IFlowableService;
 import com.lawoffice.workflow.service.IInstanceStateService;
+import com.lawoffice.workflow.service.ITaskNotificationService;
 import com.lawoffice.workflow.vo.AssigneeSelectNodeVO;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -64,6 +65,8 @@ class AssigneeResolveServiceImplTest {
     @Mock
     private IInstanceStateService instanceStateService;
     @Mock
+    private ITaskNotificationService taskNotificationService;
+    @Mock
     private ProcessInstanceAssigneeMapper processInstanceAssigneeMapper;
     @Mock
     private ProcessModelMapper processModelMapper;
@@ -91,6 +94,7 @@ class AssigneeResolveServiceImplTest {
                 departRoleMapper,
                 flowableService,
                 instanceStateService,
+                taskNotificationService,
                 processInstanceAssigneeMapper,
                 processModelMapper,
                 processNodeConfigMapper,

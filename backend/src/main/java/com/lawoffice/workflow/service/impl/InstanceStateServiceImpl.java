@@ -19,6 +19,7 @@ import com.lawoffice.workflow.mapper.TaskCandidateMapper;
 import com.lawoffice.workflow.mapper.TaskMapper;
 import com.lawoffice.workflow.req.TaskActionReq;
 import com.lawoffice.workflow.service.IInstanceStateService;
+import com.lawoffice.workflow.service.ITaskNotificationService;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
@@ -36,17 +37,20 @@ public class InstanceStateServiceImpl implements IInstanceStateService {
     private final OperationRecordMapper operationRecordMapper;
     private final TaskCandidateMapper taskCandidateMapper;
     private final TaskMapper taskMapper;
+    private final ITaskNotificationService taskNotificationService;
     private final UserMapper userMapper;
 
     public InstanceStateServiceImpl(FormInstanceMapper formInstanceMapper,
             OperationRecordMapper operationRecordMapper,
             TaskCandidateMapper taskCandidateMapper,
             TaskMapper taskMapper,
+            ITaskNotificationService taskNotificationService,
             UserMapper userMapper) {
         this.formInstanceMapper = formInstanceMapper;
         this.operationRecordMapper = operationRecordMapper;
         this.taskCandidateMapper = taskCandidateMapper;
         this.taskMapper = taskMapper;
+        this.taskNotificationService = taskNotificationService;
         this.userMapper = userMapper;
     }
 
@@ -56,6 +60,7 @@ public class InstanceStateServiceImpl implements IInstanceStateService {
         task.setCompleteTime(LocalDateTime.now());
         EntityFillUtils.fillAuditFields(task, context, false);
         taskMapper.updateById(task);
+        taskNotificationService.expireTodoMessageActions(List.of(task.getId()), task.getTenantId(), context);
         taskCandidateMapper.update(null, new UpdateWrapper<TaskCandidate>()
                 .eq("tenant_id", task.getTenantId())
                 .eq("task_id", task.getId())
@@ -103,6 +108,7 @@ public class InstanceStateServiceImpl implements IInstanceStateService {
                 .set("status", WorkflowConstants.Status.CANCELED)
                 .set("update_by", context.getUsername())
                 .set("update_time", LocalDateTime.now()));
+        taskNotificationService.expireTodoMessageActions(canceledTaskIds, tenantId, context);
         taskCandidateMapper.update(null, new UpdateWrapper<TaskCandidate>()
                 .eq("tenant_id", tenantId)
                 .in("task_id", canceledTaskIds)

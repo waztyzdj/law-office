@@ -147,6 +147,18 @@ public class WorkflowRuntimeLookupServiceImpl implements IWorkflowRuntimeLookupS
     }
 
     @Override
+    public ProcessModel requireRuntimeModel(String processModelId, String tenantId) {
+        ProcessModel model = processModelMapper.selectOne(new QueryWrapper<ProcessModel>()
+                .eq("id", processModelId)
+                .eq("tenant_id", tenantId)
+                .eq("delete_flag", 0));
+        if (model == null) {
+            throw new IllegalArgumentException("流程不存在");
+        }
+        return model;
+    }
+
+    @Override
     public FormDefinition requirePublishedForm(String formDefinitionId, String tenantId) {
         QueryWrapper<FormDefinition> wrapper = new QueryWrapper<>();
         wrapper.eq("id", formDefinitionId)

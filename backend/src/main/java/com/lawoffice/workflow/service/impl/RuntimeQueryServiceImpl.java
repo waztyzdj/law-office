@@ -687,7 +687,7 @@ public class RuntimeQueryServiceImpl implements IRuntimeQueryService {
         ProcessInstance processInstance = requireProcessInstance(task.getProcessInstanceId(), tenantId);
         FormInstance formInstance = requireFormInstance(processInstance.getFormInstanceId(), tenantId);
         formInstance.setFormDataJson(resolvePreviewFormDataJson(req.getFormDataJson(), formInstance.getFormDataJson()));
-        ProcessModel model = requirePublishedModel(processInstance.getProcessModelId(), tenantId);
+        ProcessModel model = requireRuntimeModel(processInstance.getProcessModelId(), tenantId);
         Optional<BranchMatchResult> branchMatch = conditionBranchRuntimeService.previewNextBranch(
                 model, processInstance, formInstance, task.getNodeId(), task, tenantId, context);
         if (branchMatch.isPresent()) {
@@ -750,6 +750,10 @@ public class RuntimeQueryServiceImpl implements IRuntimeQueryService {
 
     private ProcessModel requirePublishedModel(String processModelId, String tenantId) {
         return workflowRuntimeLookupService.requirePublishedModel(processModelId, tenantId);
+    }
+
+    private ProcessModel requireRuntimeModel(String processModelId, String tenantId) {
+        return workflowRuntimeLookupService.requireRuntimeModel(processModelId, tenantId);
     }
 
     private FormDefinition requirePublishedForm(String formDefinitionId, String tenantId) {

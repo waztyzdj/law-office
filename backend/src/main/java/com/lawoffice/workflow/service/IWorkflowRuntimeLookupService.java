@@ -78,6 +78,15 @@ public interface IWorkflowRuntimeLookupService {
     ProcessModel requirePublishedModel(String processModelId, String tenantId);
 
     /**
+     * 查询运行中实例绑定的流程模型版本，不要求该版本仍处于发布状态。
+     *
+     * @param processModelId 流程模型版本ID
+     * @param tenantId 租户ID
+     * @return 流程模型
+     */
+    ProcessModel requireRuntimeModel(String processModelId, String tenantId);
+
+    /**
      * 查询已发布表单定义，不存在时抛出业务参数异常。
      *
      * @param formDefinitionId 表单定义版本ID

@@ -10,6 +10,7 @@ import com.lawoffice.workflow.constant.WorkflowConstants;
 import com.lawoffice.workflow.entity.FieldPermission;
 import com.lawoffice.workflow.entity.FormInstance;
 import com.lawoffice.workflow.entity.ProcessInstance;
+import com.lawoffice.workflow.entity.ProcessModel;
 import com.lawoffice.workflow.entity.ProcessNodeConfig;
 import com.lawoffice.workflow.entity.ReminderRecord;
 import com.lawoffice.workflow.entity.Task;
@@ -25,6 +26,7 @@ import com.lawoffice.workflow.service.IConditionBranchRuntimeService;
 import com.lawoffice.workflow.service.IFlowableService;
 import com.lawoffice.workflow.service.IInstanceStateService;
 import com.lawoffice.workflow.service.IProcessNodeConfigService;
+import com.lawoffice.workflow.service.ITaskNotificationService;
 import com.lawoffice.workflow.service.IWorkflowFormDataService;
 import com.lawoffice.workflow.service.IWorkflowRuntimeLookupService;
 import com.lawoffice.workflow.vo.TaskActionVO;
@@ -94,6 +96,8 @@ class TaskActionServiceImplTest {
     @Mock
     private IProcessNodeConfigService processNodeConfigService;
     @Mock
+    private ITaskNotificationService taskNotificationService;
+    @Mock
     private IWorkflowFormDataService workflowFormDataService;
     @Mock
     private IWorkflowRuntimeLookupService workflowRuntimeLookupService;
@@ -118,6 +122,7 @@ class TaskActionServiceImplTest {
                 assigneeResolveService,
                 instanceStateService,
                 processNodeConfigService,
+                taskNotificationService,
                 workflowFormDataService,
                 workflowRuntimeLookupService,
                 new NoOpTransactionManager()
@@ -310,6 +315,7 @@ class TaskActionServiceImplTest {
         when(workflowRuntimeLookupService.requireFormInstance(FORM_INSTANCE_ID, TENANT_ID)).thenReturn(formInstance);
         when(workflowRuntimeLookupService.listFieldPermissions(PROCESS_MODEL_ID, "approve_1", TENANT_ID))
                 .thenReturn(List.of(new FieldPermission()));
+        lenient().when(workflowRuntimeLookupService.requireRuntimeModel(PROCESS_MODEL_ID, TENANT_ID)).thenReturn(runtimeModel());
     }
 
     private void mockTransferLookup(Task task, User targetUser) {
@@ -424,6 +430,16 @@ class TaskActionServiceImplTest {
         instance.setTenantId(TENANT_ID);
         instance.setFormDataJson("{}");
         return instance;
+    }
+
+    private ProcessModel runtimeModel() {
+        ProcessModel model = new ProcessModel();
+        model.setId(PROCESS_MODEL_ID);
+        model.setTenantId(TENANT_ID);
+        model.setProcessKey("process-key");
+        model.setVersion(1);
+        model.setStatus(WorkflowConstants.Status.DISABLED);
+        return model;
     }
 
     private static class NoOpTransactionManager implements PlatformTransactionManager {

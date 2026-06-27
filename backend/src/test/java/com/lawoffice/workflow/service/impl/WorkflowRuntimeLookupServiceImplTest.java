@@ -201,6 +201,24 @@ class WorkflowRuntimeLookupServiceImplTest {
     }
 
     @Test
+    void shouldRequireRuntimeModelWithoutPublishedStatus() {
+        ProcessModel model = buildPublishedModel();
+        model.setStatus(WorkflowConstants.Status.DISABLED);
+        model.setFlowableProcessDefinitionId("");
+        when(processModelMapper.selectOne(any(Wrapper.class))).thenReturn(model);
+
+        assertSame(model, service.requireRuntimeModel("model-1", TENANT_ID));
+        verify(processModelMapper, never()).selectCount(any(Wrapper.class));
+
+        when(processModelMapper.selectOne(any(Wrapper.class))).thenReturn(null);
+        IllegalArgumentException exception = assertThrows(
+                IllegalArgumentException.class,
+                () -> service.requireRuntimeModel("model-1", TENANT_ID)
+        );
+        assertEquals("流程不存在", exception.getMessage());
+    }
+
+    @Test
     void shouldRequirePublishedForm() {
         FormDefinition form = new FormDefinition();
         form.setId("form-1");

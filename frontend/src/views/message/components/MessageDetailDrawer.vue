@@ -121,6 +121,7 @@ function getRouteQueryValue(value: unknown) {
 
 function isWorkflowTodoAction(action: MessageActionInfo, path: string) {
   if (
+    action.bizType === 'workflow_todo' ||
     action.bizType === 'workflow_urge' ||
     action.bizType === 'workflow_timeout'
   ) {

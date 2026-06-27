@@ -33,6 +33,7 @@ import com.lawoffice.workflow.service.IFlowableService;
 import com.lawoffice.workflow.service.IInstanceStateService;
 import com.lawoffice.workflow.service.IProcessNodeConfigService;
 import com.lawoffice.workflow.service.ITaskActionService;
+import com.lawoffice.workflow.service.ITaskNotificationService;
 import com.lawoffice.workflow.service.IWorkflowFormDataService;
 import com.lawoffice.workflow.service.IWorkflowRuntimeLookupService;
 import com.lawoffice.workflow.vo.TaskActionVO;
@@ -67,6 +68,7 @@ public class TaskActionServiceImpl implements ITaskActionService {
     private final IAssigneeResolveService assigneeResolveService;
     private final IInstanceStateService instanceStateService;
     private final IProcessNodeConfigService processNodeConfigService;
+    private final ITaskNotificationService taskNotificationService;
     private final IWorkflowFormDataService workflowFormDataService;
     private final IWorkflowRuntimeLookupService workflowRuntimeLookupService;
     private final TransactionTemplate transactionTemplate;
@@ -83,6 +85,7 @@ public class TaskActionServiceImpl implements ITaskActionService {
             IAssigneeResolveService assigneeResolveService,
             IInstanceStateService instanceStateService,
             IProcessNodeConfigService processNodeConfigService,
+            ITaskNotificationService taskNotificationService,
             IWorkflowFormDataService workflowFormDataService,
             IWorkflowRuntimeLookupService workflowRuntimeLookupService,
             PlatformTransactionManager transactionManager) {
@@ -98,6 +101,7 @@ public class TaskActionServiceImpl implements ITaskActionService {
         this.assigneeResolveService = assigneeResolveService;
         this.instanceStateService = instanceStateService;
         this.processNodeConfigService = processNodeConfigService;
+        this.taskNotificationService = taskNotificationService;
         this.workflowFormDataService = workflowFormDataService;
         this.workflowRuntimeLookupService = workflowRuntimeLookupService;
         this.transactionTemplate = new TransactionTemplate(transactionManager);
@@ -169,7 +173,7 @@ public class TaskActionServiceImpl implements ITaskActionService {
                 ensureNoActiveAddSignChild(task);
                 Optional<BranchMatchResult> branchMatch = Optional.empty();
                 if (willAdvanceAfterApprove(task, tenantId)) {
-                    ProcessModel model = requirePublishedModel(processInstance.getProcessModelId(), tenantId);
+                    ProcessModel model = requireRuntimeModel(processInstance.getProcessModelId(), tenantId);
                     branchMatch = conditionBranchRuntimeService.matchNextBranch(
                             model, processInstance, formInstance, task.getNodeId(), task, tenantId, context);
                     saveNextAssigneeSnapshot(processInstance, task.getNodeId(), branchMatch,
@@ -288,6 +292,7 @@ public class TaskActionServiceImpl implements ITaskActionService {
             return buildTaskActionResult(existingTargetTask, processInstance);
         }
         fillOwnerFromCurrentAssignee(task);
+        taskNotificationService.expireTodoMessageActions(List.of(task.getId()), tenantId, context);
         task.setAssigneeUserId(targetUser.getId());
         task.setAssigneeUsername(targetUser.getUsername());
         task.setAssigneeRealname(targetUser.getRealname());
@@ -302,6 +307,7 @@ public class TaskActionServiceImpl implements ITaskActionService {
         processInstanceMapper.updateById(processInstance);
         instanceStateService.createTaskRecord(task, processInstance, requireFormInstance(processInstance.getFormInstanceId(), tenantId),
                 req, WorkflowConstants.Action.TRANSFER, tenantId, context, null, targetUser);
+        taskNotificationService.sendTodoArrivalMessage(processInstance, task, List.of(targetUser.getId()), context);
         return buildTaskActionResult(task, processInstance);
     }
 
@@ -324,6 +330,7 @@ public class TaskActionServiceImpl implements ITaskActionService {
 
         Task anchorTask = resolveFlowableAnchorTask(task, tenantId);
         Task targetTask = createGroupTransferTask(task, targetUser, context);
+        taskNotificationService.sendTodoArrivalMessage(processInstance, targetTask, context);
         markTaskTransferred(task, context);
         instanceStateService.cancelActiveCandidates(task, context);
         flowableService.addCandidateUsers(anchorTask.getFlowableTaskId(), List.of(targetUser.getId()));
@@ -394,12 +401,14 @@ public class TaskActionServiceImpl implements ITaskActionService {
             return buildTaskActionResult(existingTargetTask, processInstance);
         }
 
+        taskNotificationService.expireTodoMessageActions(List.of(task.getId()), tenantId, context);
         task.setStatus(WorkflowConstants.Status.TRANSFERRED);
         EntityFillUtils.fillAuditFields(task, context, false);
         taskMapper.updateById(task);
         instanceStateService.cancelActiveCandidates(task, context);
 
         Task addSignTask = createAddSignTask(task, targetUser, context);
+        taskNotificationService.sendTodoArrivalMessage(processInstance, addSignTask, context);
         instanceStateService.refreshCurrentTaskSummary(processInstance, tenantId);
         EntityFillUtils.fillAuditFields(processInstance, context, false);
         processInstanceMapper.updateById(processInstance);
@@ -510,6 +519,7 @@ public class TaskActionServiceImpl implements ITaskActionService {
         parentTask.setStatus(WorkflowConstants.Status.TODO);
         EntityFillUtils.fillAuditFields(parentTask, context, false);
         taskMapper.updateById(parentTask);
+        taskNotificationService.sendTodoArrivalMessage(processInstance, parentTask, context);
         instanceStateService.refreshCurrentTaskSummary(processInstance, tenantId);
         EntityFillUtils.fillAuditFields(processInstance, context, false);
         processInstanceMapper.updateById(processInstance);
@@ -594,6 +604,7 @@ public class TaskActionServiceImpl implements ITaskActionService {
         task.setCompleteTime(LocalDateTime.now());
         EntityFillUtils.fillAuditFields(task, context, false);
         taskMapper.updateById(task);
+        taskNotificationService.expireTodoMessageActions(List.of(task.getId()), task.getTenantId(), context);
     }
 
     private void ensureNoActiveAddSignChild(Task task) {
@@ -718,6 +729,7 @@ public class TaskActionServiceImpl implements ITaskActionService {
         List<String> expiredReminderTaskIds = new ArrayList<>(canceledTaskIds);
         expiredReminderTaskIds.addAll(canceledAddSignChildIds);
         expireUrgeMessageActions(expiredReminderTaskIds, tenantId, context);
+        taskNotificationService.expireTodoMessageActions(expiredReminderTaskIds, tenantId, context);
         cancelTasksByIds(canceledTaskIds, tenantId, context);
         cancelCandidatesByTaskIds(canceledTaskIds, tenantId, context);
     }
@@ -1054,6 +1066,10 @@ public class TaskActionServiceImpl implements ITaskActionService {
         return workflowRuntimeLookupService.requirePublishedModel(processModelId, tenantId);
     }
 
+    private ProcessModel requireRuntimeModel(String processModelId, String tenantId) {
+        return workflowRuntimeLookupService.requireRuntimeModel(processModelId, tenantId);
+    }
+
     private void checkStartPermission(ProcessModel model, RequestContext context) {
         workflowRuntimeLookupService.checkStartPermission(model, context);
     }
@@ -1081,6 +1097,7 @@ public class TaskActionServiceImpl implements ITaskActionService {
         task.setStatus(WorkflowConstants.Status.TODO);
         EntityFillUtils.fillAuditFields(task, context, true);
         taskMapper.insert(task);
+        taskNotificationService.sendTodoArrivalMessage(processInstance, task, context);
         processInstance.setCurrentTaskNames(WorkflowConstants.VirtualNodeName.START_DRAFT);
         processInstance.setCurrentAssigneeNames(starterDisplayName);
         EntityFillUtils.fillAuditFields(processInstance, context, false);
