@@ -14,6 +14,8 @@ public class MessageSentVO {
 
     private Integer messageType;
 
+    private String bizType;
+
     private Integer priority;
 
     private Integer sendStatus;

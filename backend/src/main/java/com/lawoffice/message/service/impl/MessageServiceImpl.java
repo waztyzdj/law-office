@@ -209,8 +209,10 @@ public class MessageServiceImpl implements IMessageService {
             detail.setArchiveFlag(receiver.getArchiveFlag());
         }
         detail.setSenderAvatar(resolveUserAvatar(message.getSenderId()));
+        List<SysMessageAction> actions = getActions(message.getId());
         detail.setReceiverNames(getReceiverNames(message.getId()));
-        detail.setActions(BeanUtil.copyToList(getActions(message.getId()), MessageActionVO.class));
+        detail.setBizType(resolvePrimaryBizType(actions));
+        detail.setActions(BeanUtil.copyToList(actions, MessageActionVO.class));
         detail.setAttachments(buildAttachmentVOs(message.getId()));
         return detail;
     }
@@ -557,6 +559,7 @@ public class MessageServiceImpl implements IMessageService {
         Map<String, SysMessage> messageMap = getMessageMap(receivers.stream()
                 .map(SysMessageReceiver::getMessageId)
                 .collect(Collectors.toList()));
+        Map<String, String> bizTypeMap = getPrimaryBizTypeMap(new ArrayList<>(messageMap.keySet()));
         Map<String, User> senderMap = getSenderMap(messageMap.values().stream()
                 .map(SysMessage::getSenderId)
                 .filter(StringUtils::hasText)
@@ -574,6 +577,7 @@ public class MessageServiceImpl implements IMessageService {
                     if (message != null) {
                         vo.setTitle(message.getTitle());
                         vo.setMessageType(message.getMessageType());
+                        vo.setBizType(bizTypeMap.get(message.getId()));
                         vo.setPriority(message.getPriority());
                         vo.setSenderId(message.getSenderId());
                         vo.setSenderName(message.getSenderName());
@@ -595,10 +599,14 @@ public class MessageServiceImpl implements IMessageService {
                 .collect(Collectors.toList()))
                 .stream()
                 .collect(Collectors.groupingBy(SysMessageReceiver::getMessageId));
+        Map<String, String> bizTypeMap = getPrimaryBizTypeMap(messages.stream()
+                .map(SysMessage::getId)
+                .collect(Collectors.toList()));
         return messages.stream()
                 .map(message -> {
                     List<SysMessageReceiver> receivers = receiverMap.getOrDefault(message.getId(), new ArrayList<>());
                     MessageSentVO vo = BeanUtil.copyProperties(message, MessageSentVO.class);
+                    vo.setBizType(bizTypeMap.get(message.getId()));
                     vo.setReceiverCount(receivers.size());
                     vo.setReadCount((int) receivers.stream()
                             .filter(receiver -> receiver.getReadStatus() != null && receiver.getReadStatus() == MessageConstants.READ_STATUS_READ)
@@ -725,12 +733,43 @@ public class MessageServiceImpl implements IMessageService {
         return receiverMapper.selectList(wrapper);
     }
 
+    /**
+     * 消息列表需要展示动作业务类型，但不能逐条查询动作；取排序最靠前的有效动作作为该消息的主业务类型。
+     */
+    private Map<String, String> getPrimaryBizTypeMap(List<String> messageIds) {
+        if (messageIds.isEmpty()) {
+            return new LinkedHashMap<>();
+        }
+        LambdaQueryWrapper<SysMessageAction> wrapper = new LambdaQueryWrapper<>();
+        wrapper.in(SysMessageAction::getMessageId, messageIds)
+                .eq(SysMessageAction::getDeleteFlag, 0)
+                .orderByAsc(SysMessageAction::getMessageId)
+                .orderByAsc(SysMessageAction::getSortOrder);
+        Map<String, String> bizTypeMap = new LinkedHashMap<>();
+        actionMapper.selectList(wrapper).forEach(action -> {
+            if (StringUtils.hasText(action.getMessageId())
+                    && StringUtils.hasText(action.getBizType())
+                    && !bizTypeMap.containsKey(action.getMessageId())) {
+                bizTypeMap.put(action.getMessageId(), action.getBizType());
+            }
+        });
+        return bizTypeMap;
+    }
+
     private List<SysMessageAction> getActions(String messageId) {
         LambdaQueryWrapper<SysMessageAction> wrapper = new LambdaQueryWrapper<>();
         wrapper.eq(SysMessageAction::getMessageId, messageId)
                 .eq(SysMessageAction::getDeleteFlag, 0)
                 .orderByAsc(SysMessageAction::getSortOrder);
         return actionMapper.selectList(wrapper);
+    }
+
+    private String resolvePrimaryBizType(List<SysMessageAction> actions) {
+        return actions.stream()
+                .map(SysMessageAction::getBizType)
+                .filter(StringUtils::hasText)
+                .findFirst()
+                .orElse(null);
     }
 
     private List<String> getReceiverNames(String messageId) {

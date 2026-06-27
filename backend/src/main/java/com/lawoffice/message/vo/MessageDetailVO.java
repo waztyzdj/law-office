@@ -22,6 +22,8 @@ public class MessageDetailVO {
 
     private Integer messageType;
 
+    private String bizType;
+
     private Integer priority;
 
     private String senderId;

@@ -30,8 +30,8 @@ import {
 import WorkflowRuntimeFormDrawer from '#/views/workflow/runtime/components/WorkflowRuntimeFormDrawer.vue';
 
 import {
+  getMessageTypeLabel,
   getOptionLabel,
-  messageTypeOptions,
   priorityOptions,
   readStatusOptions,
   sendStatusOptions,
@@ -130,6 +130,17 @@ function isWorkflowTodoAction(action: MessageActionInfo, path: string) {
   return path === '/workflow/todo/detail' || path === '/workflow/todo';
 }
 
+function isWorkflowCcAction(action: MessageActionInfo) {
+  return action.bizType === 'workflow_cc';
+}
+
+function getActionBizType() {
+  return (
+    detail.value.bizType ||
+    detail.value.actions?.find((action) => action.bizType)?.bizType
+  );
+}
+
 async function openWorkflowTodoDetail(query?: LocationQueryRaw) {
   const taskId = getRouteQueryValue(query?.taskId);
   const instanceId = getRouteQueryValue(query?.instanceId);
@@ -160,6 +171,18 @@ async function openWorkflowTodoDetail(query?: LocationQueryRaw) {
   });
 }
 
+async function openWorkflowDetail(query?: LocationQueryRaw) {
+  const instanceId = getRouteQueryValue(query?.instanceId);
+  if (!instanceId) {
+    message.warning('缺少审批实例参数');
+    return;
+  }
+
+  drawerApi.close();
+  await nextTick();
+  await workflowDrawerRef.value?.open({ instanceId, mode: 'detail' });
+}
+
 function openExternal(url?: string, newWindow = true) {
   if (!url) {
     message.warning('链接为空');
@@ -176,6 +199,10 @@ async function openInternal(action: MessageActionInfo) {
   const query = parseRouteQuery(action.routeQuery);
   if (isWorkflowTodoAction(action, action.routePath)) {
     await openWorkflowTodoDetail(query);
+    return;
+  }
+  if (isWorkflowCcAction(action)) {
+    await openWorkflowDetail(query);
     return;
   }
   const route = {
@@ -288,7 +315,7 @@ defineExpose({
         <h2>{{ detail.title || '-' }}</h2>
         <Descriptions :column="2" bordered size="small">
           <DescriptionsItem label="消息类型">
-            {{ getOptionLabel(messageTypeOptions, detail.messageType) }}
+            {{ getMessageTypeLabel(detail.messageType, getActionBizType()) }}
           </DescriptionsItem>
           <DescriptionsItem label="优先级">
             {{ getOptionLabel(priorityOptions, detail.priority) }}

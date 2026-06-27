@@ -8,6 +8,12 @@ export const messageTypeOptions: SelectOption[] = [
   { color: 'default', label: '系统消息', value: 9 },
 ] as SelectOption[];
 
+export const workflowCcMessageTypeOption: SelectOption = {
+  color: 'cyan',
+  label: '抄送提醒',
+  value: 'workflow_cc',
+};
+
 export const priorityOptions: SelectOption[] = [
   { color: 'default', label: '普通', value: 1 },
   { color: 'orange', label: '重要', value: 2 },
@@ -43,4 +49,23 @@ export function getOptionLabel(
   value?: number,
 ) {
   return options.find((option) => option.value === value)?.label ?? '-';
+}
+
+export function getMessageTypeMeta(
+  messageType?: number,
+  bizType?: string,
+): SelectOption {
+  if (bizType === 'workflow_cc') {
+    return workflowCcMessageTypeOption;
+  }
+  return (
+    messageTypeOptions.find((option) => option.value === messageType) ?? {
+      label: messageType === undefined || messageType === null ? '-' : String(messageType),
+      value: messageType,
+    }
+  );
+}
+
+export function getMessageTypeLabel(messageType?: number, bizType?: string) {
+  return getMessageTypeMeta(messageType, bizType).label;
 }

@@ -39,6 +39,7 @@ export interface SendMessageReq {
 
 export interface MessageInboxInfo {
   archiveFlag?: number;
+  bizType?: string;
   id?: string;
   messageId?: string;
   messageType?: number;
@@ -55,6 +56,7 @@ export interface MessageInboxInfo {
 }
 
 export interface MessageSentInfo {
+  bizType?: string;
   id?: string;
   messageType?: number;
   priority?: number;

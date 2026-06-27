@@ -9,11 +9,12 @@ import type { Ref } from 'vue';
 
 import { h } from 'vue';
 
-import { Space } from 'ant-design-vue';
+import { Space, Tag } from 'ant-design-vue';
 
 import { defineTableColumns } from '#/composables/Table';
 
 import {
+  getMessageTypeMeta,
   messageTypeOptions,
   priorityOptions,
   sendStatusOptions,
@@ -42,6 +43,12 @@ export function getSentColumns(
       title: '消息类型',
       options: {
         columnType: 'select' as const,
+        customRender: ({ record }: { record: MessageSentInfo }) => {
+          const meta = getMessageTypeMeta(record.messageType, record.bizType);
+          return meta.color
+            ? h(Tag, { color: meta.color }, () => meta.label)
+            : h('span', {}, meta.label);
+        },
         selectOptions: messageTypeOptions,
         width: 120,
       },
