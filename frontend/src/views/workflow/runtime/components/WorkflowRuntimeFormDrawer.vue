@@ -2,6 +2,7 @@
 import type {
   AvailableProcessInfo,
   AssigneeSelectNodeInfo,
+  InstanceDiagramInfo,
   InstanceDetailInfo,
   RuntimeTaskInfo,
   StartFormInfo,
@@ -20,6 +21,7 @@ import { Alert, message, Modal, Select, Space, Spin, Tag } from 'ant-design-vue'
 
 import {
   getStartForm,
+  getWorkflowInstanceDiagram,
   getWorkflowInstanceDetail,
   getWorkflowTaskForm,
   previewNextAssigneeSelectNodes,
@@ -63,6 +65,7 @@ const currentTask = ref<RuntimeTaskInfo>();
 const startForm = ref<StartFormInfo>();
 const taskForm = ref<TaskFormInfo>();
 const detail = ref<InstanceDetailInfo>();
+const diagram = ref<InstanceDiagramInfo>();
 const activeTab = ref('records');
 const loading = ref(false);
 const drawerOpened = ref(false);
@@ -272,6 +275,7 @@ function resetState(payload: DrawerPayload) {
   startForm.value = undefined;
   taskForm.value = undefined;
   detail.value = undefined;
+  diagram.value = undefined;
   activeTab.value = 'records';
   drawerOpened.value = false;
   manualCcOpen.value = false;
@@ -337,7 +341,7 @@ async function loadData(payload: DrawerPayload) {
       taskForm.value = await getWorkflowTaskForm(taskId);
       instanceTitle.value = taskForm.value.instanceTitle ?? '';
       if (taskForm.value.processInstanceId) {
-        detail.value = await getWorkflowInstanceDetail(taskForm.value.processInstanceId);
+        await loadInstanceRuntimeData(taskForm.value.processInstanceId);
       }
       drawerApi.setState({ title: drawerTitle.value });
       return;
@@ -345,12 +349,21 @@ async function loadData(payload: DrawerPayload) {
 
     const instanceId = payload.instanceId ?? payload.task?.processInstanceId;
     if (instanceId) {
-      detail.value = await getWorkflowInstanceDetail(instanceId);
+      await loadInstanceRuntimeData(instanceId);
     }
     drawerApi.setState({ title: drawerTitle.value });
   } finally {
     loading.value = false;
   }
+}
+
+async function loadInstanceRuntimeData(instanceId: string) {
+  const [nextDetail, nextDiagram] = await Promise.all([
+    getWorkflowInstanceDetail(instanceId),
+    getWorkflowInstanceDiagram(instanceId),
+  ]);
+  detail.value = nextDetail;
+  diagram.value = nextDiagram;
 }
 
 async function handleAssigneePickerConfirm() {
@@ -399,7 +412,7 @@ async function handleManualCcConfirm() {
     });
     message.success('已发送抄送');
     closeManualCcPicker();
-    detail.value = await getWorkflowInstanceDetail(processInstanceId);
+    await loadInstanceRuntimeData(processInstanceId);
     emit('success');
   } finally {
     manualCcSubmitting.value = false;
@@ -433,7 +446,7 @@ function handleWithdraw() {
       try {
         await withdrawWorkflowInstance(processInstanceId);
         message.success('已撤回');
-        detail.value = await getWorkflowInstanceDetail(processInstanceId);
+        await loadInstanceRuntimeData(processInstanceId);
         emit('success');
       } finally {
         withdrawSubmitting.value = false;
@@ -451,7 +464,7 @@ async function handleUrge() {
   try {
     await urgeWorkflowInstance(processInstanceId);
     message.success('已催办');
-    detail.value = await getWorkflowInstanceDetail(processInstanceId);
+    await loadInstanceRuntimeData(processInstanceId);
     emit('success');
   } finally {
     urgeSubmitting.value = false;
@@ -536,6 +549,8 @@ defineExpose({
             <RuntimeSideTabs
               v-model:active-key="activeTab"
               :cc-records="detail?.ccRecords ?? []"
+              :detail="detail"
+              :diagram="diagram"
               :nodes="processProgressNodes"
             />
           </aside>
@@ -724,9 +739,9 @@ defineExpose({
   display: flex;
   flex: 0 0 auto;
   flex-direction: column;
-  gap: 10px;
+  gap: 6px;
   min-height: 0;
-  padding-top: 12px;
+  padding-top: 8px;
 }
 
 .runtime-side-section {

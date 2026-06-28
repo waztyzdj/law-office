@@ -27,7 +27,10 @@ function toggleCollapsed() {
 </script>
 
 <template>
-  <div class="approval-comment-panel">
+  <div
+    class="approval-comment-panel"
+    :class="{ 'approval-comment-panel--collapsed': collapsed }"
+  >
     <div class="approval-comment-header">
       <button
         class="approval-comment-title"
@@ -74,6 +77,11 @@ function toggleCollapsed() {
   padding-top: 10px;
 }
 
+.approval-comment-panel--collapsed {
+  gap: 0;
+  padding-top: 5px;
+}
+
 .approval-comment-header {
   align-items: center;
   display: flex;
@@ -100,6 +108,20 @@ function toggleCollapsed() {
   height: 32px;
   justify-content: center;
   width: 32px;
+}
+
+.approval-comment-panel--collapsed .approval-comment-header {
+  min-height: 24px;
+}
+
+.approval-comment-panel--collapsed .approval-comment-title {
+  font-size: 14px;
+  line-height: 22px;
+}
+
+.approval-comment-panel--collapsed .approval-comment-collapse {
+  height: 24px;
+  width: 24px;
 }
 
 .approval-comment-control {

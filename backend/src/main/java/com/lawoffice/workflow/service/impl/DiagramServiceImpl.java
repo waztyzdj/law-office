@@ -13,6 +13,7 @@ import com.lawoffice.workflow.mapper.OperationRecordMapper;
 import com.lawoffice.workflow.mapper.ProcessInstanceMapper;
 import com.lawoffice.workflow.mapper.ProcessModelMapper;
 import com.lawoffice.workflow.service.IDiagramService;
+import com.lawoffice.workflow.service.IRuntimeAccessService;
 import com.lawoffice.workflow.vo.BranchRecordVO;
 import com.lawoffice.workflow.vo.InstanceDiagramVO;
 import com.lawoffice.workflow.vo.OperationRecordVO;
@@ -28,15 +29,18 @@ public class DiagramServiceImpl implements IDiagramService {
     private final ProcessModelMapper processModelMapper;
     private final BranchRecordMapper branchRecordMapper;
     private final OperationRecordMapper operationRecordMapper;
+    private final IRuntimeAccessService runtimeAccessService;
 
     public DiagramServiceImpl(ProcessInstanceMapper processInstanceMapper,
             ProcessModelMapper processModelMapper,
             BranchRecordMapper branchRecordMapper,
-            OperationRecordMapper operationRecordMapper) {
+            OperationRecordMapper operationRecordMapper,
+            IRuntimeAccessService runtimeAccessService) {
         this.processInstanceMapper = processInstanceMapper;
         this.processModelMapper = processModelMapper;
         this.branchRecordMapper = branchRecordMapper;
         this.operationRecordMapper = operationRecordMapper;
+        this.runtimeAccessService = runtimeAccessService;
     }
 
     @Override
@@ -53,6 +57,7 @@ public class DiagramServiceImpl implements IDiagramService {
             if (instance == null) {
                 throw new IllegalArgumentException("流程实例不存在");
             }
+            runtimeAccessService.ensureInstanceAccess(instance, context);
             ProcessModel model = processModelMapper.selectOne(new QueryWrapper<ProcessModel>()
                     .eq("id", instance.getProcessModelId())
                     .eq("tenant_id", tenantId)

@@ -1,5 +1,9 @@
 <script setup lang="ts">
-import type { WorkflowCcRecordInfo } from '#/api/workflow';
+import type {
+  InstanceDetailInfo,
+  InstanceDiagramInfo,
+  WorkflowCcRecordInfo,
+} from '#/api/workflow';
 import type { ProcessProgressNode } from './runtimeTypes';
 
 import { Empty, Tabs, Tag, Timeline } from 'ant-design-vue';
@@ -10,10 +14,13 @@ import {
   getStatusMeta,
   getWorkflowActionMeta,
 } from '../../components/status';
+import RuntimeProcessDiagram from './RuntimeProcessDiagram.vue';
 
 interface Props {
   activeKey: string;
   ccRecords: WorkflowCcRecordInfo[];
+  detail?: InstanceDetailInfo;
+  diagram?: InstanceDiagramInfo;
   nodes: ProcessProgressNode[];
 }
 
@@ -136,6 +143,16 @@ function getCcTriggerLabel(triggerAction?: string) {
       >
         <Empty description="暂无审批意见" />
       </div>
+    </Tabs.TabPane>
+
+    <Tabs.TabPane
+      key="diagram"
+      tab="流程图"
+    >
+      <RuntimeProcessDiagram
+        :detail="detail"
+        :diagram="diagram"
+      />
     </Tabs.TabPane>
 
     <Tabs.TabPane

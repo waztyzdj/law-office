@@ -312,7 +312,10 @@ defineExpose({
 </script>
 
 <template>
-  <section class="workflow-attachment-panel">
+  <section
+    class="workflow-attachment-panel"
+    :class="{ 'workflow-attachment-panel--collapsed': collapsed }"
+  >
     <div class="workflow-attachment-panel__header">
       <button
         class="workflow-attachment-panel__title"
@@ -424,6 +427,10 @@ defineExpose({
   padding-top: 10px;
 }
 
+.workflow-attachment-panel--collapsed {
+  padding-top: 5px;
+}
+
 .workflow-attachment-panel__header {
   align-items: center;
   display: flex;
@@ -472,6 +479,27 @@ defineExpose({
   height: 32px;
   justify-content: center;
   width: 32px;
+}
+
+.workflow-attachment-panel--collapsed .workflow-attachment-panel__header {
+  margin-bottom: 0;
+  min-height: 24px;
+}
+
+.workflow-attachment-panel--collapsed .workflow-attachment-panel__title {
+  font-size: 14px;
+  line-height: 22px;
+}
+
+.workflow-attachment-panel--collapsed .workflow-attachment-panel__count {
+  height: 18px;
+  min-width: 18px;
+  padding: 0 5px;
+}
+
+.workflow-attachment-panel--collapsed .workflow-attachment-panel__collapse {
+  height: 24px;
+  width: 24px;
 }
 
 .workflow-attachment-panel__body {

@@ -237,6 +237,21 @@ export interface WorkflowCcSendReq {
   receiverUserIds?: string[];
 }
 
+export interface BranchRecordInfo {
+  branchId?: string;
+  branchName?: string;
+  conditionSnapshotJson?: string;
+  formDataSnapshotJson?: string;
+  id?: string;
+  matchedTime?: string;
+  processInstanceId?: string;
+  processModelId?: string;
+  sourceNodeId?: string;
+  sourceNodeName?: string;
+  targetNodeId?: string;
+  targetNodeName?: string;
+}
+
 export type WorkflowAttachmentSource = 'comment' | 'start' | 'task';
 
 export interface WorkflowAttachmentInfo {
@@ -452,6 +467,14 @@ export interface InstanceDetailInfo {
   records?: OperationRecordInfo[];
 }
 
+export interface InstanceDiagramInfo {
+  bpmnXml?: string;
+  branchRecords?: BranchRecordInfo[];
+  operationRecords?: OperationRecordInfo[];
+  processInstanceId?: string;
+  processModelId?: string;
+}
+
 const categoryApi = new BaseApi('/workflow/admin/category');
 const fieldPermissionApi = new BaseApi('/workflow/admin/field-permission');
 const formApi = new BaseApi('/workflow/admin/form');
@@ -589,6 +612,8 @@ export const downloadWorkflowAttachment = (id: string) =>
   requestClient.download<Blob>(`/workflow/attachment/download/${id}`);
 export const getWorkflowInstanceDetail = (id: string) =>
   requestClient.post<InstanceDetailInfo>('/workflow/instance/detail', { id });
+export const getWorkflowInstanceDiagram = (id: string) =>
+  requestClient.post<InstanceDiagramInfo>('/workflow/instance/diagram', { id });
 export const listWorkflowInstanceRecords = (id: string) =>
   requestClient.post<OperationRecordInfo[]>('/workflow/instance/records', {
     id,
