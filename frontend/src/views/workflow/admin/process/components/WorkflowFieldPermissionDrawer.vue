@@ -296,7 +296,7 @@ function handleRequiredChange(..._args: unknown[]) {
 }
 
 async function saveCurrentNodePermissions(nodeId = activeNodeId.value) {
-  if (!nodeId) {
+  if (!nodeId || isPublished.value) {
     return;
   }
   await deleteRemovedPermissions(nodeId);
@@ -316,6 +316,9 @@ async function deleteRemovedPermissions(nodeId = activeNodeId.value) {
   );
   for (const item of removed) {
     await deleteWorkflowFieldPermission(item.id!);
+    existingPermissions.value = existingPermissions.value.filter(
+      (permission) => permission.id !== item.id,
+    );
   }
 }
 

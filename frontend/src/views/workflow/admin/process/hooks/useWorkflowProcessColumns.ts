@@ -154,7 +154,7 @@ export function getWorkflowProcessColumns(
         },
         fixed: 'right' as const,
         hasFilter: false,
-        width: 540,
+        width: 400,
       },
       title: '操作',
     },
@@ -165,6 +165,6 @@ export function getWorkflowProcessColumns(
     filterState,
     emit,
     pagination,
-    { minTableWidth: 1930, tableKey: 'workflow_process' },
+    { minTableWidth: 1790, tableKey: 'workflow_process' },
   );
 }

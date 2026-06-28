@@ -6,6 +6,7 @@ import com.lawoffice.framework.dto.RequestContext;
 import com.lawoffice.framework.result.BaseResult;
 import com.lawoffice.framework.vo.PageVO;
 import com.lawoffice.workflow.entity.FormDefinition;
+import com.lawoffice.workflow.req.FormTemplateCopyReq;
 import com.lawoffice.workflow.vo.FormDefinitionVO;
 
 import java.util.List;
@@ -49,4 +50,14 @@ public interface IFormDefinitionService extends IBaseService<FormDefinition, For
      * @return 新草稿版本
      */
     BaseResult<FormDefinitionVO> copyAsDraft(String id, RequestContext context);
+
+    /**
+     * 基于已有表单复制为新的表单模板。新表单为独立草稿，版本号从 1 开始；
+     * 只复制表单定义 JSON，不复制流程引用、表单实例或运行时数据。
+     *
+     * @param req 复制模板请求，包含来源表单以及新表单编码名称
+     * @param context 当前请求上下文
+     * @return 新复制出的表单草稿
+     */
+    BaseResult<FormDefinitionVO> copyTemplate(FormTemplateCopyReq req, RequestContext context);
 }

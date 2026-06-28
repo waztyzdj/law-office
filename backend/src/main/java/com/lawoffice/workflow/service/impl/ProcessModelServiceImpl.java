@@ -41,7 +41,12 @@ import org.xml.sax.InputSource;
 
 import javax.xml.XMLConstants;
 import javax.xml.parsers.DocumentBuilderFactory;
+import javax.xml.transform.OutputKeys;
+import javax.xml.transform.TransformerFactory;
+import javax.xml.transform.dom.DOMSource;
+import javax.xml.transform.stream.StreamResult;
 import java.io.StringReader;
+import java.io.StringWriter;
 import java.time.LocalDateTime;
 import java.util.HashMap;
 import java.util.LinkedHashSet;
@@ -393,9 +398,75 @@ public class ProcessModelServiceImpl extends AbstractWorkflowConfigServiceImpl<P
         target.setFlowableProcessDefinitionId(null);
         target.setBpmnSecurityStatus(null);
         target.setBpmnSecurityMessage(null);
+        target.setBpmnXml(adaptCopiedBpmnXml(sourceModel, req));
         target.setRemark(buildCopyRemark(req.getRemark(), "来源流程: " + sourceModel.getProcessName() + "(" + sourceModel.getProcessKey() + ")"));
         EntityFillUtils.fillAuditFields(target, context, true);
         return target;
+    }
+
+    /**
+     * BPMN XML 中 process id 就是 Flowable 流程定义 key。复制模板更换流程编码后，
+     * 必须同步 XML 内部 id，否则发布时部署出的 key 仍是来源流程编码。
+     */
+    private String adaptCopiedBpmnXml(ProcessModel sourceModel, ProcessTemplateCopyReq req) {
+        if (!StringUtils.hasText(sourceModel.getBpmnXml())) {
+            return sourceModel.getBpmnXml();
+        }
+        try {
+            return adaptBpmnXmlProcessIdentity(sourceModel.getBpmnXml(), req.getProcessKey(), req.getProcessName());
+        } catch (IllegalArgumentException e) {
+            throw e;
+        } catch (Exception e) {
+            throw new IllegalArgumentException("复制流程时更新BPMN XML失败");
+        }
+    }
+
+    private String adaptBpmnXmlProcessIdentity(String bpmnXml, String processKey, String processName) throws Exception {
+        Document document = parseBpmnDocument(bpmnXml);
+        Element process = requireSingleBpmnProcess(document);
+        String oldProcessId = process.getAttribute("id");
+        process.setAttribute("id", processKey);
+        process.setAttribute("name", processName);
+        updateBpmnDiagramProcessReferences(document, oldProcessId, processKey);
+        return serializeBpmnDocument(document);
+    }
+
+    private Element requireSingleBpmnProcess(Document document) {
+        NodeList processes = document.getElementsByTagNameNS("*", "process");
+        if (processes.getLength() != 1) {
+            throw new IllegalArgumentException("BPMN XML必须包含且只包含一个流程定义");
+        }
+        Element process = (Element) processes.item(0);
+        if (!StringUtils.hasText(process.getAttribute("id"))) {
+            throw new IllegalArgumentException("BPMN XML中的流程ID不能为空");
+        }
+        return process;
+    }
+
+    private void updateBpmnDiagramProcessReferences(Document document, String oldProcessId, String newProcessId) {
+        NodeList planes = document.getElementsByTagNameNS("*", "BPMNPlane");
+        for (int i = 0; i < planes.getLength(); i++) {
+            Element plane = (Element) planes.item(i);
+            if (oldProcessId.equals(plane.getAttribute("bpmnElement"))) {
+                plane.setAttribute("bpmnElement", newProcessId);
+            }
+        }
+        Element root = document.getDocumentElement();
+        if (root != null && oldProcessId != null && root.hasAttribute("id")) {
+            root.setAttribute("id", "Definitions_" + newProcessId);
+        }
+    }
+
+    private String serializeBpmnDocument(Document document) throws Exception {
+        TransformerFactory transformerFactory = TransformerFactory.newInstance();
+        transformerFactory.setFeature(XMLConstants.FEATURE_SECURE_PROCESSING, true);
+        var transformer = transformerFactory.newTransformer();
+        transformer.setOutputProperty(OutputKeys.ENCODING, "UTF-8");
+        transformer.setOutputProperty(OutputKeys.OMIT_XML_DECLARATION, "no");
+        transformer.setOutputProperty(OutputKeys.INDENT, "no");
+        StringWriter writer = new StringWriter();
+        transformer.transform(new DOMSource(document), new StreamResult(writer));
+        return writer.toString();
     }
 
     private String buildCopyRemark(String userRemark, String sourceText) {
@@ -408,6 +479,7 @@ public class ProcessModelServiceImpl extends AbstractWorkflowConfigServiceImpl<P
     private void validateBeforePublish(ProcessModel model) {
         validateDesignerPayload(model);
         requireText(model.getBpmnXml(), "BPMN XML不能为空");
+        normalizeBpmnXmlBeforePublish(model);
         if (WorkflowConstants.DesignerType.BPMN.equals(model.getDesignerType())) {
             String message = bpmnSecurityService.validateBpmnXml(model.getBpmnXml());
             model.setBpmnSecurityStatus(WorkflowConstants.BpmnSecurityStatus.PASSED);
@@ -427,6 +499,22 @@ public class ProcessModelServiceImpl extends AbstractWorkflowConfigServiceImpl<P
         if (WorkflowConstants.StartScopeType.SPECIFIED.equals(model.getStartScopeType())
                 && countActive(processStartPermissionMapper, model.getTenantId(), "process_model_id", model.getId()) == 0) {
             throw new IllegalArgumentException("指定发起范围时必须配置发起权限");
+        }
+    }
+
+    /**
+     * 历史草稿或复制模板可能残留旧流程编码，发布前兜底修正，保证 Flowable key 与流程标识一致。
+     */
+    private void normalizeBpmnXmlBeforePublish(ProcessModel model) {
+        if (!StringUtils.hasText(model.getBpmnXml())) {
+            return;
+        }
+        try {
+            model.setBpmnXml(adaptBpmnXmlProcessIdentity(model.getBpmnXml(), model.getProcessKey(), model.getProcessName()));
+        } catch (IllegalArgumentException e) {
+            throw e;
+        } catch (Exception e) {
+            throw new IllegalArgumentException("发布前更新BPMN XML失败");
         }
     }
 

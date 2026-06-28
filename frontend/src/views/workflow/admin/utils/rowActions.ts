@@ -42,20 +42,16 @@ export function buildVersionActionLinks<T extends VersionActionRecord>(
     );
   } else {
     actions.push(
+      h('a', { onClick: () => emits.copyAsDraft(record) }, '新建版本'),
       h('a', { onClick: () => emits.viewDesign(record) }, '查看设计'),
     );
   }
 
   actions.push(...extraActions);
+  actions.push(h('a', { onClick: () => emits.history(record) }, '历史版本'));
   if (emits.copyTemplate) {
     actions.push(
       h('a', { onClick: () => emits.copyTemplate?.(record) }, '复制模板'),
-    );
-  }
-  actions.push(h('a', { onClick: () => emits.history(record) }, '历史版本'));
-  if (record.status !== 'draft') {
-    actions.push(
-      h('a', { onClick: () => emits.copyAsDraft(record) }, '新建版本'),
     );
   }
 

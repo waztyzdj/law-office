@@ -88,6 +88,7 @@ export function getWorkflowFormColumns(
         customRender: ({ record }: { record: WorkflowFormDefinitionInfo }) => {
           const actions = buildVersionActionLinks(record, {
             copyAsDraft: (item) => emit('copyAsDraft', item),
+            copyTemplate: (item) => emit('copyTemplate', item),
             delete: (item) => emit('delete', item),
             design: (item) => emit('design', item),
             edit: (item) => emit('edit', item),
@@ -99,7 +100,7 @@ export function getWorkflowFormColumns(
         },
         fixed: 'right' as const,
         hasFilter: false,
-        width: 420,
+        width: 340,
       },
       title: '操作',
     },
@@ -110,6 +111,6 @@ export function getWorkflowFormColumns(
     filterState,
     emit,
     pagination,
-    { minTableWidth: 1580, tableKey: 'workflow_form' },
+    { minTableWidth: 1500, tableKey: 'workflow_form' },
   );
 }

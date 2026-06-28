@@ -35,6 +35,14 @@ export interface WorkflowFormDefinitionInfo {
   version?: number;
 }
 
+export interface WorkflowFormTemplateCopyReq {
+  categoryId?: string;
+  formKey?: string;
+  formName?: string;
+  remark?: string;
+  sourceFormDefinitionId?: string;
+}
+
 export interface WorkflowProcessModelInfo {
   id?: string;
   bpmnXml?: string;
@@ -524,6 +532,11 @@ export const copyWorkflowFormAsDraft = (id: string) =>
   requestClient.post<WorkflowFormDefinitionInfo>(
     '/workflow/admin/form/copy-as-draft',
     { id },
+  );
+export const copyWorkflowFormTemplate = (data: WorkflowFormTemplateCopyReq) =>
+  requestClient.post<WorkflowFormDefinitionInfo>(
+    '/workflow/admin/form/copy-template',
+    data,
   );
 export const listWorkflowFormHistory = (id: string) =>
   requestClient.post<WorkflowFormDefinitionInfo[]>(

@@ -6,6 +6,7 @@ import { message } from 'ant-design-vue';
 import type { WorkflowFormDefinitionInfo } from '#/api/workflow';
 
 import WorkflowFormDesignerDrawer from './components/WorkflowFormDesignerDrawer.vue';
+import WorkflowFormCopyTemplateDrawer from './components/WorkflowFormCopyTemplateDrawer.vue';
 import WorkflowFormDrawer from './components/WorkflowFormDrawer.vue';
 import WorkflowFormHistoryDrawer from './components/WorkflowFormHistoryDrawer.vue';
 import WorkflowFormTable from './components/WorkflowFormTable.vue';
@@ -26,6 +27,8 @@ const {
 } = useWorkflowFormTable();
 
 const formDrawerRef = ref<InstanceType<typeof WorkflowFormDrawer>>();
+const copyTemplateDrawerRef =
+  ref<InstanceType<typeof WorkflowFormCopyTemplateDrawer>>();
 const designerDrawerRef = ref<InstanceType<typeof WorkflowFormDesignerDrawer>>();
 const historyDrawerRef = ref<InstanceType<typeof WorkflowFormHistoryDrawer>>();
 
@@ -57,6 +60,10 @@ function handleHistory(record: WorkflowFormDefinitionInfo) {
   historyDrawerRef.value?.open(record);
 }
 
+function handleCopyTemplate(record: WorkflowFormDefinitionInfo) {
+  copyTemplateDrawerRef.value?.open({ record });
+}
+
 onMounted(handleRefresh);
 </script>
 
@@ -71,6 +78,7 @@ onMounted(handleRefresh);
       @add="handleAdd"
       @change="handleTableChange"
       @copy-as-draft="handleCopyAsDraft"
+      @copy-template="handleCopyTemplate"
       @delete="handleDelete"
       @design="handleDesign"
       @edit="handleEdit"
@@ -81,6 +89,10 @@ onMounted(handleRefresh);
 
     <WorkflowFormDrawer
       ref="formDrawerRef"
+      @success="handleRefresh"
+    />
+    <WorkflowFormCopyTemplateDrawer
+      ref="copyTemplateDrawerRef"
       @success="handleRefresh"
     />
     <WorkflowFormDesignerDrawer

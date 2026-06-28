@@ -15,6 +15,7 @@ import com.lawoffice.workflow.mapper.FormDefinitionMapper;
 import com.lawoffice.workflow.mapper.FormInstanceMapper;
 import com.lawoffice.workflow.mapper.ProcessCategoryMapper;
 import com.lawoffice.workflow.mapper.ProcessModelMapper;
+import com.lawoffice.workflow.req.FormTemplateCopyReq;
 import com.lawoffice.workflow.service.IFormDefinitionService;
 import com.lawoffice.workflow.vo.FormDefinitionVO;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -192,6 +193,28 @@ public class FormDefinitionServiceImpl extends AbstractWorkflowConfigServiceImpl
         }
     }
 
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public BaseResult<FormDefinitionVO> copyTemplate(FormTemplateCopyReq req, RequestContext context) {
+        try {
+            String tenantId = resolveTenantId(null, context);
+            String sourceFormId = resolveSourceFormId(req);
+            FormDefinition source = requireCurrent(sourceFormId, tenantId, "来源表单定义不存在");
+            normalizeCopyReq(req);
+            String targetCategoryId = StringUtils.hasText(req.getCategoryId()) ? req.getCategoryId() : source.getCategoryId();
+            requireActiveById(processCategoryMapper, targetCategoryId, tenantId, "流程分类不存在");
+            ensureTemplateKeyAvailable(tenantId, req.getFormKey());
+
+            FormDefinition target = buildCopiedForm(source, req, targetCategoryId, context);
+            baseMapper.insert(target);
+            return BaseResult.success(BeanUtil.toBean(target, FormDefinitionVO.class));
+        } catch (IllegalArgumentException e) {
+            return BaseResult.error(400, e.getMessage());
+        } catch (Exception e) {
+            return BaseResult.error("复制表单模板失败: " + e.getMessage());
+        }
+    }
+
     private void normalize(FormDefinition form) {
         form.setFormKey(trimToNull(form.getFormKey()));
         form.setFormName(trimToNull(form.getFormName()));
@@ -205,6 +228,64 @@ public class FormDefinitionServiceImpl extends AbstractWorkflowConfigServiceImpl
         if (form.getVersion() == null) {
             form.setVersion(resolveNextVersion(form.getTenantId(), form.getFormKey()));
         }
+    }
+
+    private String resolveSourceFormId(FormTemplateCopyReq req) {
+        if (req == null) {
+            throw new IllegalArgumentException("复制模板请求不能为空");
+        }
+        String sourceFormId = trimToNull(req.getSourceFormDefinitionId());
+        if (!StringUtils.hasText(sourceFormId)) {
+            sourceFormId = trimToNull(req.getId());
+        }
+        if (!StringUtils.hasText(sourceFormId)) {
+            throw new IllegalArgumentException("来源表单不能为空");
+        }
+        return sourceFormId;
+    }
+
+    private void normalizeCopyReq(FormTemplateCopyReq req) {
+        req.setCategoryId(trimToNull(req.getCategoryId()));
+        req.setFormKey(trimToNull(req.getFormKey()));
+        req.setFormName(trimToNull(req.getFormName()));
+        req.setRemark(trimToNull(req.getRemark()));
+        requireText(req.getFormKey(), "表单编码不能为空");
+        requireText(req.getFormName(), "表单名称不能为空");
+    }
+
+    private void ensureTemplateKeyAvailable(String tenantId, String formKey) {
+        long formCount = baseMapper.selectCount(new QueryWrapper<FormDefinition>()
+                .eq("tenant_id", tenantId)
+                .eq("form_key", formKey)
+                .eq("delete_flag", 0));
+        if (formCount > 0) {
+            throw new IllegalArgumentException("表单编码已存在，请更换后再复制");
+        }
+    }
+
+    /**
+     * 表单模板复制产生新的表单编码和版本链，只复制设计 JSON，不继承发布状态和运行时引用。
+     */
+    private FormDefinition buildCopiedForm(FormDefinition source, FormTemplateCopyReq req,
+            String categoryId, RequestContext context) {
+        FormDefinition target = BeanUtil.copyProperties(source, FormDefinition.class);
+        target.setId(null);
+        target.setCategoryId(categoryId);
+        target.setFormKey(req.getFormKey());
+        target.setFormName(req.getFormName());
+        target.setVersion(1);
+        target.setStatus(WorkflowConstants.Status.DRAFT);
+        target.setPublishedTime(null);
+        target.setRemark(buildCopyRemark(req.getRemark(), "来源表单: " + source.getFormName() + "(" + source.getFormKey() + ")"));
+        EntityFillUtils.fillAuditFields(target, context, true);
+        return target;
+    }
+
+    private String buildCopyRemark(String userRemark, String sourceText) {
+        String remark = StringUtils.hasText(userRemark)
+                ? userRemark + "；复制来源：" + sourceText
+                : "复制来源：" + sourceText;
+        return remark.length() <= 500 ? remark : remark.substring(0, 500);
     }
 
     private Integer resolveNextVersion(String tenantId, String formKey) {

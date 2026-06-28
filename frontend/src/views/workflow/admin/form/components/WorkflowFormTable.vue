@@ -21,6 +21,7 @@ const emit = defineEmits<{
   add: [];
   change: [pag: any, filters: any, sorter: any];
   copyAsDraft: [record: WorkflowFormDefinitionInfo];
+  copyTemplate: [record: WorkflowFormDefinitionInfo];
   delete: [record: WorkflowFormDefinitionInfo];
   design: [record: WorkflowFormDefinitionInfo];
   edit: [record: WorkflowFormDefinitionInfo];

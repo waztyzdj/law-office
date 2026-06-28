@@ -1,9 +1,11 @@
 package com.lawoffice.workflow.controller;
 
+import com.lawoffice.framework.annotation.AutoLog;
 import com.lawoffice.framework.annotation.ModuleInfo;
 import com.lawoffice.framework.controller.BaseController;
 import com.lawoffice.framework.dto.BaseDTO;
 import com.lawoffice.framework.dto.BasePageDTO;
+import com.lawoffice.framework.enums.OperateType;
 import com.lawoffice.framework.result.BaseResult;
 import com.lawoffice.framework.req.BasePageReq;
 import com.lawoffice.framework.util.QueryWrapperBuilderUtils;
@@ -11,12 +13,14 @@ import com.lawoffice.framework.vo.PageVO;
 import com.lawoffice.system.annotation.RequiresPermission;
 import com.lawoffice.workflow.entity.FormDefinition;
 import com.lawoffice.workflow.req.FormDefinitionReq;
+import com.lawoffice.workflow.req.FormTemplateCopyReq;
 import com.lawoffice.workflow.service.IFormDefinitionService;
 import com.lawoffice.workflow.vo.FormDefinitionVO;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import jakarta.validation.Valid;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -81,5 +85,17 @@ public class FormDefinitionController extends BaseController<IFormDefinitionServ
         BaseDTO<FormDefinition> dto = new BaseDTO<>();
         initBaseDTO(dto, request, response);
         return baseService.copyAsDraft(req == null ? null : req.getId(), dto.getContext());
+    }
+
+    @PostMapping("/copy-template")
+    @Operation(summary = "复制表单模板")
+    @RequiresPermission("workflow:form:edit")
+    @AutoLog(value = "复制表单模板", operateType = OperateType.CUSTOM)
+    public BaseResult<FormDefinitionVO> copyTemplate(@Valid @RequestBody FormTemplateCopyReq req,
+            HttpServletRequest request,
+            HttpServletResponse response) {
+        BaseDTO<FormDefinition> dto = new BaseDTO<>();
+        initBaseDTO(dto, request, response);
+        return baseService.copyTemplate(req, dto.getContext());
     }
 }
