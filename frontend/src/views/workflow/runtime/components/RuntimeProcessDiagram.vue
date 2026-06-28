@@ -7,15 +7,18 @@ import type {
   RuntimeTaskInfo,
 } from '#/api/workflow';
 
-import { computed } from 'vue';
+import { computed, ref } from 'vue';
 
-import { Empty, Tag } from 'ant-design-vue';
+import { EyeOutlined } from '@ant-design/icons-vue';
+
+import { Button, Empty, Tag } from 'ant-design-vue';
 
 import {
   formatApprovalProgress,
   getStatusMeta,
   getWorkflowActionMeta,
 } from '../../components/status';
+import RuntimeBpmnDefinitionModal from './RuntimeBpmnDefinitionModal.vue';
 
 type DiagramNodeType =
   | 'endEvent'
@@ -71,6 +74,8 @@ const finishedStatuses = new Set(['approved', 'rejected', 'terminated', 'withdra
 
 const parsedDiagram = computed(() => parseBpmnXml(props.diagram?.bpmnXml));
 const viewNodes = computed(() => buildViewNodes());
+const bpmnDefinitionOpen = ref(false);
+const hasBpmnDefinition = computed(() => hasBpmnDiagramLayout(props.diagram?.bpmnXml));
 
 function buildViewNodes() {
   const parsed = parsedDiagram.value;
@@ -167,6 +172,14 @@ function parseBpmnXml(xml?: string): { edges: ParsedEdge[]; nodes: ParsedNode[] 
   } catch {
     return { edges: [], nodes: [] };
   }
+}
+
+function hasBpmnDiagramLayout(xml?: string) {
+  if (!xml?.trim()) {
+    return false;
+  }
+  return /<(?:\w+:)?BPMNDiagram\b/i.test(xml)
+    && /<(?:\w+:)?BPMNShape\b/i.test(xml);
 }
 
 function isSupportedNodeType(type: string): type is DiagramNodeType {
@@ -398,6 +411,18 @@ function getNodeTypeColor(type: DiagramNodeType) {
 <template>
   <div class="runtime-process-diagram">
     <div
+      v-if="hasBpmnDefinition"
+      class="runtime-process-diagram__toolbar"
+    >
+      <Button
+        type="primary"
+        @click="bpmnDefinitionOpen = true"
+      >
+        <EyeOutlined />
+        查看流程定义
+      </Button>
+    </div>
+    <div
       v-if="viewNodes.length"
       class="diagram-list"
     >
@@ -465,6 +490,11 @@ function getNodeTypeColor(type: DiagramNodeType) {
     >
       <Empty description="暂无流程图数据" />
     </div>
+    <RuntimeBpmnDefinitionModal
+      v-model:open="bpmnDefinitionOpen"
+      :detail="detail"
+      :diagram="diagram"
+    />
   </div>
 </template>
 
@@ -472,6 +502,12 @@ function getNodeTypeColor(type: DiagramNodeType) {
 .runtime-process-diagram {
   min-height: 0;
   padding: 8px 4px 0;
+}
+
+.runtime-process-diagram__toolbar {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 8px;
 }
 
 .diagram-list {
