@@ -5,7 +5,9 @@ import type {
   InstanceDetailInfo,
   RuntimeTaskInfo,
   StartFormInfo,
+  StartProcessResult,
   TaskFormInfo,
+  WorkflowAttachmentSource,
 } from '#/api/workflow';
 import type { UserInfo } from '#/api/system/user';
 import type { DrawerMode } from './runtimeTypes';
@@ -37,6 +39,7 @@ import { useRuntimeTaskActions } from './hooks/useRuntimeTaskActions';
 import RuntimeActionBar from './RuntimeActionBar.vue';
 import RuntimeApprovalComment from './RuntimeApprovalComment.vue';
 import RuntimeAssigneeModals from './RuntimeAssigneeModals.vue';
+import WorkflowAttachmentPanel from './WorkflowAttachmentPanel.vue';
 import RuntimeFormRenderer from './RuntimeFormRenderer.vue';
 import RuntimeSideTabs from './RuntimeSideTabs.vue';
 import { workflowActionTitleMap } from './runtimeTypes';
@@ -69,6 +72,8 @@ const manualCcSubmitting = ref(false);
 const runtimeNotice = ref('');
 const urgeSubmitting = ref(false);
 const withdrawSubmitting = ref(false);
+const attachmentPanelKey = ref(0);
+const attachmentPanelRef = ref<InstanceType<typeof WorkflowAttachmentPanel>>();
 let runtimeRenderFrameId: number | undefined;
 const actionPermissions = computed(() => taskForm.value?.actionPermissions);
 const returnNodeOptions = computed(() =>
@@ -126,6 +131,16 @@ const canUrge = computed(
 );
 const canWithdraw = computed(
   () => mode.value === 'started' && Boolean(detail.value?.processInstance?.canWithdraw),
+);
+const runtimeProcessInstanceId = computed(
+  () => detail.value?.processInstance?.id || taskForm.value?.processInstanceId,
+);
+const showAttachmentPanel = computed(
+  () => isStartMode.value || Boolean(runtimeProcessInstanceId.value),
+);
+const attachmentEditable = computed(() => isStartMode.value || isTodoMode.value);
+const runtimeAttachmentSource = computed<WorkflowAttachmentSource>(() =>
+  isStartMode.value || isStartDraftTask.value ? 'start' : 'task',
 );
 
 const {
@@ -199,6 +214,7 @@ const {
   updateActionField,
 } = useRuntimeTaskActions({
   actionTitle: actionModalTitle,
+  afterStartCreated: handleStartCreated,
   approvalComment,
   businessKey,
   collectFormDataJson,
@@ -264,6 +280,7 @@ function resetState(payload: DrawerPayload) {
   runtimeNotice.value = payload.notice ?? '';
   urgeSubmitting.value = false;
   withdrawSubmitting.value = false;
+  attachmentPanelKey.value += 1;
   resetRuntimeFormData(payload.process);
   resetAssigneeSelection();
   resetRuntimeActions();
@@ -389,6 +406,18 @@ async function handleManualCcConfirm() {
   }
 }
 
+async function handleStartCreated(result: StartProcessResult) {
+  const processInstanceId = result.processInstanceId;
+  if (!processInstanceId) {
+    return;
+  }
+  try {
+    await attachmentPanelRef.value?.bindPendingAttachments(processInstanceId);
+  } catch {
+    message.error('申请已创建，但附件绑定失败，请稍后在办理页重新上传');
+  }
+}
+
 function handleWithdraw() {
   const processInstanceId = detail.value?.processInstance?.id;
   if (!processInstanceId) {
@@ -480,11 +509,27 @@ defineExpose({
                 :schema-json="formSchemaJson"
               />
             </div>
+            <div
+              v-if="showAttachmentPanel || showApprovalComment"
+              class="runtime-form-fixed-panels"
+            >
+              <WorkflowAttachmentPanel
+                v-if="showAttachmentPanel"
+                :key="attachmentPanelKey"
+                ref="attachmentPanelRef"
+                :attachment-source="runtimeAttachmentSource"
+                :editable="attachmentEditable"
+                :node-id="taskForm?.nodeId"
+                :node-name="taskForm?.taskName"
+                :process-instance-id="runtimeProcessInstanceId"
+                :task-id="taskForm?.taskId"
+              />
 
-            <RuntimeApprovalComment
-              v-if="showApprovalComment"
-              v-model:value="approvalComment"
-            />
+              <RuntimeApprovalComment
+                v-if="showApprovalComment"
+                v-model:value="approvalComment"
+              />
+            </div>
           </section>
 
           <aside class="runtime-side-section">
@@ -606,6 +651,7 @@ defineExpose({
   flex-direction: column;
   height: 100%;
   min-height: 0;
+  overflow: hidden;
 }
 
 .runtime-notice {
@@ -664,6 +710,7 @@ defineExpose({
   display: flex;
   flex-direction: column;
   min-height: 0;
+  overflow: hidden;
   padding-right: 16px;
 }
 
@@ -671,6 +718,15 @@ defineExpose({
   flex: 1;
   min-height: 0;
   overflow: auto;
+}
+
+.runtime-form-fixed-panels {
+  display: flex;
+  flex: 0 0 auto;
+  flex-direction: column;
+  gap: 10px;
+  min-height: 0;
+  padding-top: 12px;
 }
 
 .runtime-side-section {

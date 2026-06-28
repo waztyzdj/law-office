@@ -15,6 +15,9 @@ public class AttachmentVO extends BaseVO {
     private String nodeName;
     private String fileId;
     private String fileRelationId;
+    private String fileName;
+    private String fileType;
+    private Long fileSize;
     private String attachmentSource;
     private String uploaderUserId;
     private String uploaderUsername;

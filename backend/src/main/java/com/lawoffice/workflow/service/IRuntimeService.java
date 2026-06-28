@@ -3,6 +3,7 @@ package com.lawoffice.workflow.service;
 import com.lawoffice.framework.dto.RequestContext;
 import com.lawoffice.framework.result.BaseResult;
 import com.lawoffice.framework.vo.PageVO;
+import com.lawoffice.system.vo.FileUploadVO;
 import com.lawoffice.workflow.req.AvailableProcessPageReq;
 import com.lawoffice.workflow.req.AssigneePreviewReq;
 import com.lawoffice.workflow.req.AttachmentBindReq;
@@ -26,6 +27,7 @@ import com.lawoffice.workflow.vo.StartedInstanceVO;
 import com.lawoffice.workflow.vo.TaskActionVO;
 import com.lawoffice.workflow.vo.TaskFormVO;
 
+import java.io.InputStream;
 import java.util.List;
 
 /**
@@ -276,6 +278,24 @@ public interface IRuntimeService {
      * @return 删除结果
      */
     BaseResult<Void> deleteAttachment(String attachmentId, RequestContext context);
+
+    /**
+     * 按审批附件ID获取可下载文件元数据。
+     *
+     * @param attachmentId 附件ID
+     * @param context 当前请求上下文
+     * @return 文件元数据
+     */
+    FileUploadVO requireAttachmentFile(String attachmentId, RequestContext context);
+
+    /**
+     * 按审批附件ID下载文件内容。
+     *
+     * @param attachmentId 附件ID
+     * @param context 当前请求上下文
+     * @return 文件内容流
+     */
+    InputStream downloadAttachmentContent(String attachmentId, RequestContext context);
 
     /**
      * 查询审批实例流程图数据。

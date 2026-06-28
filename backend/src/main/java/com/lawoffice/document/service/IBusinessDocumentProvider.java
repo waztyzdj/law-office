@@ -30,6 +30,24 @@ public interface IBusinessDocumentProvider {
     }
 
     /**
+     * 将业务数据 ID 转换为可选的上级分组 ID。默认不分组，业务文档仍按“模块/业务记录”两级展示。
+     */
+    default Map<String, String> resolveRecordGroupIds(
+            Collection<String> bizIds,
+            BusinessDocumentAccessContext context) {
+        return Collections.emptyMap();
+    }
+
+    /**
+     * 将业务分组 ID 转换为分组目录展示名称。
+     */
+    default Map<String, String> resolveGroupNames(
+            Collection<String> groupIds,
+            BusinessDocumentAccessContext context) {
+        return Collections.emptyMap();
+    }
+
+    /**
      * 判断当前用户是否有权限在业务文档中查看指定业务数据的附件。
      */
     boolean canAccess(String bizId, BusinessDocumentAccessContext context);

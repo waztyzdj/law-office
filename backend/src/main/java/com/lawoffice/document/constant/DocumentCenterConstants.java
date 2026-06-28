@@ -15,10 +15,12 @@ public final class DocumentCenterConstants {
     public static final String SHARED_BY_ME_STORE_TYPE = "shared_by_me";
     public static final String BUSINESS_VIEW_STORE_TYPE = "business_view";
     public static final String BUSINESS_MODULE_VIEW_STORE_TYPE = "business_module_view";
+    public static final String BUSINESS_GROUP_VIEW_STORE_TYPE = "business_group_view";
     public static final String BUSINESS_RECORD_VIEW_STORE_TYPE = "business_record_view";
 
     public static final String SHARED_OWNER_PREFIX = "so:";
     public static final String BUSINESS_MODULE_PREFIX = "bm:";
+    public static final String BUSINESS_GROUP_PREFIX = "bg:";
     public static final String BUSINESS_RECORD_PREFIX = "br:";
     public static final String PERSONAL_SHARED_RELATION_PREFIX = "document_shared:";
     public static final String PERSONAL_BUSINESS_RELATION_PREFIX = "document_business:";

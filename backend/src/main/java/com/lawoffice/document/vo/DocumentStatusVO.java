@@ -30,5 +30,9 @@ public class DocumentStatusVO {
 
     private String businessModuleName;
 
+    private String businessGroupId;
+
+    private String businessGroupName;
+
     private String businessRecordName;
 }

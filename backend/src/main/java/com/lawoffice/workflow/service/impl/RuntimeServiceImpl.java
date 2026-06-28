@@ -3,6 +3,7 @@ package com.lawoffice.workflow.service.impl;
 import com.lawoffice.framework.dto.RequestContext;
 import com.lawoffice.framework.result.BaseResult;
 import com.lawoffice.framework.vo.PageVO;
+import com.lawoffice.system.vo.FileUploadVO;
 import com.lawoffice.workflow.req.AvailableProcessPageReq;
 import com.lawoffice.workflow.req.AssigneePreviewReq;
 import com.lawoffice.workflow.req.AttachmentBindReq;
@@ -36,6 +37,7 @@ import com.lawoffice.workflow.vo.TaskActionVO;
 import com.lawoffice.workflow.vo.TaskFormVO;
 import org.springframework.stereotype.Service;
 
+import java.io.InputStream;
 import java.util.List;
 
 @Service
@@ -197,6 +199,16 @@ public class RuntimeServiceImpl implements IRuntimeService {
     @Override
     public BaseResult<Void> deleteAttachment(String attachmentId, RequestContext context) {
         return attachmentRuntimeService.delete(attachmentId, context);
+    }
+
+    @Override
+    public FileUploadVO requireAttachmentFile(String attachmentId, RequestContext context) {
+        return attachmentRuntimeService.requireFile(attachmentId, context);
+    }
+
+    @Override
+    public InputStream downloadAttachmentContent(String attachmentId, RequestContext context) {
+        return attachmentRuntimeService.downloadContent(attachmentId, context);
     }
 
     @Override

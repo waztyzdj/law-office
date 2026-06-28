@@ -6,6 +6,7 @@ import type {
   InstanceDetailInfo,
   SelectedAssigneeReq,
   StartProcessReq,
+  StartProcessResult,
   TaskActionReq,
   TaskActionResult,
   TaskFormInfo,
@@ -43,6 +44,7 @@ interface UseRuntimeTaskActionsOptions {
   collectFormDataJson: (validate: boolean) => Promise<string>;
   currentProcess: Ref<AvailableProcessInfo | undefined>;
   detail: Ref<InstanceDetailInfo | undefined>;
+  afterStartCreated?: (result: StartProcessResult) => Promise<void> | void;
   instanceTitle: Ref<string>;
   isStartDraftTask: Ref<boolean>;
   isStartMode: Ref<boolean>;
@@ -88,12 +90,13 @@ export function useRuntimeTaskActions(options: UseRuntimeTaskActionsOptions) {
     }
     saving.value = true;
     try {
-      await saveWorkflowStartDraft({
+      const result = await saveWorkflowStartDraft({
         businessKey: options.businessKey.value.trim() || undefined,
         formDataJson: await options.collectFormDataJson(false),
         instanceTitle: options.instanceTitle.value.trim(),
         processModelId: options.currentProcess.value.id,
       });
+      await options.afterStartCreated?.(result);
       message.success('已保存到我的待办');
       options.onSuccess();
       options.onClose();
@@ -125,7 +128,8 @@ export function useRuntimeTaskActions(options: UseRuntimeTaskActionsOptions) {
   }
 
   async function submitStartPayload(payload: StartProcessReq) {
-    await startWorkflowProcess(payload);
+    const result = await startWorkflowProcess(payload);
+    await options.afterStartCreated?.(result);
     message.success('申请已提交');
     options.onSuccess();
     options.onClose();

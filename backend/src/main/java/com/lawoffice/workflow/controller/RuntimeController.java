@@ -4,6 +4,8 @@ import com.lawoffice.framework.dto.RequestContext;
 import com.lawoffice.framework.result.BaseResult;
 import com.lawoffice.framework.util.RequestContextUtils;
 import com.lawoffice.framework.vo.PageVO;
+import com.lawoffice.system.vo.FileUploadVO;
+import com.lawoffice.util.HttpDownloadUtils;
 import com.lawoffice.workflow.req.AttachmentBindReq;
 import com.lawoffice.workflow.req.AssigneePreviewReq;
 import com.lawoffice.workflow.req.AvailableProcessPageReq;
@@ -37,12 +39,18 @@ import com.lawoffice.workflow.vo.TaskFormVO;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.io.IOException;
+import java.io.InputStream;
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 
 @RestController
@@ -264,11 +272,35 @@ public class RuntimeController {
         return runtimeService.deleteAttachment(req == null ? null : req.getId(), context);
     }
 
+    @GetMapping("/attachment/download/{attachmentId}")
+    @Operation(summary = "下载审批附件")
+    public void downloadAttachment(@PathVariable String attachmentId,
+            HttpServletRequest request,
+            HttpServletResponse response) throws IOException {
+        RequestContext context = RequestContextUtils.buildContext(request);
+        FileUploadVO file = runtimeService.requireAttachmentFile(attachmentId, context);
+        String fileName = HttpDownloadUtils.resolveDownloadFileName(file.getFileName());
+        response.setCharacterEncoding(StandardCharsets.UTF_8.name());
+        response.setContentType(resolveContentType(file.getFileType()));
+        response.setHeader("Content-Disposition", HttpDownloadUtils.buildContentDisposition(fileName));
+        response.setHeader("Access-Control-Expose-Headers", "Content-Disposition");
+        try (InputStream inputStream = runtimeService.downloadAttachmentContent(attachmentId, context)) {
+            inputStream.transferTo(response.getOutputStream());
+        }
+    }
+
     @PostMapping("/instance/diagram")
     @Operation(summary = "获取实例图谱")
     public BaseResult<InstanceDiagramVO> getInstanceDiagram(@RequestBody InstanceDiagramReq req,
             HttpServletRequest request) {
         RequestContext context = RequestContextUtils.buildContext(request);
         return runtimeService.getInstanceDiagram(req == null ? null : req.getId(), context);
+    }
+
+    private String resolveContentType(String fileType) {
+        if (fileType != null && fileType.contains("/")) {
+            return fileType;
+        }
+        return "application/octet-stream";
     }
 }

@@ -223,6 +223,13 @@ public final class WorkflowConstants {
         }
     }
 
+    public static final class BusinessDocument {
+        public static final String APPROVAL_BIZ_TYPE = "workflow_approval";
+
+        private BusinessDocument() {
+        }
+    }
+
     public static final class BpmnSecurityStatus {
         public static final String PASSED = "passed";
         public static final String FAILED = "failed";

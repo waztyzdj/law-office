@@ -2,9 +2,11 @@ package com.lawoffice.workflow.service;
 
 import com.lawoffice.framework.dto.RequestContext;
 import com.lawoffice.framework.result.BaseResult;
+import com.lawoffice.system.vo.FileUploadVO;
 import com.lawoffice.workflow.req.AttachmentBindReq;
 import com.lawoffice.workflow.vo.AttachmentVO;
 
+import java.io.InputStream;
 import java.util.List;
 
 /**
@@ -38,4 +40,22 @@ public interface IAttachmentRuntimeService {
      * @return 删除结果
      */
     BaseResult<Void> delete(String attachmentId, RequestContext context);
+
+    /**
+     * 按审批附件ID获取文件元数据，访问权按流程实例校验，而不是按文件上传人校验。
+     *
+     * @param attachmentId 审批附件ID
+     * @param context 请求上下文
+     * @return 文件元数据
+     */
+    FileUploadVO requireFile(String attachmentId, RequestContext context);
+
+    /**
+     * 按审批附件ID下载文件内容，访问权按流程实例校验。
+     *
+     * @param attachmentId 审批附件ID
+     * @param context 请求上下文
+     * @return 文件内容流
+     */
+    InputStream downloadContent(String attachmentId, RequestContext context);
 }

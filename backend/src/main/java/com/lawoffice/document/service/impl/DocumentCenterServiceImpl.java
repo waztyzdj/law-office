@@ -10,6 +10,7 @@ import com.lawoffice.framework.config.TenantContextHolder;
 import com.lawoffice.framework.service.impl.BaseServiceImpl;
 import com.lawoffice.framework.vo.PageVO;
 import com.lawoffice.document.dto.DocumentAccessContext;
+import com.lawoffice.document.dto.DocumentBusinessGroupNode;
 import com.lawoffice.document.dto.DocumentBusinessRecordNode;
 import com.lawoffice.document.dto.DocumentCopyTarget;
 import com.lawoffice.document.dto.DocumentSharedTargetContext;
@@ -922,10 +923,16 @@ public class DocumentCenterServiceImpl extends BaseServiceImpl<SysFilesMapper, S
         String parentId = trimToNull(pageReq.getParentId());
         if (StringUtils.hasText(parentId)) {
             if (documentVirtualNodeService.isBusinessModuleVirtualId(parentId)) {
-                return pageBusinessModuleRecords(
+                return pageBusinessModuleChildren(
                         context,
                         pageReq,
                         documentVirtualNodeService.parseBusinessModuleBizType(parentId));
+            }
+            if (documentVirtualNodeService.isBusinessGroupVirtualId(parentId)) {
+                return pageBusinessGroupRecords(
+                        context,
+                        pageReq,
+                        documentVirtualNodeService.parseBusinessGroupNode(parentId));
             }
             if (documentVirtualNodeService.isBusinessRecordVirtualId(parentId)) {
                 return pageBusinessRecordChildren(
@@ -956,9 +963,9 @@ public class DocumentCenterServiceImpl extends BaseServiceImpl<SysFilesMapper, S
     }
 
     /**
-     * 业务模块虚拟目录下只展示当前用户可访问的业务记录目录，记录名称由业务 Provider 批量解析。
+     * 业务模块虚拟目录下展示可选业务分组目录；未分组业务仍直接展示业务记录目录。
      */
-    private PageVO<DocumentFileVO> pageBusinessModuleRecords(
+    private PageVO<DocumentFileVO> pageBusinessModuleChildren(
             DocumentAccessContext context,
             DocumentPageReq pageReq,
             String bizType) {
@@ -971,17 +978,87 @@ public class DocumentCenterServiceImpl extends BaseServiceImpl<SysFilesMapper, S
                 .filter(StringUtils::hasText)
                 .distinct()
                 .toList();
-        Map<String, String> recordNames = documentVirtualNodeService.resolveBusinessRecordNames(
+        Map<String, String> groupIdsByBizId = documentVirtualNodeService.resolveBusinessRecordGroupIds(
                 bizType,
                 bizIds,
                 documentBusinessAccessService.toBusinessDocumentAccessContext(context));
-        List<SysFiles> records = bizIds.stream()
+        List<String> groupIds = bizIds.stream()
+                .map(groupIdsByBizId::get)
+                .filter(StringUtils::hasText)
+                .distinct()
+                .toList();
+        Map<String, String> groupNames = documentVirtualNodeService.resolveBusinessGroupNames(
+                bizType,
+                groupIds,
+                documentBusinessAccessService.toBusinessDocumentAccessContext(context));
+        List<SysFiles> groups = groupIds.stream()
+                .map(groupId -> documentFileViewService.buildBusinessVirtualFolder(
+                        context,
+                        documentVirtualNodeService.businessGroupId(bizType, groupId),
+                        groupNames.getOrDefault(groupId, groupId),
+                        BUSINESS_GROUP_VIEW_STORE_TYPE,
+                        documentVirtualNodeService.businessModuleId(bizType)))
+                .toList();
+        List<String> ungroupedBizIds = bizIds.stream()
+                .filter(bizId -> !StringUtils.hasText(groupIdsByBizId.get(bizId)))
+                .toList();
+        if (ungroupedBizIds.isEmpty()) {
+            return pageCombinedDocuments(context, pageReq, groups, Collections.emptyList());
+        }
+        Map<String, String> recordNames = documentVirtualNodeService.resolveBusinessRecordNames(
+                bizType,
+                ungroupedBizIds,
+                documentBusinessAccessService.toBusinessDocumentAccessContext(context));
+        List<SysFiles> records = ungroupedBizIds.stream()
                 .map(bizId -> documentFileViewService.buildBusinessVirtualFolder(
                         context,
                         documentVirtualNodeService.businessRecordId(bizType, bizId),
                         recordNames.getOrDefault(bizId, bizType + "-" + bizId),
                         BUSINESS_RECORD_VIEW_STORE_TYPE,
                         documentVirtualNodeService.businessModuleId(bizType)))
+                .toList();
+        List<SysFiles> children = new ArrayList<>(groups);
+        children.addAll(records);
+        return pageCombinedDocuments(context, pageReq, children, Collections.emptyList());
+    }
+
+    /**
+     * 业务分组虚拟目录下展示当前分组内的业务记录目录。
+     */
+    private PageVO<DocumentFileVO> pageBusinessGroupRecords(
+            DocumentAccessContext context,
+            DocumentPageReq pageReq,
+            DocumentBusinessGroupNode groupNode) {
+        if (groupNode == null
+                || !StringUtils.hasText(groupNode.bizType())
+                || !StringUtils.hasText(groupNode.groupId())) {
+            return pageCombinedDocuments(context, pageReq, Collections.emptyList(), Collections.emptyList());
+        }
+        List<String> bizIds = documentBusinessAccessService.findAccessibleBusinessRelations(context).stream()
+                .filter(relation -> Objects.equals(relation.getBizType(), groupNode.bizType()))
+                .map(SysFileRelation::getBizId)
+                .filter(StringUtils::hasText)
+                .distinct()
+                .toList();
+        Map<String, String> groupIdsByBizId = documentVirtualNodeService.resolveBusinessRecordGroupIds(
+                groupNode.bizType(),
+                bizIds,
+                documentBusinessAccessService.toBusinessDocumentAccessContext(context));
+        List<String> groupedBizIds = bizIds.stream()
+                .filter(bizId -> Objects.equals(groupNode.groupId(), groupIdsByBizId.get(bizId)))
+                .toList();
+        Map<String, String> recordNames = documentVirtualNodeService.resolveBusinessRecordNames(
+                groupNode.bizType(),
+                groupedBizIds,
+                documentBusinessAccessService.toBusinessDocumentAccessContext(context));
+        String groupParentId = documentVirtualNodeService.businessGroupId(groupNode.bizType(), groupNode.groupId());
+        List<SysFiles> records = groupedBizIds.stream()
+                .map(bizId -> documentFileViewService.buildBusinessVirtualFolder(
+                        context,
+                        documentVirtualNodeService.businessRecordId(groupNode.bizType(), bizId),
+                        recordNames.getOrDefault(bizId, groupNode.bizType() + "-" + bizId),
+                        BUSINESS_RECORD_VIEW_STORE_TYPE,
+                        groupParentId))
                 .toList();
         return pageCombinedDocuments(context, pageReq, records, Collections.emptyList());
     }

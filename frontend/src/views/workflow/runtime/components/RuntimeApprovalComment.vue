@@ -1,5 +1,13 @@
 <script setup lang="ts">
-import { Textarea } from 'ant-design-vue';
+import { ref } from 'vue';
+
+import {
+  DownOutlined,
+  EditOutlined,
+  RightOutlined,
+} from '@ant-design/icons-vue';
+
+import { Button, Textarea, Tooltip } from 'ant-design-vue';
 
 interface Props {
   value: string;
@@ -10,15 +18,43 @@ defineProps<Props>();
 const emit = defineEmits<{
   'update:value': [value: string];
 }>();
+
+const collapsed = ref(false);
+
+function toggleCollapsed() {
+  collapsed.value = !collapsed.value;
+}
 </script>
 
 <template>
   <div class="approval-comment-panel">
-    <label class="approval-comment-label">审批意见</label>
-    <div class="approval-comment-control">
+    <div class="approval-comment-header">
+      <button
+        class="approval-comment-title"
+        type="button"
+        @click="toggleCollapsed"
+      >
+        <EditOutlined />
+        <span>审批意见</span>
+      </button>
+      <Tooltip :title="collapsed ? '展开审批意见' : '折叠审批意见'">
+        <Button
+          class="approval-comment-collapse"
+          type="text"
+          @click="toggleCollapsed"
+        >
+          <RightOutlined v-if="collapsed" />
+          <DownOutlined v-else />
+        </Button>
+      </Tooltip>
+    </div>
+    <div
+      v-show="!collapsed"
+      class="approval-comment-control"
+    >
       <Textarea
         :maxlength="500"
-        :rows="4"
+        :rows="3"
         :value="value"
         placeholder="请输入审批意见"
         show-count
@@ -30,26 +66,43 @@ const emit = defineEmits<{
 
 <style scoped>
 .approval-comment-panel {
-  align-items: flex-start;
   border-top: 1px solid #f0f0f0;
   display: flex;
   flex: 0 0 auto;
-  gap: 12px;
-  margin-top: 16px;
-  padding-top: 14px;
+  flex-direction: column;
+  gap: 10px;
+  padding-top: 10px;
 }
 
-.approval-comment-label {
-  color: #1f2937;
-  flex: 0 0 92px;
-  font-size: 14px;
-  font-weight: 500;
-  line-height: 32px;
-  text-align: right;
+.approval-comment-header {
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
+}
+
+.approval-comment-title {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  color: hsl(var(--foreground));
+  cursor: pointer;
+  display: flex;
+  font-size: 15px;
+  font-weight: 600;
+  gap: 6px;
+  min-width: 0;
+  padding: 0;
+}
+
+.approval-comment-collapse {
+  align-items: center;
+  display: inline-flex;
+  height: 32px;
+  justify-content: center;
+  width: 32px;
 }
 
 .approval-comment-control {
-  flex: 1;
   min-width: 0;
 }
 </style>

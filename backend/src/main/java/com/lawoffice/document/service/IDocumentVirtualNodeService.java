@@ -1,6 +1,7 @@
 package com.lawoffice.document.service;
 
 import com.lawoffice.document.dto.BusinessDocumentAccessContext;
+import com.lawoffice.document.dto.DocumentBusinessGroupNode;
 import com.lawoffice.document.dto.DocumentBusinessRecordNode;
 
 import java.util.Collection;
@@ -44,6 +45,15 @@ public interface IDocumentVirtualNodeService {
     String businessModuleId(String bizType);
 
     /**
+     * 构造业务分组虚拟目录 ID。
+     *
+     * @param bizType 业务类型
+     * @param groupId 分组 ID
+     * @return 虚拟目录 ID
+     */
+    String businessGroupId(String bizType, String groupId);
+
+    /**
      * 构造业务记录虚拟目录 ID。
      *
      * @param bizType 业务类型
@@ -59,6 +69,14 @@ public interface IDocumentVirtualNodeService {
      * @return 是否业务模块虚拟目录
      */
     boolean isBusinessModuleVirtualId(String id);
+
+    /**
+     * 判断是否业务分组虚拟目录 ID。
+     *
+     * @param id 节点 ID
+     * @return 是否业务分组虚拟目录
+     */
+    boolean isBusinessGroupVirtualId(String id);
 
     /**
      * 判断是否业务记录虚拟目录 ID。
@@ -77,6 +95,14 @@ public interface IDocumentVirtualNodeService {
     String parseBusinessModuleBizType(String id);
 
     /**
+     * 从业务分组虚拟目录 ID 中解析业务分组节点。
+     *
+     * @param id 节点 ID
+     * @return 业务分组节点，非法格式返回 null
+     */
+    DocumentBusinessGroupNode parseBusinessGroupNode(String id);
+
+    /**
      * 从业务记录虚拟目录 ID 中解析业务节点。
      *
      * @param id 节点 ID
@@ -91,6 +117,32 @@ public interface IDocumentVirtualNodeService {
      * @return 业务模块展示名称
      */
     String resolveBusinessModuleName(String bizType);
+
+    /**
+     * 批量解析业务分组展示名称。
+     *
+     * @param bizType 业务类型
+     * @param groupIds 分组 ID 集合
+     * @param context 业务访问上下文
+     * @return 分组 ID 到展示名称的映射
+     */
+    Map<String, String> resolveBusinessGroupNames(
+            String bizType,
+            Collection<String> groupIds,
+            BusinessDocumentAccessContext context);
+
+    /**
+     * 批量解析业务记录所属分组。
+     *
+     * @param bizType 业务类型
+     * @param bizIds 业务数据 ID 集合
+     * @param context 业务访问上下文
+     * @return 业务数据 ID 到分组 ID 的映射
+     */
+    Map<String, String> resolveBusinessRecordGroupIds(
+            String bizType,
+            Collection<String> bizIds,
+            BusinessDocumentAccessContext context);
 
     /**
      * 批量解析业务记录展示名称。

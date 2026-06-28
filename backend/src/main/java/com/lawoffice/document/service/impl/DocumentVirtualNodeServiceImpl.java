@@ -3,6 +3,7 @@ package com.lawoffice.document.service.impl;
 import static com.lawoffice.document.constant.DocumentCenterConstants.*;
 
 import com.lawoffice.document.dto.BusinessDocumentAccessContext;
+import com.lawoffice.document.dto.DocumentBusinessGroupNode;
 import com.lawoffice.document.dto.DocumentBusinessRecordNode;
 import com.lawoffice.document.service.IBusinessDocumentProvider;
 import com.lawoffice.document.service.IDocumentVirtualNodeService;
@@ -47,6 +48,11 @@ public class DocumentVirtualNodeServiceImpl implements IDocumentVirtualNodeServi
     }
 
     @Override
+    public String businessGroupId(String bizType, String groupId) {
+        return BUSINESS_GROUP_PREFIX + bizType + ":" + groupId;
+    }
+
+    @Override
     public String businessRecordId(String bizType, String bizId) {
         return BUSINESS_RECORD_PREFIX + bizType + ":" + bizId;
     }
@@ -54,6 +60,11 @@ public class DocumentVirtualNodeServiceImpl implements IDocumentVirtualNodeServi
     @Override
     public boolean isBusinessModuleVirtualId(String id) {
         return StringUtils.hasText(id) && id.startsWith(BUSINESS_MODULE_PREFIX);
+    }
+
+    @Override
+    public boolean isBusinessGroupVirtualId(String id) {
+        return StringUtils.hasText(id) && id.startsWith(BUSINESS_GROUP_PREFIX);
     }
 
     @Override
@@ -67,6 +78,19 @@ public class DocumentVirtualNodeServiceImpl implements IDocumentVirtualNodeServi
             return null;
         }
         return id.substring(BUSINESS_MODULE_PREFIX.length());
+    }
+
+    @Override
+    public DocumentBusinessGroupNode parseBusinessGroupNode(String id) {
+        if (!isBusinessGroupVirtualId(id)) {
+            return null;
+        }
+        String value = id.substring(BUSINESS_GROUP_PREFIX.length());
+        String[] parts = value.split(":", 2);
+        if (parts.length != 2) {
+            return null;
+        }
+        return new DocumentBusinessGroupNode(parts[0], parts[1]);
     }
 
     @Override
@@ -86,6 +110,44 @@ public class DocumentVirtualNodeServiceImpl implements IDocumentVirtualNodeServi
     public String resolveBusinessModuleName(String bizType) {
         IBusinessDocumentProvider provider = findBusinessDocumentProvider(bizType);
         return provider == null ? bizType : provider.moduleName();
+    }
+
+    @Override
+    public Map<String, String> resolveBusinessGroupNames(
+            String bizType,
+            Collection<String> groupIds,
+            BusinessDocumentAccessContext context) {
+        if (groupIds.isEmpty()) {
+            return Collections.emptyMap();
+        }
+        IBusinessDocumentProvider provider = findBusinessDocumentProvider(bizType);
+        if (provider != null) {
+            Map<String, String> groupNames = provider.resolveGroupNames(groupIds, context);
+            if (groupNames != null && !groupNames.isEmpty()) {
+                return groupNames;
+            }
+        }
+        return groupIds.stream()
+                .collect(Collectors.toMap(
+                        groupId -> groupId,
+                        groupId -> groupId,
+                        (left, right) -> left));
+    }
+
+    @Override
+    public Map<String, String> resolveBusinessRecordGroupIds(
+            String bizType,
+            Collection<String> bizIds,
+            BusinessDocumentAccessContext context) {
+        if (bizIds.isEmpty()) {
+            return Collections.emptyMap();
+        }
+        IBusinessDocumentProvider provider = findBusinessDocumentProvider(bizType);
+        if (provider == null) {
+            return Collections.emptyMap();
+        }
+        Map<String, String> groupIds = provider.resolveRecordGroupIds(bizIds, context);
+        return groupIds == null ? Collections.emptyMap() : groupIds;
     }
 
     @Override

@@ -237,6 +237,39 @@ export interface WorkflowCcSendReq {
   receiverUserIds?: string[];
 }
 
+export type WorkflowAttachmentSource = 'comment' | 'start' | 'task';
+
+export interface WorkflowAttachmentInfo {
+  attachmentSource?: WorkflowAttachmentSource | string;
+  createTime?: string;
+  fileId?: string;
+  fileName?: string;
+  fileRelationId?: string;
+  fileSize?: number;
+  fileType?: string;
+  id?: string;
+  nodeId?: string;
+  nodeName?: string;
+  processInstanceId?: string;
+  remark?: string;
+  sortOrder?: number;
+  status?: string;
+  taskId?: string;
+  uploaderRealname?: string;
+  uploaderUserId?: string;
+  uploaderUsername?: string;
+}
+
+export interface WorkflowAttachmentBindReq {
+  attachmentSource?: WorkflowAttachmentSource;
+  fileId?: string;
+  nodeId?: string;
+  nodeName?: string;
+  processInstanceId?: string;
+  remark?: string;
+  taskId?: string;
+}
+
 export interface StartFormInfo {
   assigneeSelectNodes?: AssigneeSelectNodeInfo[];
   fieldPermissions?: RuntimeFieldPermissionInfo[];
@@ -544,6 +577,16 @@ export const markWorkflowCcRead = (id: string) =>
   requestClient.post<WorkflowCcRecordInfo>('/workflow/cc/read', { id });
 export const sendWorkflowCc = (params: WorkflowCcSendReq) =>
   requestClient.post<WorkflowCcRecordInfo[]>('/workflow/cc/send', params);
+export const listWorkflowAttachments = (processInstanceId: string) =>
+  requestClient.post<WorkflowAttachmentInfo[]>('/workflow/attachment/list', {
+    id: processInstanceId,
+  });
+export const bindWorkflowAttachment = (data: WorkflowAttachmentBindReq) =>
+  requestClient.post<WorkflowAttachmentInfo>('/workflow/attachment/bind', data);
+export const deleteWorkflowAttachment = (id: string) =>
+  requestClient.post<void>('/workflow/attachment/delete', { id });
+export const downloadWorkflowAttachment = (id: string) =>
+  requestClient.download<Blob>(`/workflow/attachment/download/${id}`);
 export const getWorkflowInstanceDetail = (id: string) =>
   requestClient.post<InstanceDetailInfo>('/workflow/instance/detail', { id });
 export const listWorkflowInstanceRecords = (id: string) =>

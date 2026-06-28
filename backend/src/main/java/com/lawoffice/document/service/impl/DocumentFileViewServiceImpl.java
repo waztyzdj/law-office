@@ -1,6 +1,7 @@
 package com.lawoffice.document.service.impl;
 
 import static com.lawoffice.document.constant.DocumentCenterConstants.BUSINESS_MODULE_VIEW_STORE_TYPE;
+import static com.lawoffice.document.constant.DocumentCenterConstants.BUSINESS_GROUP_VIEW_STORE_TYPE;
 import static com.lawoffice.document.constant.DocumentCenterConstants.BUSINESS_RECORD_VIEW_STORE_TYPE;
 import static com.lawoffice.document.constant.DocumentCenterConstants.SHARED_OWNER_VIEW_STORE_TYPE;
 import static com.lawoffice.system.constant.SysFileConstants.FLAG_NO;
@@ -9,6 +10,7 @@ import static com.lawoffice.system.constant.SysFileConstants.FOLDER_TYPE;
 
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.lawoffice.document.dto.DocumentAccessContext;
+import com.lawoffice.document.dto.DocumentBusinessGroupNode;
 import com.lawoffice.document.dto.DocumentBusinessRecordNode;
 import com.lawoffice.system.entity.SysFileRelation;
 import com.lawoffice.system.entity.SysFiles;
@@ -118,7 +120,7 @@ public class DocumentFileViewServiceImpl implements IDocumentFileViewService {
         for (DocumentFileVO folder : folders) {
             folder.setHasChild(parentIdsWithChildren.contains(folder.getId())
                     || isSharedOwnerVirtualFolder(folder)
-                    || hasBusinessVirtualFolderChildren(folder, businessRelations));
+                    || hasBusinessVirtualFolderChildren(folder, businessRelations, context));
         }
     }
 
@@ -181,6 +183,20 @@ public class DocumentFileViewServiceImpl implements IDocumentFileViewService {
             String bizType = documentVirtualNodeService.parseBusinessModuleBizType(file.getId());
             status.setBusinessBizType(bizType);
             status.setBusinessModuleName(documentVirtualNodeService.resolveBusinessModuleName(bizType));
+            return;
+        }
+        if (BUSINESS_GROUP_VIEW_STORE_TYPE.equals(file.getStoreType())) {
+            DocumentBusinessGroupNode groupNode = documentVirtualNodeService.parseBusinessGroupNode(file.getId());
+            if (groupNode == null) {
+                return;
+            }
+            status.setBusinessBizType(groupNode.bizType());
+            status.setBusinessGroupId(groupNode.groupId());
+            status.setBusinessModuleName(documentVirtualNodeService.resolveBusinessModuleName(groupNode.bizType()));
+            status.setBusinessGroupName(documentVirtualNodeService.resolveBusinessGroupNames(
+                    groupNode.bizType(),
+                    List.of(groupNode.groupId()),
+                    documentBusinessAccessService.toBusinessDocumentAccessContext(context)).get(groupNode.groupId()));
             return;
         }
         if (BUSINESS_RECORD_VIEW_STORE_TYPE.equals(file.getStoreType())) {
@@ -306,6 +322,7 @@ public class DocumentFileViewServiceImpl implements IDocumentFileViewService {
 
     private boolean isBusinessVirtualFolder(DocumentFileVO folder) {
         return BUSINESS_MODULE_VIEW_STORE_TYPE.equals(folder.getStoreType())
+                || BUSINESS_GROUP_VIEW_STORE_TYPE.equals(folder.getStoreType())
                 || BUSINESS_RECORD_VIEW_STORE_TYPE.equals(folder.getStoreType());
     }
 
@@ -314,13 +331,32 @@ public class DocumentFileViewServiceImpl implements IDocumentFileViewService {
      */
     private boolean hasBusinessVirtualFolderChildren(
             DocumentFileVO folder,
-            List<SysFileRelation> businessRelations) {
+            List<SysFileRelation> businessRelations,
+            DocumentAccessContext context) {
         String folderId = folder.getId();
         if (BUSINESS_MODULE_VIEW_STORE_TYPE.equals(folder.getStoreType())) {
             String bizType = documentVirtualNodeService.parseBusinessModuleBizType(folderId);
             return businessRelations.stream()
                     .anyMatch(relation -> Objects.equals(relation.getBizType(), bizType)
                             && StringUtils.hasText(relation.getBizId()));
+        }
+        if (BUSINESS_GROUP_VIEW_STORE_TYPE.equals(folder.getStoreType())) {
+            DocumentBusinessGroupNode groupNode = documentVirtualNodeService.parseBusinessGroupNode(folderId);
+            if (groupNode == null) {
+                return false;
+            }
+            List<String> bizIds = businessRelations.stream()
+                    .filter(relation -> Objects.equals(relation.getBizType(), groupNode.bizType()))
+                    .map(SysFileRelation::getBizId)
+                    .filter(StringUtils::hasText)
+                    .distinct()
+                    .toList();
+            Map<String, String> groupIdsByBizId = documentVirtualNodeService.resolveBusinessRecordGroupIds(
+                    groupNode.bizType(),
+                    bizIds,
+                    documentBusinessAccessService.toBusinessDocumentAccessContext(context));
+            return bizIds.stream()
+                    .anyMatch(bizId -> Objects.equals(groupNode.groupId(), groupIdsByBizId.get(bizId)));
         }
         if (BUSINESS_RECORD_VIEW_STORE_TYPE.equals(folder.getStoreType())) {
             return false;
