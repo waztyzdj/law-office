@@ -8,6 +8,7 @@ interface VersionActionRecord {
 
 interface VersionActionEmits<T extends VersionActionRecord> {
   copyAsDraft: (record: T) => void;
+  copyTemplate?: (record: T) => void;
   delete: (record: T) => void;
   design: (record: T) => void;
   edit: (record: T) => void;
@@ -45,10 +46,13 @@ export function buildVersionActionLinks<T extends VersionActionRecord>(
     );
   }
 
-  actions.push(
-    ...extraActions,
-    h('a', { onClick: () => emits.history(record) }, '历史版本'),
-  );
+  actions.push(...extraActions);
+  if (emits.copyTemplate) {
+    actions.push(
+      h('a', { onClick: () => emits.copyTemplate?.(record) }, '复制模板'),
+    );
+  }
+  actions.push(h('a', { onClick: () => emits.history(record) }, '历史版本'));
   if (record.status !== 'draft') {
     actions.push(
       h('a', { onClick: () => emits.copyAsDraft(record) }, '新建版本'),

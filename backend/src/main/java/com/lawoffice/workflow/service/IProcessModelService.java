@@ -6,6 +6,7 @@ import com.lawoffice.framework.dto.RequestContext;
 import com.lawoffice.framework.result.BaseResult;
 import com.lawoffice.framework.vo.PageVO;
 import com.lawoffice.workflow.entity.ProcessModel;
+import com.lawoffice.workflow.req.ProcessTemplateCopyReq;
 import com.lawoffice.workflow.vo.ProcessModelVO;
 
 import java.util.List;
@@ -49,4 +50,15 @@ public interface IProcessModelService extends IBaseService<ProcessModel, Process
      * @return 新草稿版本
      */
     BaseResult<ProcessModelVO> copyAsDraft(String id, RequestContext context);
+
+    /**
+     * 基于已有流程复制为新的审批模板。新流程为独立草稿，版本号从 1 开始；
+     * 只复制定义侧配置，不复制运行时实例、任务、记录、附件和消息。
+     * 绑定来源表单时复制字段权限，改绑其他表单时跳过字段权限，避免字段不匹配。
+     *
+     * @param req 复制模板请求，包含来源流程、新流程编码名称以及绑定表单
+     * @param context 当前请求上下文
+     * @return 新复制出的流程模板草稿
+     */
+    BaseResult<ProcessModelVO> copyTemplate(ProcessTemplateCopyReq req, RequestContext context);
 }

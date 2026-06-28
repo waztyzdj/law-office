@@ -134,6 +134,7 @@ export function getWorkflowProcessColumns(
             record,
             {
               copyAsDraft: (item) => emit('copyAsDraft', item),
+              copyTemplate: (item) => emit('copyTemplate', item),
               delete: (item) => emit('delete', item),
               design: (item) => emit('design', item),
               edit: (item) => emit('edit', item),
@@ -153,7 +154,7 @@ export function getWorkflowProcessColumns(
         },
         fixed: 'right' as const,
         hasFilter: false,
-        width: 460,
+        width: 540,
       },
       title: '操作',
     },
@@ -164,6 +165,6 @@ export function getWorkflowProcessColumns(
     filterState,
     emit,
     pagination,
-    { minTableWidth: 1850, tableKey: 'workflow_process' },
+    { minTableWidth: 1930, tableKey: 'workflow_process' },
   );
 }

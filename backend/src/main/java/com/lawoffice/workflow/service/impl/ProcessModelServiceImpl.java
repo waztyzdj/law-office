@@ -25,6 +25,7 @@ import com.lawoffice.workflow.mapper.ProcessInstanceMapper;
 import com.lawoffice.workflow.mapper.ProcessModelMapper;
 import com.lawoffice.workflow.mapper.ProcessNodeConfigMapper;
 import com.lawoffice.workflow.mapper.ProcessStartPermissionMapper;
+import com.lawoffice.workflow.req.ProcessTemplateCopyReq;
 import com.lawoffice.workflow.service.IBpmnSecurityService;
 import com.lawoffice.workflow.service.IFlowableService;
 import com.lawoffice.workflow.service.IProcessModelService;
@@ -266,6 +267,37 @@ public class ProcessModelServiceImpl extends AbstractWorkflowConfigServiceImpl<P
         }
     }
 
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public BaseResult<ProcessModelVO> copyTemplate(ProcessTemplateCopyReq req, RequestContext context) {
+        try {
+            String tenantId = resolveTenantId(null, context);
+            String sourceModelId = resolveSourceModelId(req);
+            ProcessModel sourceModel = requireCurrent(sourceModelId, tenantId, "来源流程模型不存在");
+            requireActiveById(formDefinitionMapper, sourceModel.getFormDefinitionId(), tenantId, "来源表单定义不存在");
+
+            normalizeCopyReq(req);
+            String targetCategoryId = StringUtils.hasText(req.getCategoryId()) ? req.getCategoryId() : sourceModel.getCategoryId();
+            requireActiveById(processCategoryMapper, targetCategoryId, tenantId, "流程分类不存在");
+            FormDefinition targetForm = requireActiveById(formDefinitionMapper, req.getFormDefinitionId(), tenantId, "绑定表单不存在");
+            if (!WorkflowConstants.Status.PUBLISHED.equals(targetForm.getStatus())) {
+                throw new IllegalArgumentException("复制模板必须绑定已发布表单版本");
+            }
+            ensureTemplateKeyAvailable(tenantId, req.getProcessKey());
+
+            ProcessModel targetModel = buildCopiedProcess(sourceModel, req, targetCategoryId, targetForm.getId(), context);
+            baseMapper.insert(targetModel);
+            copyChildren(sourceModel.getId(), targetModel.getId(), tenantId, context,
+                    sourceModel.getFormDefinitionId().equals(targetForm.getId()));
+
+            return BaseResult.success(BeanUtil.toBean(targetModel, ProcessModelVO.class));
+        } catch (IllegalArgumentException e) {
+            return BaseResult.error(400, e.getMessage());
+        } catch (Exception e) {
+            return BaseResult.error("复制审批模板失败: " + e.getMessage());
+        }
+    }
+
     /**
      * 同一流程编码只保留最新发布版本可发起，旧发布版本转为禁用，历史实例继续引用原版本快照。
      */
@@ -306,6 +338,71 @@ public class ProcessModelServiceImpl extends AbstractWorkflowConfigServiceImpl<P
         if (model.getVersion() == null) {
             model.setVersion(resolveNextVersion(model.getTenantId(), model.getProcessKey()));
         }
+    }
+
+    private String resolveSourceModelId(ProcessTemplateCopyReq req) {
+        if (req == null) {
+            throw new IllegalArgumentException("复制模板请求不能为空");
+        }
+        String sourceModelId = trimToNull(req.getSourceProcessModelId());
+        if (!StringUtils.hasText(sourceModelId)) {
+            sourceModelId = trimToNull(req.getId());
+        }
+        if (!StringUtils.hasText(sourceModelId)) {
+            throw new IllegalArgumentException("来源流程模型不能为空");
+        }
+        return sourceModelId;
+    }
+
+    private void normalizeCopyReq(ProcessTemplateCopyReq req) {
+        req.setCategoryId(trimToNull(req.getCategoryId()));
+        req.setFormDefinitionId(trimToNull(req.getFormDefinitionId()));
+        req.setProcessKey(trimToNull(req.getProcessKey()));
+        req.setProcessName(trimToNull(req.getProcessName()));
+        req.setRemark(trimToNull(req.getRemark()));
+        requireText(req.getFormDefinitionId(), "绑定表单不能为空");
+        requireText(req.getProcessKey(), "流程编码不能为空");
+        requireText(req.getProcessName(), "流程名称不能为空");
+    }
+
+    private void ensureTemplateKeyAvailable(String tenantId, String processKey) {
+        long processCount = baseMapper.selectCount(new QueryWrapper<ProcessModel>()
+                .eq("tenant_id", tenantId)
+                .eq("process_key", processKey)
+                .eq("delete_flag", 0));
+        if (processCount > 0) {
+            throw new IllegalArgumentException("流程编码已存在，请更换后再复制");
+        }
+    }
+
+    /**
+     * 模板复制只复制定义内容，发布状态和 Flowable 部署标识必须清空，避免新模板误用来源流程运行态。
+     */
+    private ProcessModel buildCopiedProcess(ProcessModel sourceModel, ProcessTemplateCopyReq req,
+            String categoryId, String formDefinitionId, RequestContext context) {
+        ProcessModel target = BeanUtil.copyProperties(sourceModel, ProcessModel.class);
+        target.setId(null);
+        target.setCategoryId(categoryId);
+        target.setFormDefinitionId(formDefinitionId);
+        target.setProcessKey(req.getProcessKey());
+        target.setProcessName(req.getProcessName());
+        target.setVersion(1);
+        target.setStatus(WorkflowConstants.Status.DRAFT);
+        target.setPublishedTime(null);
+        target.setFlowableDeploymentId(null);
+        target.setFlowableProcessDefinitionId(null);
+        target.setBpmnSecurityStatus(null);
+        target.setBpmnSecurityMessage(null);
+        target.setRemark(buildCopyRemark(req.getRemark(), "来源流程: " + sourceModel.getProcessName() + "(" + sourceModel.getProcessKey() + ")"));
+        EntityFillUtils.fillAuditFields(target, context, true);
+        return target;
+    }
+
+    private String buildCopyRemark(String userRemark, String sourceText) {
+        String remark = StringUtils.hasText(userRemark)
+                ? userRemark + "；复制来源：" + sourceText
+                : "复制来源：" + sourceText;
+        return remark.length() <= 500 ? remark : remark.substring(0, 500);
     }
 
     private void validateBeforePublish(ProcessModel model) {
@@ -619,8 +716,15 @@ public class ProcessModelServiceImpl extends AbstractWorkflowConfigServiceImpl<P
     }
 
     private void copyChildren(String sourceModelId, String targetModelId, String tenantId, RequestContext context) {
+        copyChildren(sourceModelId, targetModelId, tenantId, context, true);
+    }
+
+    private void copyChildren(String sourceModelId, String targetModelId, String tenantId,
+            RequestContext context, boolean copyFieldPermissions) {
         copyNodeConfigs(sourceModelId, targetModelId, tenantId, context);
-        copyFieldPermissions(sourceModelId, targetModelId, tenantId, context);
+        if (copyFieldPermissions) {
+            copyFieldPermissions(sourceModelId, targetModelId, tenantId, context);
+        }
         copyStartPermissions(sourceModelId, targetModelId, tenantId, context);
     }
 

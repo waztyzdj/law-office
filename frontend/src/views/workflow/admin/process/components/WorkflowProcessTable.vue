@@ -24,6 +24,7 @@ const emit = defineEmits<{
   addSimple: [];
   change: [pag: any, filters: any, sorter: any];
   copyAsDraft: [record: WorkflowProcessModelInfo];
+  copyTemplate: [record: WorkflowProcessModelInfo];
   delete: [record: WorkflowProcessModelInfo];
   design: [record: WorkflowProcessModelInfo];
   edit: [record: WorkflowProcessModelInfo];

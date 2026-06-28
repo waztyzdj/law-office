@@ -8,6 +8,7 @@ import type { WorkflowProcessModelInfo } from '#/api/workflow';
 import WorkflowFieldPermissionDrawer from './components/WorkflowFieldPermissionDrawer.vue';
 import WorkflowProcessHistoryDrawer from './components/WorkflowProcessHistoryDrawer.vue';
 import WorkflowProcessTable from './components/WorkflowProcessTable.vue';
+import WorkflowProcessCopyTemplateDrawer from './components/WorkflowProcessCopyTemplateDrawer.vue';
 import BpmnProcessDesignerDrawer from './components/BpmnProcessDesignerDrawer.vue';
 import SimpleProcessDesignerDrawer from './components/SimpleProcessDesignerDrawer.vue';
 import WorkflowProcessDrawer from './components/WorkflowProcessDrawer.vue';
@@ -29,6 +30,8 @@ const {
 } = useWorkflowProcessTable();
 
 const processDrawerRef = ref<InstanceType<typeof WorkflowProcessDrawer>>();
+const copyTemplateDrawerRef =
+  ref<InstanceType<typeof WorkflowProcessCopyTemplateDrawer>>();
 const designerDrawerRef = ref<InstanceType<typeof SimpleProcessDesignerDrawer>>();
 const bpmnDesignerDrawerRef = ref<InstanceType<typeof BpmnProcessDesignerDrawer>>();
 const fieldPermissionDrawerRef =
@@ -80,6 +83,10 @@ function handleHistory(record: WorkflowProcessModelInfo) {
   historyDrawerRef.value?.open(record);
 }
 
+function handleCopyTemplate(record: WorkflowProcessModelInfo) {
+  copyTemplateDrawerRef.value?.open({ record });
+}
+
 onMounted(handleRefresh);
 </script>
 
@@ -95,6 +102,7 @@ onMounted(handleRefresh);
       @add-simple="handleAddSimple"
       @change="handleTableChange"
       @copy-as-draft="handleCopyAsDraft"
+      @copy-template="handleCopyTemplate"
       @delete="handleDelete"
       @design="handleDesign"
       @edit="handleEdit"
@@ -107,6 +115,10 @@ onMounted(handleRefresh);
 
     <WorkflowProcessDrawer
       ref="processDrawerRef"
+      @success="handleRefresh"
+    />
+    <WorkflowProcessCopyTemplateDrawer
+      ref="copyTemplateDrawerRef"
       @success="handleRefresh"
     />
     <BpmnProcessDesignerDrawer

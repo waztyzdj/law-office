@@ -61,6 +61,15 @@ export interface WorkflowProcessPageReq extends BasePageReq {
   status?: string;
 }
 
+export interface WorkflowProcessTemplateCopyReq {
+  categoryId?: string;
+  formDefinitionId?: string;
+  processKey?: string;
+  processName?: string;
+  remark?: string;
+  sourceProcessModelId?: string;
+}
+
 export interface WorkflowProcessNodeConfigInfo {
   id?: string;
   allowAddSign?: number;
@@ -546,6 +555,13 @@ export const copyWorkflowProcessAsDraft = (id: string) =>
   requestClient.post<WorkflowProcessModelInfo>(
     '/workflow/admin/process/copy-as-draft',
     { id },
+  );
+export const copyWorkflowProcessTemplate = (
+  data: WorkflowProcessTemplateCopyReq,
+) =>
+  requestClient.post<WorkflowProcessModelInfo>(
+    '/workflow/admin/process/copy-template',
+    data,
   );
 export const listWorkflowProcessHistory = (id: string) =>
   requestClient.post<WorkflowProcessModelInfo[]>(
