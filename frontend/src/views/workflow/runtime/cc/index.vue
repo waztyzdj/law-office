@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue';
+import { onMounted, ref, watch } from 'vue';
 import { useRoute } from 'vue-router';
 
 import type { WorkflowCcRecordInfo } from '#/api/workflow';
@@ -33,17 +33,34 @@ async function handleDetail(record: WorkflowCcRecordInfo) {
   });
 }
 
-onMounted(async () => {
-  await loadData();
-  const instanceId = typeof route.query.instanceId === 'string' ? route.query.instanceId : '';
+function getRouteQueryValue(value: unknown) {
+  return typeof value === 'string' ? value : '';
+}
+
+async function openDetailFromRouteQuery() {
+  const instanceId = getRouteQueryValue(route.query.instanceId);
   if (!instanceId) {
     return;
   }
   const matched = records.value.find((record) => record.processInstanceId === instanceId);
   if (matched) {
     await handleDetail(matched);
+    return;
   }
+  await drawerRef.value?.open({ instanceId, mode: 'detail' });
+}
+
+onMounted(async () => {
+  await loadData();
+  await openDetailFromRouteQuery();
 });
+
+watch(
+  () => route.query.instanceId,
+  async () => {
+    await openDetailFromRouteQuery();
+  },
+);
 </script>
 
 <template>

@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue';
+import { onMounted, ref, watch } from 'vue';
+import { useRoute } from 'vue-router';
 
 import { message, Modal } from 'ant-design-vue';
 
@@ -20,9 +21,22 @@ const {
 } = useWorkflowStartedTable();
 
 const drawerRef = ref<InstanceType<typeof WorkflowRuntimeFormDrawer>>();
+const route = useRoute();
 
 function handleDetail(record: StartedInstanceInfo) {
   drawerRef.value?.open({ instanceId: record.id, mode: 'started' });
+}
+
+function getRouteQueryValue(value: unknown) {
+  return typeof value === 'string' ? value : '';
+}
+
+async function openDetailFromRouteQuery() {
+  const instanceId = getRouteQueryValue(route.query.instanceId);
+  if (!instanceId) {
+    return;
+  }
+  await drawerRef.value?.open({ instanceId, mode: 'started' });
 }
 
 function handleWithdraw(record: StartedInstanceInfo) {
@@ -51,7 +65,17 @@ async function handleUrge(record: StartedInstanceInfo) {
   await loadData();
 }
 
-onMounted(loadData);
+onMounted(async () => {
+  await loadData();
+  await openDetailFromRouteQuery();
+});
+
+watch(
+  () => route.query.instanceId,
+  async () => {
+    await openDetailFromRouteQuery();
+  },
+);
 </script>
 
 <template>
