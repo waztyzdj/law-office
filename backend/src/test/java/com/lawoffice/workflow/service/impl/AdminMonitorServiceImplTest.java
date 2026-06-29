@@ -140,7 +140,7 @@ class AdminMonitorServiceImplTest {
         when(processInstanceMapper.selectOne(any(Wrapper.class))).thenReturn(processInstance);
         when(taskMapper.selectOne(any(Wrapper.class))).thenReturn(task);
         when(userService.getTenantUserIds(TENANT_ID)).thenReturn(List.of(TARGET_USER_ID));
-        when(userMapper.selectOne(any(Wrapper.class))).thenReturn(targetUser);
+        when(userMapper.selectOne(any(Wrapper.class))).thenReturn(targetUser, operatorUser());
 
         BaseResult<AdminOperationRecordVO> result = service.reassign(reassignReq(), context);
 
@@ -163,6 +163,7 @@ class AdminMonitorServiceImplTest {
         AdminOperationRecord record = recordCaptor.getValue();
         assertEquals(WorkflowConstants.AdminOperationType.REASSIGN, record.getOperationType());
         assertEquals(WorkflowConstants.AdminOperationStatus.SUCCESS, record.getStatus());
+        assertEquals("管理员", record.getOperatorRealname());
         assertTrue(record.getAfterSnapshotJson().contains(TARGET_USER_ID));
     }
 
@@ -175,7 +176,7 @@ class AdminMonitorServiceImplTest {
         when(processInstanceMapper.selectOne(any(Wrapper.class))).thenReturn(processInstance);
         when(taskMapper.selectOne(any(Wrapper.class))).thenReturn(task);
         when(userService.getTenantUserIds(TENANT_ID)).thenReturn(List.of(TARGET_USER_ID));
-        when(userMapper.selectOne(any(Wrapper.class))).thenReturn(targetUser);
+        when(userMapper.selectOne(any(Wrapper.class))).thenReturn(targetUser, operatorUser());
         when(taskMapper.selectCount(any(Wrapper.class))).thenReturn(1L);
 
         BaseResult<AdminOperationRecordVO> result = service.reassign(reassignReq(), context);
@@ -358,6 +359,15 @@ class AdminMonitorServiceImplTest {
         user.setId(TARGET_USER_ID);
         user.setUsername("target");
         user.setRealname("目标处理人");
+        user.setStatus(1);
+        return user;
+    }
+
+    private User operatorUser() {
+        User user = new User();
+        user.setId("admin-1");
+        user.setUsername("admin");
+        user.setRealname("管理员");
         user.setStatus(1);
         return user;
     }

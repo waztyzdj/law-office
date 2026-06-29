@@ -30,7 +30,6 @@ const emit = defineEmits<{
 }>();
 
 const currentProcess = ref<WorkflowProcessModelInfo>();
-const sourceForm = ref<WorkflowFormDefinitionInfo>();
 const categoryOptions = ref<{ label: string; value: string }[]>([]);
 const formOptions = ref<{ label: string; value: string }[]>([]);
 const initialValues = ref<Record<string, any>>({});
@@ -253,14 +252,12 @@ async function loadOptions(record: WorkflowProcessModelInfo) {
       : Promise.resolve(undefined),
   ]);
   categoryOptions.value = mapCategoryOptions(categories ?? []);
-  sourceForm.value = formDetail;
   formOptions.value = mapFormOptions(formPage.records ?? [], formDetail);
   formApi.setState({ schema: buildFormSchema() });
 }
 
 async function prepareFormState(record: WorkflowProcessModelInfo) {
   currentProcess.value = record;
-  sourceForm.value = undefined;
   hasSyncedMountedValues.value = false;
   await loadOptions(record);
   initialValues.value = buildInitialValues(record);

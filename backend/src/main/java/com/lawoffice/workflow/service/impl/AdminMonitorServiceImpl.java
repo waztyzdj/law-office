@@ -458,7 +458,20 @@ public class AdminMonitorServiceImpl implements IAdminMonitorService {
     private void fillOperator(AdminOperationRecord record, RequestContext context) {
         record.setOperatorUserId(context.getUserId());
         record.setOperatorUsername(context.getUsername());
-        record.setOperatorRealname(context.getUsername());
+        record.setOperatorRealname(resolveOperatorRealname(context));
+    }
+
+    private String resolveOperatorRealname(RequestContext context) {
+        if (context == null || !StringUtils.hasText(context.getUserId())) {
+            return context == null ? null : context.getUsername();
+        }
+        User user = userMapper.selectOne(new QueryWrapper<User>()
+                .eq("id", context.getUserId())
+                .eq("delete_flag", 0));
+        if (user == null || !StringUtils.hasText(user.getRealname())) {
+            return context.getUsername();
+        }
+        return user.getRealname();
     }
 
     private ProcessInstance requireMaintainableInstance(String processInstanceId, String tenantId) {
