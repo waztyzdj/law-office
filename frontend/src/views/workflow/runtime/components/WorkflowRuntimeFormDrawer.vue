@@ -11,7 +11,7 @@ import type {
   WorkflowAttachmentSource,
 } from '#/api/workflow';
 import type { UserInfo } from '#/api/system/user';
-import type { DrawerMode } from './runtimeTypes';
+import type { DrawerMode, ProcessProgressNode } from './runtimeTypes';
 
 import { computed, ref } from 'vue';
 
@@ -56,6 +56,7 @@ interface DrawerPayload {
 }
 
 const emit = defineEmits<{
+  adminReassign: [node: ProcessProgressNode];
   success: [];
 }>();
 
@@ -135,6 +136,7 @@ const canUrge = computed(
 const canWithdraw = computed(
   () => mode.value === 'started' && Boolean(detail.value?.processInstance?.canWithdraw),
 );
+const canAdminMonitorReassign = computed(() => mode.value === 'adminMonitor');
 const runtimeProcessInstanceId = computed(
   () => detail.value?.processInstance?.id || taskForm.value?.processInstanceId,
 );
@@ -321,6 +323,7 @@ async function open(payload: DrawerPayload) {
   resetState(payload);
   loading.value = true;
   drawerApi.open();
+  scheduleRuntimeContentRender();
   await loadData(payload);
 }
 
@@ -471,6 +474,13 @@ async function handleUrge() {
   }
 }
 
+function handleAdminReassign(node: ProcessProgressNode) {
+  if (mode.value !== 'adminMonitor') {
+    return;
+  }
+  emit('adminReassign', node);
+}
+
 defineExpose({
   open,
 });
@@ -548,10 +558,12 @@ defineExpose({
           <aside class="runtime-side-section">
             <RuntimeSideTabs
               v-model:active-key="activeTab"
+              :admin-reassignable="canAdminMonitorReassign"
               :cc-records="detail?.ccRecords ?? []"
               :detail="detail"
               :diagram="diagram"
               :nodes="processProgressNodes"
+              @admin-reassign="handleAdminReassign"
             />
           </aside>
         </div>

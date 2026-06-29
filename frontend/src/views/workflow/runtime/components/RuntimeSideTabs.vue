@@ -6,7 +6,7 @@ import type {
 } from '#/api/workflow';
 import type { ProcessProgressNode } from './runtimeTypes';
 
-import { Empty, Tabs, Tag, Timeline } from 'ant-design-vue';
+import { Button, Empty, Tabs, Tag, Timeline } from 'ant-design-vue';
 
 import {
   ccTriggerActionMap,
@@ -18,6 +18,7 @@ import RuntimeProcessDiagram from './RuntimeProcessDiagram.vue';
 
 interface Props {
   activeKey: string;
+  adminReassignable?: boolean;
   ccRecords: WorkflowCcRecordInfo[];
   detail?: InstanceDetailInfo;
   diagram?: InstanceDiagramInfo;
@@ -27,6 +28,7 @@ interface Props {
 defineProps<Props>();
 
 const emit = defineEmits<{
+  adminReassign: [node: ProcessProgressNode];
   'update:activeKey': [value: string];
 }>();
 
@@ -118,6 +120,15 @@ function getCcTriggerLabel(triggerAction?: string) {
                 >
                   {{ getStatusMeta(node.resultStatus).label }}
                 </Tag>
+                <Button
+                  v-if="adminReassignable && node.status === 'current' && node.taskId"
+                  class="progress-node-reassign"
+                  size="small"
+                  type="primary"
+                  @click="emit('adminReassign', node)"
+                >
+                  改派
+                </Button>
               </div>
               <div
                 v-if="node.status !== 'end' || node.time"
@@ -313,6 +324,10 @@ function getCcTriggerLabel(triggerAction?: string) {
   display: flex;
   gap: 8px;
   margin-bottom: 6px;
+}
+
+.progress-node-reassign {
+  margin-left: auto;
 }
 
 .progress-node-name {

@@ -129,6 +129,17 @@ export const ccTriggerActionMap: Record<string, string> = {
   start: '发起后',
 };
 
+export const adminOperationTypeMap: Record<string, string> = {
+  reassign: '管理员改派',
+  resend_notice: '补发通知',
+  terminate: '管理员终止',
+};
+
+export const adminOperationStatusMap: Record<string, WorkflowMeta> = {
+  failed: { color: 'error', label: '失败' },
+  success: { color: 'success', label: '成功' },
+};
+
 export function getStatusMeta(status?: string) {
   if (!status) {
     return { color: 'default', label: '-' };
@@ -143,6 +154,14 @@ export function getWorkflowActionMeta(action?: string) {
   }
 
   return workflowActionMap[action] ?? { color: 'default', label: action };
+}
+
+export function getAdminOperationStatusMeta(status?: string) {
+  if (!status) {
+    return { color: 'default', label: '-' };
+  }
+
+  return adminOperationStatusMap[status] ?? { color: 'default', label: status };
 }
 
 export function getApprovalModeMeta(approvalMode?: string): WorkflowMeta {

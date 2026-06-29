@@ -83,6 +83,15 @@ const routes: RouteRecordRaw[] = [
           title: '流程设计',
         },
       },
+      {
+        name: 'WorkflowMonitor',
+        path: '/workflow/monitor',
+        component: () => import('#/views/workflow/admin/monitor/index.vue'),
+        meta: {
+          icon: 'lucide:activity',
+          title: '流程监控',
+        },
+      },
     ],
   },
 ];

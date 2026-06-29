@@ -50,6 +50,7 @@ export function useRuntimeProgressNodes(
         id: task.id ?? `current-${index}`,
         name: task.taskName ?? task.nodeId ?? '当前任务',
         status: 'current',
+        taskId: task.id,
         time: task.startTime,
       });
     });

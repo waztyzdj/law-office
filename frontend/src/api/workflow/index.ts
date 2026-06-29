@@ -215,6 +215,70 @@ export interface StartedInstancePageReq extends BasePageReq {
   status?: string;
 }
 
+export interface AdminMonitorInstanceInfo {
+  canMaintain?: boolean;
+  categoryId?: string;
+  currentAssigneeNames?: string;
+  currentTaskNames?: string;
+  endTime?: string;
+  formDefinitionId?: string;
+  formInstanceId?: string;
+  id?: string;
+  instanceNo?: string;
+  instanceTitle?: string;
+  processModelId?: string;
+  processKey?: string;
+  processName?: string;
+  processVersion?: number;
+  starterRealname?: string;
+  starterUserId?: string;
+  starterUsername?: string;
+  status?: string;
+  startTime?: string;
+  todoTaskCount?: number;
+  updateTime?: string;
+}
+
+export interface AdminMonitorPageReq extends BasePageReq {
+  categoryId?: string;
+  currentAssigneeNames?: string;
+  currentTaskNames?: string;
+  instanceNo?: string;
+  instanceTitle?: string;
+  processKey?: string;
+  processName?: string;
+  starterRealname?: string;
+  startTimeGe?: string;
+  startTimeLe?: string;
+  status?: string;
+  updateTimeGe?: string;
+  updateTimeLe?: string;
+}
+
+export interface AdminMonitorActionReq {
+  operationReason?: string;
+  processInstanceId?: string;
+  targetUserId?: string;
+  taskId?: string;
+}
+
+export interface AdminOperationRecordInfo {
+  afterSnapshotJson?: string;
+  beforeSnapshotJson?: string;
+  createTime?: string;
+  errorMessage?: string;
+  id?: string;
+  operateTime?: string;
+  operationReason?: string;
+  operationType?: string;
+  operatorRealname?: string;
+  operatorUserId?: string;
+  operatorUsername?: string;
+  processInstanceId?: string;
+  status?: string;
+  taskId?: string;
+}
+
 export interface WorkflowCcRecordInfo {
   id?: string;
   createTime?: string;
@@ -620,6 +684,26 @@ export const pageStartedInstances = (params: StartedInstancePageReq) =>
     '/workflow/started/page',
     normalizeStartedInstancePageReq(params),
   );
+export const pageAdminMonitorInstances = (params: AdminMonitorPageReq) =>
+  requestClient.post<WorkflowPageResult<AdminMonitorInstanceInfo>>(
+    '/workflow/admin/monitor/page',
+    normalizeAdminMonitorPageReq(params),
+  );
+export const reassignAdminMonitorTask = (data: AdminMonitorActionReq) =>
+  requestClient.post<AdminOperationRecordInfo>(
+    '/workflow/admin/monitor/reassign',
+    data,
+  );
+export const terminateAdminMonitorInstance = (data: AdminMonitorActionReq) =>
+  requestClient.post<AdminOperationRecordInfo>(
+    '/workflow/admin/monitor/terminate',
+    data,
+  );
+export const resendAdminMonitorNotice = (data: AdminMonitorActionReq) =>
+  requestClient.post<AdminOperationRecordInfo>(
+    '/workflow/admin/monitor/resend-notice',
+    data,
+  );
 export const pageWorkflowCcRecords = (params: WorkflowCcPageReq) =>
   requestClient.post<WorkflowPageResult<WorkflowCcRecordInfo>>(
     '/workflow/cc/page',
@@ -768,6 +852,46 @@ function normalizeStartedInstancePageReq(
       queryParams.startTime_lt ??
       queryParams.startTime_eq,
     status: params.status ?? queryParams.status_eq,
+  };
+}
+
+function normalizeAdminMonitorPageReq(
+  params: AdminMonitorPageReq,
+): AdminMonitorPageReq {
+  const queryParams = params.queryParams ?? {};
+  return {
+    ...params,
+    currentAssigneeNames:
+      params.currentAssigneeNames ?? queryParams.currentAssigneeNames_like,
+    currentTaskNames:
+      params.currentTaskNames ?? queryParams.currentTaskNames_like,
+    categoryId: params.categoryId ?? queryParams.categoryId_eq,
+    instanceNo: params.instanceNo ?? queryParams.instanceNo_like,
+    instanceTitle: params.instanceTitle ?? queryParams.instanceTitle_like,
+    processKey: params.processKey ?? queryParams.processKey_eq,
+    processName: params.processName ?? queryParams.processName_like,
+    starterRealname: params.starterRealname ?? queryParams.starterRealname_like,
+    startTimeGe:
+      params.startTimeGe ??
+      queryParams.startTime_ge ??
+      queryParams.startTime_gt ??
+      queryParams.startTime_eq,
+    startTimeLe:
+      params.startTimeLe ??
+      queryParams.startTime_le ??
+      queryParams.startTime_lt ??
+      queryParams.startTime_eq,
+    status: params.status ?? queryParams.status_eq,
+    updateTimeGe:
+      params.updateTimeGe ??
+      queryParams.updateTime_ge ??
+      queryParams.updateTime_gt ??
+      queryParams.updateTime_eq,
+    updateTimeLe:
+      params.updateTimeLe ??
+      queryParams.updateTime_le ??
+      queryParams.updateTime_lt ??
+      queryParams.updateTime_eq,
   };
 }
 

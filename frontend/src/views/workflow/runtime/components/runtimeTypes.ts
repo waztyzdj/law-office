@@ -1,6 +1,6 @@
 import type { TaskActionPermissionInfo } from '#/api/workflow';
 
-export type DrawerMode = 'detail' | 'done' | 'start' | 'started' | 'todo';
+export type DrawerMode = 'adminMonitor' | 'detail' | 'done' | 'start' | 'started' | 'todo';
 
 export type WorkflowAction = 'addSign' | 'return' | 'transfer';
 
@@ -20,6 +20,7 @@ export interface ProcessProgressNode {
   name: string;
   resultStatus?: string;
   status: 'current' | 'done' | 'end';
+  taskId?: string;
   time?: string;
 }
 

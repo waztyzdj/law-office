@@ -367,6 +367,23 @@ FormCreate 表单实例表，用于保存发起后的表单数据、schema 快�
 - `form_data_snapshot_json`：操作时表单数据快照。
 - `operate_time`：操作时间。
 
+### `wf_admin_operation_record`
+
+流程监控维护记录表，用于记录管理员改派、终止、补发通知等维护动作。该表不替代审批记录表，审批动作仍写入 `wf_approval_record`。
+
+重点字段：
+
+- `process_instance_id`：审批实例 ID。
+- `task_id`：任务扩展 ID；终止流程等实例级维护动作可为空。
+- `operation_type`：维护动作，取值 `reassign`、`terminate`、`resend_notice`。
+- `operation_reason`：维护原因，必填。
+- `before_snapshot_json`：动作前关键数据快照，例如原处理人、任务状态、流程状态。
+- `after_snapshot_json`：动作后关键数据快照，例如新处理人、终止状态、通知结果。
+- `operator_user_id`、`operator_username`、`operator_realname`：维护操作人快照。
+- `operate_time`：维护时间。
+- `status`：维护结果，取值 `success`、`failed`。
+- `error_message`：失败原因。
+
 ### `wf_cc_record`
 
 审批抄送记录表，用于“我的抄送”、审批详情访问权和抄送已读状态。

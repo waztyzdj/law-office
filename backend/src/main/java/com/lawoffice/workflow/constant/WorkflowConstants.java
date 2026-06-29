@@ -237,4 +237,21 @@ public final class WorkflowConstants {
         private BpmnSecurityStatus() {
         }
     }
+
+    public static final class AdminOperationType {
+        public static final String REASSIGN = "reassign";
+        public static final String TERMINATE = "terminate";
+        public static final String RESEND_NOTICE = "resend_notice";
+
+        private AdminOperationType() {
+        }
+    }
+
+    public static final class AdminOperationStatus {
+        public static final String SUCCESS = "success";
+        public static final String FAILED = "failed";
+
+        private AdminOperationStatus() {
+        }
+    }
 }

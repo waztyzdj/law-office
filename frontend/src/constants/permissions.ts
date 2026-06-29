@@ -23,5 +23,9 @@ export const permissionCodes = {
   user: createBasePermissionCodes('user'),
   workflowCategory: createBasePermissionCodes('workflow:category'),
   workflowForm: createBasePermissionCodes('workflow:form'),
+  workflowMonitor: {
+    manage: 'workflow:monitor:manage',
+    view: 'workflow:monitor:view',
+  },
   workflowProcess: createBasePermissionCodes('workflow:process'),
 } as const;
