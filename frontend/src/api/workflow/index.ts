@@ -279,6 +279,11 @@ export interface AdminOperationRecordInfo {
   taskId?: string;
 }
 
+export interface AdminMonitorDetailInfo {
+  adminOperationRecords?: AdminOperationRecordInfo[];
+  detail?: InstanceDetailInfo;
+}
+
 export interface WorkflowCcRecordInfo {
   id?: string;
   createTime?: string;
@@ -689,6 +694,10 @@ export const pageAdminMonitorInstances = (params: AdminMonitorPageReq) =>
     '/workflow/admin/monitor/page',
     normalizeAdminMonitorPageReq(params),
   );
+export const getAdminMonitorDetail = (processInstanceId: string) =>
+  requestClient.post<AdminMonitorDetailInfo>('/workflow/admin/monitor/detail', {
+    processInstanceId,
+  });
 export const reassignAdminMonitorTask = (data: AdminMonitorActionReq) =>
   requestClient.post<AdminOperationRecordInfo>(
     '/workflow/admin/monitor/reassign',

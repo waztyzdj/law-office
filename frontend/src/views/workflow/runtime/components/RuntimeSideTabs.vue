@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type {
+  AdminOperationRecordInfo,
   InstanceDetailInfo,
   InstanceDiagramInfo,
   WorkflowCcRecordInfo,
@@ -9,7 +10,9 @@ import type { ProcessProgressNode } from './runtimeTypes';
 import { Button, Empty, Tabs, Tag, Timeline } from 'ant-design-vue';
 
 import {
+  adminOperationTypeMap,
   ccTriggerActionMap,
+  getAdminOperationStatusMeta,
   getApprovalModeMeta,
   getStatusMeta,
   getWorkflowActionMeta,
@@ -18,7 +21,9 @@ import RuntimeProcessDiagram from './RuntimeProcessDiagram.vue';
 
 interface Props {
   activeKey: string;
+  adminMonitorMode?: boolean;
   adminReassignable?: boolean;
+  adminOperationRecords?: AdminOperationRecordInfo[];
   ccRecords: WorkflowCcRecordInfo[];
   detail?: InstanceDetailInfo;
   diagram?: InstanceDiagramInfo;
@@ -70,6 +75,48 @@ function getCcStatusMeta(status?: string) {
 
 function getCcTriggerLabel(triggerAction?: string) {
   return ccTriggerActionMap[triggerAction ?? ''] ?? triggerAction ?? '-';
+}
+
+function getAdminOperationLabel(operationType?: string) {
+  return adminOperationTypeMap[operationType ?? ''] ?? operationType ?? '-';
+}
+
+function formatAdminOperator(record: AdminOperationRecordInfo) {
+  return record.operatorRealname || record.operatorUsername || '-';
+}
+
+function parseRecordSnapshot(snapshotJson?: string) {
+  if (!snapshotJson) {
+    return {};
+  }
+  try {
+    const value = JSON.parse(snapshotJson);
+    return value && typeof value === 'object' ? (value as Record<string, any>) : {};
+  } catch {
+    return {};
+  }
+}
+
+function getAdminChangeLabel(record: AdminOperationRecordInfo) {
+  return record.operationType === 'reassign' ? '处理人' : '结果';
+}
+
+function formatAdminChange(record: AdminOperationRecordInfo) {
+  const before = parseRecordSnapshot(record.beforeSnapshotJson);
+  const after = parseRecordSnapshot(record.afterSnapshotJson);
+  if (record.operationType === 'reassign') {
+    const beforeName = before.assigneeRealname || before.assigneeUsername || '-';
+    const afterName = after.assigneeRealname || after.assigneeUsername || '-';
+    return `${beforeName} -> ${afterName}`;
+  }
+  if (record.operationType === 'terminate') {
+    return '流程已终止，当前待办已取消';
+  }
+  if (record.operationType === 'resend_notice') {
+    const taskIds = Array.isArray(before.taskIds) ? before.taskIds.length : 0;
+    return taskIds > 0 ? `已补发 ${taskIds} 个当前待办通知` : '已补发当前待办通知';
+  }
+  return '';
 }
 </script>
 
@@ -213,6 +260,69 @@ function getCcTriggerLabel(triggerAction?: string) {
         <Empty description="暂无抄送记录" />
       </div>
     </Tabs.TabPane>
+
+    <Tabs.TabPane
+      v-if="adminMonitorMode"
+      key="adminRecords"
+      tab="维护记录"
+    >
+      <div
+        v-if="adminOperationRecords?.length"
+        class="admin-record-list"
+      >
+        <div
+          v-for="record in adminOperationRecords"
+          :key="record.id"
+          class="admin-record-item"
+        >
+          <div class="admin-record-head">
+            <span class="admin-record-title">
+              {{ getAdminOperationLabel(record.operationType) }}
+            </span>
+            <Tag :color="getAdminOperationStatusMeta(record.status).color">
+              {{ getAdminOperationStatusMeta(record.status).label }}
+            </Tag>
+          </div>
+          <div class="admin-record-fields">
+            <div class="admin-record-field">
+              <span class="admin-record-label">操作人</span>
+              <span class="admin-record-value">{{ formatAdminOperator(record) }}</span>
+            </div>
+            <div class="admin-record-field">
+              <span class="admin-record-label">时间</span>
+              <span class="admin-record-value">{{ record.operateTime || '-' }}</span>
+            </div>
+            <div
+              v-if="record.operationReason"
+              class="admin-record-field"
+            >
+              <span class="admin-record-label">原因</span>
+              <span class="admin-record-value">{{ record.operationReason }}</span>
+            </div>
+            <div
+              v-if="formatAdminChange(record)"
+              class="admin-record-field"
+            >
+              <span class="admin-record-label">{{ getAdminChangeLabel(record) }}</span>
+              <span class="admin-record-value">{{ formatAdminChange(record) }}</span>
+            </div>
+            <div
+              v-if="record.status === 'failed' && record.errorMessage"
+              class="admin-record-field admin-record-field--error"
+            >
+              <span class="admin-record-label">失败原因</span>
+              <span class="admin-record-value">{{ record.errorMessage }}</span>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div
+        v-else
+        class="runtime-empty-panel"
+      >
+        <Empty description="暂无维护记录" />
+      </div>
+    </Tabs.TabPane>
   </Tabs>
 </template>
 
@@ -269,7 +379,21 @@ function getCcTriggerLabel(triggerAction?: string) {
   padding: 8px 4px 0;
 }
 
+.admin-record-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 8px 4px 0;
+}
+
 .cc-record-item {
+  background: #fafafa;
+  border: 1px solid #f0f0f0;
+  border-radius: 6px;
+  padding: 10px 12px;
+}
+
+.admin-record-item {
   background: #fafafa;
   border: 1px solid #f0f0f0;
   border-radius: 6px;
@@ -284,7 +408,20 @@ function getCcTriggerLabel(triggerAction?: string) {
   margin-bottom: 6px;
 }
 
+.admin-record-head {
+  align-items: center;
+  display: flex;
+  gap: 8px;
+  justify-content: space-between;
+  margin-bottom: 6px;
+}
+
 .cc-record-receiver {
+  color: #111827;
+  font-weight: 500;
+}
+
+.admin-record-title {
   color: #111827;
   font-weight: 500;
 }
@@ -298,6 +435,38 @@ function getCcTriggerLabel(triggerAction?: string) {
   line-height: 1.7;
 }
 
+.admin-record-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.admin-record-field {
+  align-items: flex-start;
+  color: #6b7280;
+  display: grid;
+  font-size: 13px;
+  grid-template-columns: 64px minmax(0, 1fr);
+  line-height: 1.6;
+}
+
+.admin-record-label {
+  color: #6b7280;
+  padding-right: 8px;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.admin-record-label::after {
+  content: '：';
+}
+
+.admin-record-value {
+  color: #4b5563;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
 .cc-record-remark {
   color: #4b5563;
   font-size: 13px;
@@ -305,6 +474,12 @@ function getCcTriggerLabel(triggerAction?: string) {
   margin-top: 6px;
   white-space: pre-wrap;
   word-break: break-word;
+}
+
+.admin-record-field--error,
+.admin-record-field--error .admin-record-label,
+.admin-record-field--error .admin-record-value {
+  color: #cf1322;
 }
 
 .process-progress-panel {

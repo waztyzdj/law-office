@@ -1,6 +1,7 @@
 ﻿<script setup lang="ts">
 import type {
   AvailableProcessInfo,
+  AdminOperationRecordInfo,
   AssigneeSelectNodeInfo,
   InstanceDiagramInfo,
   InstanceDetailInfo,
@@ -15,11 +16,13 @@ import type { DrawerMode, ProcessProgressNode } from './runtimeTypes';
 
 import { computed, ref } from 'vue';
 
+import { useAccess } from '@vben/access';
 import { useVbenDrawer } from '@vben/common-ui';
 
 import { Alert, message, Modal, Select, Space, Spin, Tag } from 'ant-design-vue';
 
 import {
+  getAdminMonitorDetail,
   getStartForm,
   getWorkflowInstanceDiagram,
   getWorkflowInstanceDetail,
@@ -30,6 +33,7 @@ import {
   withdrawWorkflowInstance,
 } from '#/api/workflow';
 import UserPickerPanel from '#/components/user-picker/UserPickerPanel.vue';
+import { permissionCodes } from '#/constants/permissions';
 import {
   formatApprovalProgress,
   getApprovalModeMeta,
@@ -67,6 +71,7 @@ const startForm = ref<StartFormInfo>();
 const taskForm = ref<TaskFormInfo>();
 const detail = ref<InstanceDetailInfo>();
 const diagram = ref<InstanceDiagramInfo>();
+const adminOperationRecords = ref<AdminOperationRecordInfo[]>([]);
 const activeTab = ref('records');
 const loading = ref(false);
 const drawerOpened = ref(false);
@@ -79,6 +84,7 @@ const withdrawSubmitting = ref(false);
 const attachmentPanelKey = ref(0);
 const attachmentPanelRef = ref<InstanceType<typeof WorkflowAttachmentPanel>>();
 let runtimeRenderFrameId: number | undefined;
+const { hasAccessByCodes } = useAccess();
 const actionPermissions = computed(() => taskForm.value?.actionPermissions);
 const returnNodeOptions = computed(() =>
   (taskForm.value?.returnNodes ?? []).map((item) => ({
@@ -136,7 +142,12 @@ const canUrge = computed(
 const canWithdraw = computed(
   () => mode.value === 'started' && Boolean(detail.value?.processInstance?.canWithdraw),
 );
-const canAdminMonitorReassign = computed(() => mode.value === 'adminMonitor');
+const isAdminMonitorMode = computed(() => mode.value === 'adminMonitor');
+const canAdminMonitorReassign = computed(
+  () =>
+    isAdminMonitorMode.value &&
+    hasAccessByCodes([permissionCodes.workflowMonitor.manage]),
+);
 const runtimeProcessInstanceId = computed(
   () => detail.value?.processInstance?.id || taskForm.value?.processInstanceId,
 );
@@ -278,6 +289,7 @@ function resetState(payload: DrawerPayload) {
   taskForm.value = undefined;
   detail.value = undefined;
   diagram.value = undefined;
+  adminOperationRecords.value = [];
   activeTab.value = 'records';
   drawerOpened.value = false;
   manualCcOpen.value = false;
@@ -351,6 +363,11 @@ async function loadData(payload: DrawerPayload) {
     }
 
     const instanceId = payload.instanceId ?? payload.task?.processInstanceId;
+    if (instanceId && payload.mode === 'adminMonitor') {
+      await loadAdminMonitorRuntimeData(instanceId);
+      return;
+    }
+
     if (instanceId) {
       await loadInstanceRuntimeData(instanceId);
     }
@@ -366,6 +383,16 @@ async function loadInstanceRuntimeData(instanceId: string) {
     getWorkflowInstanceDiagram(instanceId),
   ]);
   detail.value = nextDetail;
+  diagram.value = nextDiagram;
+}
+
+async function loadAdminMonitorRuntimeData(instanceId: string) {
+  const [nextMonitorDetail, nextDiagram] = await Promise.all([
+    getAdminMonitorDetail(instanceId),
+    getWorkflowInstanceDiagram(instanceId),
+  ]);
+  detail.value = nextMonitorDetail.detail;
+  adminOperationRecords.value = nextMonitorDetail.adminOperationRecords ?? [];
   diagram.value = nextDiagram;
 }
 
@@ -415,7 +442,11 @@ async function handleManualCcConfirm() {
     });
     message.success('已发送抄送');
     closeManualCcPicker();
-    await loadInstanceRuntimeData(processInstanceId);
+    if (mode.value === 'adminMonitor') {
+      await loadAdminMonitorRuntimeData(processInstanceId);
+    } else {
+      await loadInstanceRuntimeData(processInstanceId);
+    }
     emit('success');
   } finally {
     manualCcSubmitting.value = false;
@@ -558,7 +589,9 @@ defineExpose({
           <aside class="runtime-side-section">
             <RuntimeSideTabs
               v-model:active-key="activeTab"
+              :admin-monitor-mode="isAdminMonitorMode"
               :admin-reassignable="canAdminMonitorReassign"
+              :admin-operation-records="adminOperationRecords"
               :cc-records="detail?.ccRecords ?? []"
               :detail="detail"
               :diagram="diagram"

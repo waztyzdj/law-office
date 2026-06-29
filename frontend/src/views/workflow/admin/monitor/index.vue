@@ -60,7 +60,10 @@ const reasonModalTitle = {
 };
 
 function handleDetail(record: AdminMonitorInstanceInfo) {
-  drawerRef.value?.open({ instanceId: record.id, mode: 'detail' });
+  reassignTarget.value = record;
+  reassignProcessInstanceId.value = '';
+  reassignTaskId.value = '';
+  drawerRef.value?.open({ instanceId: record.id, mode: 'adminMonitor' });
 }
 
 function requireInstanceId(record?: AdminMonitorInstanceInfo) {
