@@ -386,7 +386,7 @@ defineExpose({
           :multiple="true"
           :show-upload-list="false"
         >
-          <Button :loading="isUploading" type="primary">
+          <Button :loading="isUploading" size="small" type="link">
             <UploadOutlined />
             上传附件
           </Button>

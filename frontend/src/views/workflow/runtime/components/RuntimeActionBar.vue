@@ -2,8 +2,17 @@
 import type { RuntimeActionPermissions, WorkflowAction } from './runtimeTypes';
 
 import {
+  BellOutlined,
+  CheckOutlined,
+  CloseOutlined,
   DownloadOutlined,
   PrinterOutlined,
+  RollbackOutlined,
+  SaveOutlined,
+  SendOutlined,
+  SwapOutlined,
+  UndoOutlined,
+  UserAddOutlined,
 } from '@ant-design/icons-vue';
 import { Button } from 'ant-design-vue';
 
@@ -52,6 +61,7 @@ const emit = defineEmits<{
         type="primary"
         @click="emit('saveStartDraft')"
       >
+        <SaveOutlined />
         保存
       </Button>
       <Button
@@ -59,6 +69,7 @@ const emit = defineEmits<{
         type="primary"
         @click="emit('submitStart')"
       >
+        <SendOutlined />
         提交
       </Button>
     </template>
@@ -70,6 +81,7 @@ const emit = defineEmits<{
         type="primary"
         @click="emit('saveStartDraftTask')"
       >
+        <SaveOutlined />
         保存
       </Button>
       <Button
@@ -79,6 +91,8 @@ const emit = defineEmits<{
         type="primary"
         @click="emit('approve')"
       >
+        <SendOutlined v-if="isStartDraftTask" />
+        <CheckOutlined v-else />
         {{ isStartDraftTask ? '提交' : '通过' }}
       </Button>
       <Button
@@ -88,24 +102,28 @@ const emit = defineEmits<{
         danger
         @click="emit('reject')"
       >
+        <CloseOutlined />
         不通过
       </Button>
       <Button
         v-if="!isStartDraftTask && actionPermissions?.allowReturn"
         @click="emit('action', 'return')"
       >
+        <RollbackOutlined />
         退回
       </Button>
       <Button
         v-if="!isStartDraftTask && actionPermissions?.allowTransfer"
         @click="emit('action', 'transfer')"
       >
+        <SwapOutlined />
         转办
       </Button>
       <Button
         v-if="!isStartDraftTask && actionPermissions?.allowAddSign"
         @click="emit('action', 'addSign')"
       >
+        <UserAddOutlined />
         加签
       </Button>
     </template>
@@ -116,6 +134,7 @@ const emit = defineEmits<{
       :type="isTodoMode ? 'default' : 'primary'"
       @click="emit('cc')"
     >
+      <SendOutlined />
       抄送
     </Button>
     <Button
@@ -124,6 +143,7 @@ const emit = defineEmits<{
       :loading="urgeSubmitting"
       @click="emit('urge')"
     >
+      <BellOutlined />
       催办
     </Button>
     <Button
@@ -133,6 +153,7 @@ const emit = defineEmits<{
       danger
       @click="emit('withdraw')"
     >
+      <UndoOutlined />
       撤回
     </Button>
     <Button
@@ -156,6 +177,7 @@ const emit = defineEmits<{
       :disabled="saving || submitting || ccSubmitting || urgeSubmitting || downloading"
       @click="emit('cancel')"
     >
+      <CloseOutlined />
       取消
     </Button>
   </div>
