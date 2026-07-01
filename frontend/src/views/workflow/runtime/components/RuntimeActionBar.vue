@@ -1,11 +1,13 @@
 <script setup lang="ts">
 import type { RuntimeActionPermissions, WorkflowAction } from './runtimeTypes';
 
+import { PrinterOutlined } from '@ant-design/icons-vue';
 import { Button } from 'ant-design-vue';
 
 interface Props {
   actionPermissions?: RuntimeActionPermissions;
   canCc: boolean;
+  canPrint: boolean;
   canUrge: boolean;
   canWithdraw: boolean;
   ccSubmitting: boolean;
@@ -25,6 +27,7 @@ const emit = defineEmits<{
   approve: [];
   cancel: [];
   cc: [];
+  print: [];
   reject: [];
   saveStartDraft: [];
   saveStartDraftTask: [];
@@ -125,6 +128,14 @@ const emit = defineEmits<{
       @click="emit('withdraw')"
     >
       撤回
+    </Button>
+    <Button
+      v-if="canPrint"
+      :disabled="saving || submitting || ccSubmitting || urgeSubmitting || withdrawSubmitting"
+      @click="emit('print')"
+    >
+      <PrinterOutlined />
+      打印
     </Button>
     <Button
       :disabled="saving || submitting || ccSubmitting || urgeSubmitting"

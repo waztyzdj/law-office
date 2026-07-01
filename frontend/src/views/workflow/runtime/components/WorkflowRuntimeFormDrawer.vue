@@ -49,6 +49,7 @@ import WorkflowAttachmentPanel from './WorkflowAttachmentPanel.vue';
 import RuntimeFormRenderer from './RuntimeFormRenderer.vue';
 import RuntimeSideTabs from './RuntimeSideTabs.vue';
 import { workflowActionTitleMap } from './runtimeTypes';
+import WorkflowPrintPreviewModal from './WorkflowPrintPreviewModal.vue';
 
 interface DrawerPayload {
   instanceId?: string;
@@ -83,6 +84,7 @@ const urgeSubmitting = ref(false);
 const withdrawSubmitting = ref(false);
 const attachmentPanelKey = ref(0);
 const attachmentPanelRef = ref<InstanceType<typeof WorkflowAttachmentPanel>>();
+const printPreviewRef = ref<InstanceType<typeof WorkflowPrintPreviewModal>>();
 let runtimeRenderFrameId: number | undefined;
 const { hasAccessByCodes } = useAccess();
 const actionPermissions = computed(() => taskForm.value?.actionPermissions);
@@ -136,6 +138,7 @@ const shouldSelectNextAssigneeOnApprove = computed(() => {
   return completed + 1 >= total;
 });
 const canManualCc = computed(() => Boolean(detail.value?.processInstance?.id));
+const canPrint = computed(() => detail.value?.processInstance?.status === 'approved');
 const canUrge = computed(
   () => mode.value === 'started' && Boolean(detail.value?.processInstance?.canUrge),
 );
@@ -505,6 +508,13 @@ async function handleUrge() {
   }
 }
 
+function openPrintPreview() {
+  if (!canPrint.value) {
+    return;
+  }
+  printPreviewRef.value?.open({ detail: detail.value });
+}
+
 function handleAdminReassign(node: ProcessProgressNode) {
   if (mode.value !== 'adminMonitor') {
     return;
@@ -602,9 +612,10 @@ defineExpose({
         </div>
 
         <RuntimeActionBar
-          v-if="showRuntimeActions || canManualCc || canUrge || canWithdraw"
+          v-if="showRuntimeActions || canManualCc || canPrint || canUrge || canWithdraw"
           :action-permissions="actionPermissions"
           :can-cc="canManualCc"
+          :can-print="canPrint"
           :can-urge="canUrge"
           :can-withdraw="canWithdraw"
           :cc-submitting="manualCcSubmitting"
@@ -619,6 +630,7 @@ defineExpose({
           @approve="handleApprove"
           @cancel="drawerApi.close()"
           @cc="openManualCcPicker"
+          @print="openPrintPreview"
           @reject="handleReject"
           @save-start-draft="handleSaveStartDraft"
           @save-start-draft-task="handleSaveStartDraftTask"
@@ -691,6 +703,8 @@ defineExpose({
         @update:selected-users="(users) => (manualCcSelectedUsers = users)"
       />
     </Modal>
+
+    <WorkflowPrintPreviewModal ref="printPreviewRef" />
   </Drawer>
 </template>
 
