@@ -6,6 +6,7 @@ import com.lawoffice.framework.util.RequestContextUtils;
 import com.lawoffice.framework.vo.PageVO;
 import com.lawoffice.system.vo.FileUploadVO;
 import com.lawoffice.util.HttpDownloadUtils;
+import com.lawoffice.workflow.dto.WorkflowDownloadFile;
 import com.lawoffice.workflow.req.AttachmentBindReq;
 import com.lawoffice.workflow.req.AssigneePreviewReq;
 import com.lawoffice.workflow.req.AvailableProcessPageReq;
@@ -22,6 +23,7 @@ import com.lawoffice.workflow.req.TaskFormReq;
 import com.lawoffice.workflow.req.TaskPageReq;
 import com.lawoffice.workflow.req.TaskUrgeReq;
 import com.lawoffice.workflow.service.IRuntimeService;
+import com.lawoffice.workflow.service.IWorkflowDownloadService;
 import com.lawoffice.workflow.vo.AttachmentVO;
 import com.lawoffice.workflow.vo.AssigneeSelectNodeVO;
 import com.lawoffice.workflow.vo.AvailableProcessVO;
@@ -59,10 +61,13 @@ import java.util.List;
 public class RuntimeController {
 
     private final IRuntimeService runtimeService;
+    private final IWorkflowDownloadService workflowDownloadService;
 
     @Autowired
-    public RuntimeController(IRuntimeService runtimeService) {
+    public RuntimeController(IRuntimeService runtimeService,
+            IWorkflowDownloadService workflowDownloadService) {
         this.runtimeService = runtimeService;
+        this.workflowDownloadService = workflowDownloadService;
     }
 
     @PostMapping("/available/page")
@@ -297,10 +302,30 @@ public class RuntimeController {
         return runtimeService.getInstanceDiagram(req == null ? null : req.getId(), context);
     }
 
+    @PostMapping("/instance/download/package")
+    @Operation(summary = "下载审批材料包")
+    public void downloadPackage(@RequestBody InstanceReq req,
+            HttpServletRequest request,
+            HttpServletResponse response) throws IOException {
+        RequestContext context = RequestContextUtils.buildContext(request);
+        WorkflowDownloadFile downloadFile = workflowDownloadService.downloadPackage(
+                req == null ? null : req.getId(), context);
+        writeDownloadFile(response, downloadFile);
+    }
+
     private String resolveContentType(String fileType) {
         if (fileType != null && fileType.contains("/")) {
             return fileType;
         }
         return "application/octet-stream";
+    }
+
+    private void writeDownloadFile(HttpServletResponse response, WorkflowDownloadFile downloadFile) throws IOException {
+        String fileName = HttpDownloadUtils.resolveDownloadFileName(downloadFile.fileName());
+        response.setCharacterEncoding(StandardCharsets.UTF_8.name());
+        response.setContentType(downloadFile.contentType());
+        response.setHeader("Content-Disposition", HttpDownloadUtils.buildContentDisposition(fileName));
+        response.setHeader("Access-Control-Expose-Headers", "Content-Disposition");
+        response.getOutputStream().write(downloadFile.content());
     }
 }

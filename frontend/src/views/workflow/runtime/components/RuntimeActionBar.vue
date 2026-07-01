@@ -1,16 +1,21 @@
 <script setup lang="ts">
 import type { RuntimeActionPermissions, WorkflowAction } from './runtimeTypes';
 
-import { PrinterOutlined } from '@ant-design/icons-vue';
+import {
+  DownloadOutlined,
+  PrinterOutlined,
+} from '@ant-design/icons-vue';
 import { Button } from 'ant-design-vue';
 
 interface Props {
   actionPermissions?: RuntimeActionPermissions;
   canCc: boolean;
+  canDownload: boolean;
   canPrint: boolean;
   canUrge: boolean;
   canWithdraw: boolean;
   ccSubmitting: boolean;
+  downloading: boolean;
   isStartDraftTask: boolean;
   isStartMode: boolean;
   isTodoMode: boolean;
@@ -27,6 +32,7 @@ const emit = defineEmits<{
   approve: [];
   cancel: [];
   cc: [];
+  download: [];
   print: [];
   reject: [];
   saveStartDraft: [];
@@ -131,14 +137,23 @@ const emit = defineEmits<{
     </Button>
     <Button
       v-if="canPrint"
-      :disabled="saving || submitting || ccSubmitting || urgeSubmitting || withdrawSubmitting"
+      :disabled="saving || submitting || ccSubmitting || urgeSubmitting || withdrawSubmitting || downloading"
       @click="emit('print')"
     >
       <PrinterOutlined />
       打印
     </Button>
     <Button
-      :disabled="saving || submitting || ccSubmitting || urgeSubmitting"
+      v-if="canDownload"
+      :disabled="saving || submitting || ccSubmitting || urgeSubmitting || withdrawSubmitting"
+      :loading="downloading"
+      @click="emit('download')"
+    >
+      <DownloadOutlined />
+      下载
+    </Button>
+    <Button
+      :disabled="saving || submitting || ccSubmitting || urgeSubmitting || downloading"
       @click="emit('cancel')"
     >
       取消

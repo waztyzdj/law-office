@@ -22,6 +22,7 @@ import { useVbenDrawer } from '@vben/common-ui';
 import { Alert, message, Modal, Select, Space, Spin, Tag } from 'ant-design-vue';
 
 import {
+  downloadWorkflowInstancePackage,
   getAdminMonitorDetail,
   getStartForm,
   getWorkflowInstanceDiagram,
@@ -82,6 +83,7 @@ const manualCcSubmitting = ref(false);
 const runtimeNotice = ref('');
 const urgeSubmitting = ref(false);
 const withdrawSubmitting = ref(false);
+const downloadingPackage = ref(false);
 const attachmentPanelKey = ref(0);
 const attachmentPanelRef = ref<InstanceType<typeof WorkflowAttachmentPanel>>();
 const printPreviewRef = ref<InstanceType<typeof WorkflowPrintPreviewModal>>();
@@ -139,6 +141,7 @@ const shouldSelectNextAssigneeOnApprove = computed(() => {
 });
 const canManualCc = computed(() => Boolean(detail.value?.processInstance?.id));
 const canPrint = computed(() => detail.value?.processInstance?.status === 'approved');
+const canDownload = computed(() => detail.value?.processInstance?.status === 'approved');
 const canUrge = computed(
   () => mode.value === 'started' && Boolean(detail.value?.processInstance?.canUrge),
 );
@@ -301,6 +304,7 @@ function resetState(payload: DrawerPayload) {
   runtimeNotice.value = payload.notice ?? '';
   urgeSubmitting.value = false;
   withdrawSubmitting.value = false;
+  downloadingPackage.value = false;
   attachmentPanelKey.value += 1;
   resetRuntimeFormData(payload.process);
   resetAssigneeSelection();
@@ -515,6 +519,43 @@ function openPrintPreview() {
   printPreviewRef.value?.open({ detail: detail.value });
 }
 
+async function handleDownloadPackage() {
+  const processInstanceId = detail.value?.processInstance?.id;
+  if (!processInstanceId || !canDownload.value) {
+    return;
+  }
+  downloadingPackage.value = true;
+  try {
+    const blob = await downloadWorkflowInstancePackage(processInstanceId);
+    downloadBlob(blob, `${buildDownloadFileName()}.zip`);
+    message.success('下载成功');
+  } finally {
+    downloadingPackage.value = false;
+  }
+}
+
+function buildDownloadFileName() {
+  const processInstance = detail.value?.processInstance;
+  const title = processInstance?.instanceTitle?.trim() || '审批单';
+  const instanceNo = processInstance?.instanceNo?.trim();
+  return sanitizeFileName(instanceNo ? `${title}-${instanceNo}` : title);
+}
+
+function sanitizeFileName(fileName: string) {
+  return fileName.replace(/[\\/:*?"<>|\r\n]+/g, ' ').trim() || '审批单';
+}
+
+function downloadBlob(blob: Blob, fileName: string) {
+  const objectUrl = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = objectUrl;
+  link.download = fileName;
+  document.body.append(link);
+  link.click();
+  link.remove();
+  window.setTimeout(() => URL.revokeObjectURL(objectUrl), 0);
+}
+
 function handleAdminReassign(node: ProcessProgressNode) {
   if (mode.value !== 'adminMonitor') {
     return;
@@ -612,13 +653,15 @@ defineExpose({
         </div>
 
         <RuntimeActionBar
-          v-if="showRuntimeActions || canManualCc || canPrint || canUrge || canWithdraw"
+          v-if="showRuntimeActions || canManualCc || canPrint || canDownload || canUrge || canWithdraw"
           :action-permissions="actionPermissions"
           :can-cc="canManualCc"
+          :can-download="canDownload"
           :can-print="canPrint"
           :can-urge="canUrge"
           :can-withdraw="canWithdraw"
           :cc-submitting="manualCcSubmitting"
+          :downloading="downloadingPackage"
           :is-start-draft-task="isStartDraftTask"
           :is-start-mode="isStartMode"
           :is-todo-mode="isTodoMode"
@@ -630,6 +673,7 @@ defineExpose({
           @approve="handleApprove"
           @cancel="drawerApi.close()"
           @cc="openManualCcPicker"
+          @download="handleDownloadPackage"
           @print="openPrintPreview"
           @reject="handleReject"
           @save-start-draft="handleSaveStartDraft"

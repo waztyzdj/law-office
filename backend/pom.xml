@@ -125,6 +125,13 @@
             <version>3.3.3</version>
         </dependency>
 
+        <!-- PDFBox for workflow approval download package PDF generation -->
+        <dependency>
+            <groupId>org.apache.pdfbox</groupId>
+            <artifactId>pdfbox</artifactId>
+            <version>2.0.30</version>
+        </dependency>
+
         <!-- Spring Boot AOP Starter -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
