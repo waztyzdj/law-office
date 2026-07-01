@@ -624,6 +624,8 @@ defineExpose({
                 ref="attachmentPanelRef"
                 :attachment-source="runtimeAttachmentSource"
                 :editable="attachmentEditable"
+                :instance-no="detail?.processInstance?.instanceNo || taskForm?.instanceNo"
+                :instance-title="detail?.processInstance?.instanceTitle || taskForm?.instanceTitle"
                 :node-id="taskForm?.nodeId"
                 :node-name="taskForm?.taskName"
                 :process-instance-id="runtimeProcessInstanceId"

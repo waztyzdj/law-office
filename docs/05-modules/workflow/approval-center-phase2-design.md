@@ -200,9 +200,11 @@
 | `POST` | `/cc/send` | 手动抄送审批实例 |
 | `POST` | `/instance/detail` | 查询审批详情，响应包含 `ccRecords` 抄送记录 |
 | `POST` | `/instance/diagram` | 查询实例流程图和节点高亮状态 |
-| `POST` | `/attachment/page` | 查询审批附件 |
+| `POST` | `/attachment/list` | 查询审批附件 |
 | `POST` | `/attachment/bind` | 绑定已上传文件到审批实例或任务 |
 | `POST` | `/attachment/delete` | 删除审批附件 |
+| `GET` | `/attachment/download/{attachmentId}` | 下载单个审批附件 |
+| `POST` | `/attachment/download-all` | 打包下载审批实例全部附件 |
 
 具体请求、响应字段在进入开发前补充到 `docs/04-api/`。
 

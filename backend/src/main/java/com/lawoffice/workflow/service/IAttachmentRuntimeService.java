@@ -3,6 +3,7 @@ package com.lawoffice.workflow.service;
 import com.lawoffice.framework.dto.RequestContext;
 import com.lawoffice.framework.result.BaseResult;
 import com.lawoffice.system.vo.FileUploadVO;
+import com.lawoffice.workflow.dto.WorkflowDownloadFile;
 import com.lawoffice.workflow.req.AttachmentBindReq;
 import com.lawoffice.workflow.vo.AttachmentVO;
 
@@ -58,4 +59,13 @@ public interface IAttachmentRuntimeService {
      * @return 文件内容流
      */
     InputStream downloadContent(String attachmentId, RequestContext context);
+
+    /**
+     * 打包下载流程实例下当前用户可访问的全部有效附件，不包含审批单 PDF。
+     *
+     * @param processInstanceId 流程实例ID
+     * @param context 请求上下文
+     * @return ZIP 文件
+     */
+    WorkflowDownloadFile downloadPackageByInstance(String processInstanceId, RequestContext context);
 }

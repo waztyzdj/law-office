@@ -294,6 +294,17 @@ public class RuntimeController {
         }
     }
 
+    @PostMapping("/attachment/download-all")
+    @Operation(summary = "打包下载审批附件")
+    public void downloadAllAttachments(@RequestBody InstanceReq req,
+            HttpServletRequest request,
+            HttpServletResponse response) throws IOException {
+        RequestContext context = RequestContextUtils.buildContext(request);
+        WorkflowDownloadFile downloadFile = runtimeService.downloadAttachmentPackage(
+                req == null ? null : req.getId(), context);
+        writeDownloadFile(response, downloadFile);
+    }
+
     @PostMapping("/instance/diagram")
     @Operation(summary = "获取实例图谱")
     public BaseResult<InstanceDiagramVO> getInstanceDiagram(@RequestBody InstanceDiagramReq req,

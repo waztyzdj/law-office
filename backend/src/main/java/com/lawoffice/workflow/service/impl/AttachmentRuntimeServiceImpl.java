@@ -10,6 +10,7 @@ import com.lawoffice.system.vo.FileRelationVO;
 import com.lawoffice.system.vo.FileUploadVO;
 import com.lawoffice.util.EntityFillUtils;
 import com.lawoffice.workflow.constant.WorkflowConstants;
+import com.lawoffice.workflow.dto.WorkflowDownloadFile;
 import com.lawoffice.workflow.entity.Attachment;
 import com.lawoffice.workflow.entity.ProcessInstance;
 import com.lawoffice.workflow.entity.Task;
@@ -26,13 +27,19 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
+import java.io.ByteArrayOutputStream;
 import java.io.InputStream;
+import java.io.IOException;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipOutputStream;
 
 @Service
 public class AttachmentRuntimeServiceImpl implements IAttachmentRuntimeService {
 
+    private static final String ZIP_CONTENT_TYPE = "application/zip";
     private static final Set<String> SUPPORTED_ATTACHMENT_SOURCES = Set.of(
             WorkflowConstants.AttachmentSource.START,
             WorkflowConstants.AttachmentSource.TASK,
@@ -68,13 +75,7 @@ public class AttachmentRuntimeServiceImpl implements IAttachmentRuntimeService {
                 throw new IllegalArgumentException("流程实例ID不能为空");
             }
             requireAccessibleInstance(processInstanceId, tenantId, context);
-            List<Attachment> attachments = attachmentMapper.selectList(new QueryWrapper<Attachment>()
-                    .eq("tenant_id", tenantId)
-                    .eq("process_instance_id", processInstanceId)
-                    .eq("status", WorkflowConstants.AttachmentStatus.ACTIVE)
-                    .eq("delete_flag", 0)
-                    .orderByAsc("sort_order")
-                    .orderByAsc("create_time"));
+            List<Attachment> attachments = listActiveAttachments(processInstanceId, tenantId);
             return BaseResult.success(buildAttachmentVOList(attachments));
         } catch (IllegalArgumentException e) {
             return BaseResult.error(400, e.getMessage());
@@ -163,6 +164,21 @@ public class AttachmentRuntimeServiceImpl implements IAttachmentRuntimeService {
         return sysFilesService.downloadFileContent(attachment.getFileId());
     }
 
+    @Override
+    public WorkflowDownloadFile downloadPackageByInstance(String processInstanceId, RequestContext context) {
+        String tenantId = RuntimeSupport.requireTenantId(context);
+        if (!StringUtils.hasText(processInstanceId)) {
+            throw new IllegalArgumentException("流程实例ID不能为空");
+        }
+        ProcessInstance processInstance = requireAccessibleInstance(processInstanceId, tenantId, context);
+        List<Attachment> attachments = listActiveAttachments(processInstanceId, tenantId);
+        if (attachments.isEmpty()) {
+            throw new IllegalArgumentException("暂无可下载附件");
+        }
+        byte[] zipContent = buildAttachmentPackage(attachments);
+        return new WorkflowDownloadFile(buildPackageFileName(processInstance) + ".zip", ZIP_CONTENT_TYPE, zipContent);
+    }
+
     private void validateBindReq(AttachmentBindReq req) {
         if (req == null) {
             throw new IllegalArgumentException("附件绑定请求不能为空");
@@ -198,6 +214,77 @@ public class AttachmentRuntimeServiceImpl implements IAttachmentRuntimeService {
         return attachments.stream()
                 .map(this::buildAttachmentVO)
                 .toList();
+    }
+
+    private List<Attachment> listActiveAttachments(String processInstanceId, String tenantId) {
+        return attachmentMapper.selectList(new QueryWrapper<Attachment>()
+                .eq("tenant_id", tenantId)
+                .eq("process_instance_id", processInstanceId)
+                .eq("status", WorkflowConstants.AttachmentStatus.ACTIVE)
+                .eq("delete_flag", 0)
+                .orderByAsc("sort_order")
+                .orderByAsc("create_time"));
+    }
+
+    private byte[] buildAttachmentPackage(List<Attachment> attachments) {
+        try (ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
+                ZipOutputStream zipOutputStream = new ZipOutputStream(outputStream)) {
+            Set<String> usedNames = new HashSet<>();
+            for (Attachment attachment : attachments) {
+                addAttachmentEntry(zipOutputStream, attachment, usedNames);
+            }
+            zipOutputStream.finish();
+            return outputStream.toByteArray();
+        } catch (IOException e) {
+            throw new IllegalStateException("打包审批附件失败", e);
+        }
+    }
+
+    private void addAttachmentEntry(ZipOutputStream zipOutputStream, Attachment attachment,
+            Set<String> usedNames) throws IOException {
+        FileUploadVO file = sysFilesService.getFileById(attachment.getFileId());
+        String fileName = file != null && StringUtils.hasText(file.getFileName())
+                ? file.getFileName()
+                : attachment.getFileId();
+        String entryName = uniqueZipEntryName(fileName, usedNames);
+        zipOutputStream.putNextEntry(new ZipEntry(entryName));
+        try (InputStream inputStream = sysFilesService.downloadFileContent(attachment.getFileId())) {
+            inputStream.transferTo(zipOutputStream);
+        }
+        zipOutputStream.closeEntry();
+    }
+
+    private String uniqueZipEntryName(String name, Set<String> usedNames) {
+        String safeName = safeZipEntryName(name);
+        if (usedNames.add(safeName)) {
+            return safeName;
+        }
+        int dotIndex = safeName.lastIndexOf('.');
+        String baseName = dotIndex > 0 ? safeName.substring(0, dotIndex) : safeName;
+        String extension = dotIndex > 0 ? safeName.substring(dotIndex) : "";
+        int index = 1;
+        String candidate;
+        do {
+            candidate = baseName + "(" + index++ + ")" + extension;
+        } while (!usedNames.add(candidate));
+        return candidate;
+    }
+
+    private String safeZipEntryName(String name) {
+        return StringUtils.hasText(name) ? name.replace("\\", "_")
+                .replace("/", "_")
+                .replace("\r", "_")
+                .replace("\n", "_") : "未命名";
+    }
+
+    private String buildPackageFileName(ProcessInstance processInstance) {
+        String title = StringUtils.hasText(processInstance.getInstanceTitle())
+                ? processInstance.getInstanceTitle()
+                : "审批附件";
+        String fileName = StringUtils.hasText(processInstance.getInstanceNo())
+                ? title + "-" + processInstance.getInstanceNo()
+                : title;
+        return fileName.replaceAll("[\\\\/:*?\"<>|\\r\\n]+", " ").trim();
     }
 
     private AttachmentVO buildAttachmentVO(Attachment attachment) {

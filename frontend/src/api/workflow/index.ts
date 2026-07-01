@@ -732,6 +732,11 @@ export const deleteWorkflowAttachment = (id: string) =>
   requestClient.post<void>('/workflow/attachment/delete', { id });
 export const downloadWorkflowAttachment = (id: string) =>
   requestClient.download<Blob>(`/workflow/attachment/download/${id}`);
+export const downloadWorkflowAttachmentPackage = (id: string) =>
+  requestClient.download<Blob>('/workflow/attachment/download-all', {
+    data: { id },
+    method: 'POST',
+  });
 export const downloadWorkflowInstancePackage = (id: string) =>
   requestClient.download<Blob>('/workflow/instance/download/package', {
     data: { id },

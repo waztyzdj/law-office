@@ -32,6 +32,7 @@ import {
   bindWorkflowAttachment,
   deleteWorkflowAttachment,
   downloadWorkflowAttachment,
+  downloadWorkflowAttachmentPackage,
   listWorkflowAttachments,
 } from '#/api/workflow';
 import {
@@ -57,6 +58,8 @@ const props = withDefaults(
   defineProps<{
     attachmentSource?: WorkflowAttachmentSource;
     editable?: boolean;
+    instanceNo?: string;
+    instanceTitle?: string;
     nodeId?: string;
     nodeName?: string;
     processInstanceId?: string;
@@ -73,6 +76,7 @@ const MAX_ATTACHMENT_SIZE = 50 * 1024 * 1024;
 const attachments = ref<AttachmentItem[]>([]);
 const loading = ref(false);
 const uploadCount = ref(0);
+const downloadingAll = ref(false);
 const downloadingFileIds = ref<string[]>([]);
 const deletingIds = ref<string[]>([]);
 const collapsed = ref(false);
@@ -81,7 +85,15 @@ const documentPreviewModalRef = ref<InstanceType<typeof DocumentOnlyOfficePrevie
 
 const isUploading = computed(() => uploadCount.value > 0);
 const hasAttachments = computed(() => attachments.value.length > 0);
+const hasDownloadableAttachments = computed(() =>
+  attachments.value.some((item) => item.id && !item.pending),
+);
 const canUpload = computed(() => props.editable);
+const attachmentPackageFileName = computed(() => {
+  const title = props.instanceTitle?.trim() || '审批附件';
+  const instanceNo = props.instanceNo?.trim();
+  return `${sanitizeFileName(instanceNo ? `${title}-${instanceNo}` : title)}.zip`;
+});
 
 watch(
   () => props.processInstanceId,
@@ -187,6 +199,7 @@ function reset() {
   attachments.value = [];
   loading.value = false;
   uploadCount.value = 0;
+  downloadingAll.value = false;
   downloadingFileIds.value = [];
   deletingIds.value = [];
 }
@@ -265,19 +278,43 @@ async function handleDownload(item: AttachmentItem) {
   setDownloading(item.id, true);
   try {
     const blob = await downloadWorkflowAttachment(item.id);
-    const objectUrl = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = objectUrl;
-    link.download = item.fileName?.trim() || 'download';
-    document.body.append(link);
-    link.click();
-    link.remove();
-    window.setTimeout(() => URL.revokeObjectURL(objectUrl), 0);
+    downloadBlob(blob, item.fileName?.trim() || 'download');
   } catch {
     message.error('附件下载失败');
   } finally {
     setDownloading(item.id, false);
   }
+}
+
+async function handleDownloadAll() {
+  if (!props.processInstanceId || !hasDownloadableAttachments.value) {
+    return;
+  }
+  downloadingAll.value = true;
+  try {
+    const blob = await downloadWorkflowAttachmentPackage(props.processInstanceId);
+    downloadBlob(blob, attachmentPackageFileName.value);
+    message.success('下载成功');
+  } catch {
+    message.error('附件打包下载失败');
+  } finally {
+    downloadingAll.value = false;
+  }
+}
+
+function downloadBlob(blob: Blob, fileName: string) {
+  const objectUrl = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = objectUrl;
+  link.download = fileName;
+  document.body.append(link);
+  link.click();
+  link.remove();
+  window.setTimeout(() => URL.revokeObjectURL(objectUrl), 0);
+}
+
+function sanitizeFileName(fileName: string) {
+  return fileName.replace(/[\\/:*?"<>|\r\n]+/g, ' ').trim() || '审批附件';
 }
 
 async function handleDelete(item: AttachmentItem) {
@@ -332,6 +369,16 @@ defineExpose({
         </span>
       </button>
       <div class="workflow-attachment-panel__tools">
+        <Button
+          v-if="hasDownloadableAttachments && !collapsed"
+          size="small"
+          type="link"
+          :loading="downloadingAll"
+          @click="handleDownloadAll"
+        >
+          <DownloadOutlined />
+          全部下载
+        </Button>
         <Upload
           v-if="canUpload && !collapsed"
           :before-upload="handleBeforeUpload"

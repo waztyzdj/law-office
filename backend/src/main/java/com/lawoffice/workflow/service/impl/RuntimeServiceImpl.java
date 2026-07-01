@@ -4,6 +4,7 @@ import com.lawoffice.framework.dto.RequestContext;
 import com.lawoffice.framework.result.BaseResult;
 import com.lawoffice.framework.vo.PageVO;
 import com.lawoffice.system.vo.FileUploadVO;
+import com.lawoffice.workflow.dto.WorkflowDownloadFile;
 import com.lawoffice.workflow.req.AvailableProcessPageReq;
 import com.lawoffice.workflow.req.AssigneePreviewReq;
 import com.lawoffice.workflow.req.AttachmentBindReq;
@@ -209,6 +210,11 @@ public class RuntimeServiceImpl implements IRuntimeService {
     @Override
     public InputStream downloadAttachmentContent(String attachmentId, RequestContext context) {
         return attachmentRuntimeService.downloadContent(attachmentId, context);
+    }
+
+    @Override
+    public WorkflowDownloadFile downloadAttachmentPackage(String processInstanceId, RequestContext context) {
+        return attachmentRuntimeService.downloadPackageByInstance(processInstanceId, context);
     }
 
     @Override
