@@ -92,6 +92,15 @@ const routes: RouteRecordRaw[] = [
           title: '流程监控',
         },
       },
+      {
+        name: 'WorkflowArchive',
+        path: '/workflow/archive',
+        component: () => import('#/views/workflow/admin/archive/index.vue'),
+        meta: {
+          icon: 'lucide:folder-archive',
+          title: '流程归档',
+        },
+      },
     ],
   },
 ];

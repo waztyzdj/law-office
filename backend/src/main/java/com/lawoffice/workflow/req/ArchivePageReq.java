@@ -6,7 +6,7 @@ import lombok.EqualsAndHashCode;
 
 @Data
 @EqualsAndHashCode(callSuper = true)
-public class AdminMonitorPageReq extends BasePageReq {
+public class ArchivePageReq extends BasePageReq {
 
     private String instanceTitle;
 
@@ -22,19 +22,21 @@ public class AdminMonitorPageReq extends BasePageReq {
 
     private String starterRealname;
 
-    private String currentTaskNames;
+    private String instanceStatus;
 
-    private String currentAssigneeNames;
+    private String archiveSource;
 
-    private String status;
+    private String processStartTimeGe;
 
-    private String startTimeGe;
+    private String processStartTimeLe;
 
-    private String startTimeLe;
+    private String processEndTimeGe;
 
-    private String updateTimeGe;
+    private String processEndTimeLe;
 
-    private String updateTimeLe;
+    private String archiveTimeGe;
+
+    private String archiveTimeLe;
 
     private String archiveReason;
 }

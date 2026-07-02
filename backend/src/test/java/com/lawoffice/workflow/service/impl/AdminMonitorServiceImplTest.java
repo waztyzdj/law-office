@@ -18,6 +18,7 @@ import com.lawoffice.workflow.entity.ProcessInstance;
 import com.lawoffice.workflow.entity.Task;
 import com.lawoffice.workflow.entity.TaskCandidate;
 import com.lawoffice.workflow.mapper.AdminOperationRecordMapper;
+import com.lawoffice.workflow.mapper.ArchiveRecordMapper;
 import com.lawoffice.workflow.mapper.CcRecordMapper;
 import com.lawoffice.workflow.mapper.FormInstanceMapper;
 import com.lawoffice.workflow.mapper.OperationRecordMapper;
@@ -73,6 +74,8 @@ class AdminMonitorServiceImplTest {
     @Mock
     private AdminOperationRecordMapper adminOperationRecordMapper;
     @Mock
+    private ArchiveRecordMapper archiveRecordMapper;
+    @Mock
     private CcRecordMapper ccRecordMapper;
     @Mock
     private FormInstanceMapper formInstanceMapper;
@@ -108,6 +111,7 @@ class AdminMonitorServiceImplTest {
     void setUp() {
         service = new AdminMonitorServiceImpl(
                 adminOperationRecordMapper,
+                archiveRecordMapper,
                 ccRecordMapper,
                 formInstanceMapper,
                 flowableService,

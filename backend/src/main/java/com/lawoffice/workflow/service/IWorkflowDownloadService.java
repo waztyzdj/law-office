@@ -16,4 +16,15 @@ public interface IWorkflowDownloadService {
      * @return ZIP 文件
      */
     WorkflowDownloadFile downloadPackage(String processInstanceId, RequestContext context);
+
+    /**
+     * 下载流程归档材料包。
+     * <p>
+     * 该入口由流程归档权限控制，不复用普通运行时访问权；允许已归档的通过、不通过和终止实例下载。
+     *
+     * @param processInstanceId 流程实例 ID
+     * @param context 请求上下文
+     * @return ZIP 材料包
+     */
+    WorkflowDownloadFile downloadArchivePackage(String processInstanceId, RequestContext context);
 }

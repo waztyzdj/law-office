@@ -86,6 +86,17 @@ export const NUMBER_FILTER_CONDITIONS: FilterConditionOption[] = [
  */
 export type ColumnType = 'text' | 'date' | 'datetime' | 'number' | 'select';
 
+function toFirstPagePagination(pagination: any) {
+  if (!pagination) {
+    return pagination;
+  }
+  return {
+    ...pagination,
+    current: 1,
+    pageNum: 1,
+  };
+}
+
 /**
  * Select 选项配置
  */
@@ -321,7 +332,7 @@ export function useTableHeaderFilter(
                   filterState.value[dataIndex] = undefined;
                   
                   // 触发 change 事件，更新筛选状态
-                  emit('change', pagination, filterState.value, {});
+                  emit('change', toFirstPagePagination(pagination), filterState.value, {});
                 },
               },
               () => '重置'
@@ -402,7 +413,7 @@ export function useTableHeaderFilter(
     confirm();
 
     // 手动触发 change 事件
-    emit('change', pagination, filterState.value, {});
+    emit('change', toFirstPagePagination(pagination), filterState.value, {});
   };
 
   return {
@@ -510,7 +521,7 @@ export function useTableHeaderSelectFilter(
                   confirm();
 
                   // 手动触发 change 事件
-                  emit('change', pagination, filterState.value, {});
+                  emit('change', toFirstPagePagination(pagination), filterState.value, {});
                 },
               },
               () => '搜索'
@@ -526,7 +537,7 @@ export function useTableHeaderSelectFilter(
                   filterState.value[dataIndex] = undefined;
                   
                   // 触发 change 事件，更新筛选状态
-                  emit('change', pagination, filterState.value, {});
+                  emit('change', toFirstPagePagination(pagination), filterState.value, {});
                 },
               },
               () => '重置'
@@ -835,7 +846,7 @@ export function useTableHeaderDateTimeFilter(dataIndex: string) {
                   confirm();
 
                   // 手动触发 change 事件
-                  emit('change', pagination, filterState.value, {});
+                  emit('change', toFirstPagePagination(pagination), filterState.value, {});
                 },
               },
               () => '搜索'
@@ -856,7 +867,7 @@ export function useTableHeaderDateTimeFilter(dataIndex: string) {
                   filterState.value[dataIndex] = undefined;
                   
                   // 触发 change 事件，更新筛选状态
-                  emit('change', pagination, filterState.value, {});
+                  emit('change', toFirstPagePagination(pagination), filterState.value, {});
                 },
               },
               () => '重置'

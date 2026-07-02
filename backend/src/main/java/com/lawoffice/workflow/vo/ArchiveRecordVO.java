@@ -9,11 +9,17 @@ import java.time.LocalDateTime;
 
 @Data
 @EqualsAndHashCode(callSuper = true)
-public class AdminMonitorInstanceVO extends BaseVO {
+public class ArchiveRecordVO extends BaseVO {
+
+    private String tenantId;
+
+    private String processInstanceId;
 
     private String processModelId;
 
     private String categoryId;
+
+    private String categoryName;
 
     private String processKey;
 
@@ -29,31 +35,30 @@ public class AdminMonitorInstanceVO extends BaseVO {
 
     private String instanceTitle;
 
-    private String businessKey;
-
     private String starterUserId;
 
     private String starterUsername;
 
     private String starterRealname;
 
-    private String status;
+    private String instanceStatus;
 
     @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss", timezone = "GMT+8")
-    private LocalDateTime startTime;
+    private LocalDateTime processStartTime;
 
     @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss", timezone = "GMT+8")
-    private LocalDateTime endTime;
+    private LocalDateTime processEndTime;
 
-    private String currentTaskNames;
+    private String archiveSource;
 
-    private String currentAssigneeNames;
+    private String archiveReason;
 
-    private Long todoTaskCount;
+    private String archiverUserId;
 
-    private Boolean canMaintain;
+    private String archiverUsername;
 
-    private Boolean archived;
+    private String archiverRealname;
 
-    private Boolean canArchive;
+    @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss", timezone = "GMT+8")
+    private LocalDateTime archiveTime;
 }

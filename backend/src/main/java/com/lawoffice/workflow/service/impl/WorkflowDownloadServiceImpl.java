@@ -75,7 +75,16 @@ public class WorkflowDownloadServiceImpl implements IWorkflowDownloadService {
 
     @Override
     public WorkflowDownloadFile downloadPackage(String processInstanceId, RequestContext context) {
-        DownloadContext downloadContext = loadDownloadContext(processInstanceId, context);
+        DownloadContext downloadContext = loadRuntimeDownloadContext(processInstanceId, context);
+        byte[] pdfContent = buildPdf(downloadContext);
+        byte[] zipContent = buildPackage(downloadContext, pdfContent);
+        return new WorkflowDownloadFile(buildBaseFileName(downloadContext.processInstance()) + ".zip",
+                ZIP_CONTENT_TYPE, zipContent);
+    }
+
+    @Override
+    public WorkflowDownloadFile downloadArchivePackage(String processInstanceId, RequestContext context) {
+        DownloadContext downloadContext = loadArchiveDownloadContext(processInstanceId, context);
         byte[] pdfContent = buildPdf(downloadContext);
         byte[] zipContent = buildPackage(downloadContext, pdfContent);
         return new WorkflowDownloadFile(buildBaseFileName(downloadContext.processInstance()) + ".zip",
@@ -85,13 +94,32 @@ public class WorkflowDownloadServiceImpl implements IWorkflowDownloadService {
     /**
      * 下载材料属于正式留存件，只允许已通过结束的实例下载，并复用详情访问权。
      */
-    private DownloadContext loadDownloadContext(String processInstanceId, RequestContext context) {
+    private DownloadContext loadRuntimeDownloadContext(String processInstanceId, RequestContext context) {
         String tenantId = workflowRuntimeLookupService.requireTenantId(context);
         ProcessInstance processInstance = workflowRuntimeLookupService.requireProcessInstance(processInstanceId, tenantId);
         runtimeAccessService.ensureInstanceAccess(processInstance, context);
         if (!WorkflowConstants.Status.APPROVED.equals(processInstance.getStatus())) {
             throw new IllegalArgumentException("只有审批通过并结束的流程可以下载");
         }
+        return buildDownloadContext(processInstance, tenantId);
+    }
+
+    /**
+     * 归档材料下载由归档 Controller 的查看权限和归档记录存在性兜底，这里只校验租户与终态，
+     * 允许通过、不通过和已终止实例复用同一套 PDF/ZIP 生成逻辑。
+     */
+    private DownloadContext loadArchiveDownloadContext(String processInstanceId, RequestContext context) {
+        String tenantId = workflowRuntimeLookupService.requireTenantId(context);
+        ProcessInstance processInstance = workflowRuntimeLookupService.requireProcessInstance(processInstanceId, tenantId);
+        if (!WorkflowConstants.Status.APPROVED.equals(processInstance.getStatus())
+                && !WorkflowConstants.Status.REJECTED.equals(processInstance.getStatus())
+                && !WorkflowConstants.Status.TERMINATED.equals(processInstance.getStatus())) {
+            throw new IllegalArgumentException("只有已结束流程可以下载归档材料");
+        }
+        return buildDownloadContext(processInstance, tenantId);
+    }
+
+    private DownloadContext buildDownloadContext(ProcessInstance processInstance, String tenantId) {
         FormInstance formInstance = workflowRuntimeLookupService.requireFormInstance(
                 processInstance.getFormInstanceId(), tenantId);
         List<OperationRecord> records = listOperationRecords(processInstance.getId(), tenantId);

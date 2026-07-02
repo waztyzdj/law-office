@@ -1,6 +1,13 @@
 import type { TaskActionPermissionInfo } from '#/api/workflow';
 
-export type DrawerMode = 'adminMonitor' | 'detail' | 'done' | 'start' | 'started' | 'todo';
+export type DrawerMode =
+  | 'adminMonitor'
+  | 'archive'
+  | 'detail'
+  | 'done'
+  | 'start'
+  | 'started'
+  | 'todo';
 
 export type WorkflowAction = 'addSign' | 'return' | 'transfer';
 

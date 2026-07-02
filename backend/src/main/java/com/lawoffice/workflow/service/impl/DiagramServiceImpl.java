@@ -58,26 +58,53 @@ public class DiagramServiceImpl implements IDiagramService {
                 throw new IllegalArgumentException("流程实例不存在");
             }
             runtimeAccessService.ensureInstanceAccess(instance, context);
-            ProcessModel model = processModelMapper.selectOne(new QueryWrapper<ProcessModel>()
-                    .eq("id", instance.getProcessModelId())
-                    .eq("tenant_id", tenantId)
-                    .eq("delete_flag", 0));
-            if (model == null) {
-                throw new IllegalArgumentException("流程模型不存在");
-            }
-
-            InstanceDiagramVO diagram = new InstanceDiagramVO();
-            diagram.setProcessInstanceId(instance.getId());
-            diagram.setProcessModelId(model.getId());
-            diagram.setBpmnXml(model.getBpmnXml());
-            diagram.setBranchRecords(listBranchRecords(tenantId, instance.getId()));
-            diagram.setOperationRecords(listOperationRecords(tenantId, instance.getId()));
-            return BaseResult.success(diagram);
+            return BaseResult.success(buildInstanceDiagram(instance, tenantId));
         } catch (IllegalArgumentException e) {
             return BaseResult.error(400, e.getMessage());
         } catch (Exception e) {
             return BaseResult.error("查询流程图数据失败: " + e.getMessage());
         }
+    }
+
+    @Override
+    public BaseResult<InstanceDiagramVO> getInstanceDiagramForGrantedAccess(String processInstanceId,
+            RequestContext context) {
+        try {
+            String tenantId = RuntimeSupport.requireTenantId(context);
+            if (!StringUtils.hasText(processInstanceId)) {
+                throw new IllegalArgumentException("流程实例ID不能为空");
+            }
+            ProcessInstance instance = processInstanceMapper.selectOne(new QueryWrapper<ProcessInstance>()
+                    .eq("id", processInstanceId)
+                    .eq("tenant_id", tenantId)
+                    .eq("delete_flag", 0));
+            if (instance == null) {
+                throw new IllegalArgumentException("流程实例不存在");
+            }
+            return BaseResult.success(buildInstanceDiagram(instance, tenantId));
+        } catch (IllegalArgumentException e) {
+            return BaseResult.error(400, e.getMessage());
+        } catch (Exception e) {
+            return BaseResult.error("查询流程图数据失败: " + e.getMessage());
+        }
+    }
+
+    private InstanceDiagramVO buildInstanceDiagram(ProcessInstance instance, String tenantId) {
+        ProcessModel model = processModelMapper.selectOne(new QueryWrapper<ProcessModel>()
+                .eq("id", instance.getProcessModelId())
+                .eq("tenant_id", tenantId)
+                .eq("delete_flag", 0));
+        if (model == null) {
+            throw new IllegalArgumentException("流程模型不存在");
+        }
+
+        InstanceDiagramVO diagram = new InstanceDiagramVO();
+        diagram.setProcessInstanceId(instance.getId());
+        diagram.setProcessModelId(model.getId());
+        diagram.setBpmnXml(model.getBpmnXml());
+        diagram.setBranchRecords(listBranchRecords(tenantId, instance.getId()));
+        diagram.setOperationRecords(listOperationRecords(tenantId, instance.getId()));
+        return diagram;
     }
 
     private List<BranchRecordVO> listBranchRecords(String tenantId, String processInstanceId) {

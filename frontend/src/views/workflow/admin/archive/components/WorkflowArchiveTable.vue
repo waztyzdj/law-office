@@ -1,76 +1,78 @@
 <script setup lang="ts">
+import type { ArchiveRecordInfo } from '#/api/workflow';
+import type { TablePaginationConfig } from '#/composables/Table';
+
 import { computed, toRef } from 'vue';
 
 import { IconifyIcon } from '@vben/icons';
 
 import { Button, Space } from 'ant-design-vue';
 
-import type { AdminMonitorInstanceInfo } from '#/api/workflow';
-import type { TablePaginationConfig } from '#/composables/Table';
-
 import { BaseTable } from '#/components/BaseTable';
 import { permissionCodes } from '#/constants/permissions';
 
-import { getWorkflowMonitorColumns } from '../hooks/useWorkflowMonitorColumns';
+import { getWorkflowArchiveColumns } from '../hooks/useWorkflowArchiveColumns';
+import type { WorkflowArchiveTab } from '../hooks/useWorkflowArchiveTable';
 
 interface Props {
   activeFilters: Record<string, any>;
   archivingByQuery?: boolean;
   archivingSelected?: boolean;
-  dataSource: AdminMonitorInstanceInfo[];
+  dataSource: ArchiveRecordInfo[];
   loading: boolean;
   pagination: TablePaginationConfig;
   scopeTitle: string;
   selectedRowKeys: (number | string)[];
+  tab: WorkflowArchiveTab;
 }
 
 const props = defineProps<Props>();
 const emit = defineEmits<{
-  archive: [record: AdminMonitorInstanceInfo];
+  archive: [record: ArchiveRecordInfo];
   archiveByQuery: [];
   archiveSelected: [];
   change: [pag: any, filters: any, sorter: any];
-  detail: [record: AdminMonitorInstanceInfo];
-  reassign: [record: AdminMonitorInstanceInfo];
-  resendNotice: [record: AdminMonitorInstanceInfo];
+  detail: [record: ArchiveRecordInfo];
+  download: [record: ArchiveRecordInfo];
   selectChange: [keys: (number | string)[]];
-  terminate: [record: AdminMonitorInstanceInfo];
 }>();
 
 const filterStateRef = toRef(props, 'activeFilters');
 const tableConfig = computed(() =>
-  getWorkflowMonitorColumns(filterStateRef, emit, props.pagination),
+  getWorkflowArchiveColumns(props.tab, filterStateRef, emit, props.pagination),
 );
-const rowSelection = computed(() => ({
-  getCheckboxProps: (record: AdminMonitorInstanceInfo) => ({
-    disabled: !record.canArchive,
-  }),
-  onChange: (keys: (number | string)[]) => emit('selectChange', keys),
-  selectedRowKeys: props.selectedRowKeys,
-}));
+const rowSelection = computed(() =>
+  props.tab === 'unarchived'
+    ? {
+        selectedRowKeys: props.selectedRowKeys,
+        onChange: (keys: (number | string)[]) => emit('selectChange', keys),
+      }
+    : undefined,
+);
 </script>
 
 <template>
   <BaseTable
-    class="workflow-monitor-table"
+    class="workflow-archive-table"
     :columns="tableConfig.columns"
     :data-source="dataSource"
     :loading="loading"
     :pagination="pagination"
     :row-selection="rowSelection"
     :scroll="tableConfig.scroll"
-    :show-toolbar="true"
-    row-key="id"
+    :show-card="false"
+    :show-toolbar="false"
+    row-key="processInstanceId"
     @change="(pag, tableFilters, sorter) => $emit('change', pag, tableFilters, sorter)"
   >
-    <template #toolbar>
-      <div class="workflow-monitor-table__header">
-        <div class="workflow-monitor-table__title">
+    <template #beforeTable>
+      <div class="workflow-archive-table__header">
+        <div class="workflow-archive-table__title">
           {{ scopeTitle }}
         </div>
-        <Space>
+        <Space v-if="tab === 'unarchived'">
           <Button
-            v-access:code="permissionCodes.workflowMonitor.manage"
+            v-access:code="permissionCodes.workflowArchive.manage"
             :disabled="selectedRowKeys.length === 0"
             :loading="archivingSelected"
             type="primary"
@@ -82,7 +84,7 @@ const rowSelection = computed(() => ({
             批量归档
           </Button>
           <Button
-            v-access:code="permissionCodes.workflowMonitor.manage"
+            v-access:code="permissionCodes.workflowArchive.manage"
             :loading="archivingByQuery"
             @click="$emit('archiveByQuery')"
           >
@@ -98,51 +100,40 @@ const rowSelection = computed(() => ({
 </template>
 
 <style scoped>
-.workflow-monitor-table {
+.workflow-archive-table {
+  display: flex;
+  flex-direction: column;
   height: 100%;
   overflow: hidden;
 }
 
-.workflow-monitor-table :deep(.ant-card-body) {
-  display: flex;
-  flex-direction: column;
-  height: 100%;
-  min-height: 0;
-}
-
-.workflow-monitor-table__title {
+.workflow-archive-table__title {
   flex: 0 0 auto;
   color: var(--ant-color-text, rgb(0 0 0 / 88%));
   font-size: 15px;
   font-weight: 500;
 }
 
-.workflow-monitor-table__header {
+.workflow-archive-table__header {
   display: flex;
+  flex: 0 0 auto;
   flex-direction: column;
   gap: 12px;
+  margin-bottom: 12px;
 }
 
-.workflow-monitor-table :deep(.base-table-toolbar) {
-  align-items: flex-start;
-}
-
-.workflow-monitor-table :deep(.base-table-toolbar-main) {
-  align-items: flex-start;
-}
-
-.workflow-monitor-table :deep(.ant-table-wrapper) {
+.workflow-archive-table :deep(.ant-table-wrapper) {
   flex: 0 0 auto;
   min-height: 0;
 }
 
-.workflow-monitor-table :deep(.ant-spin-nested-loading),
-.workflow-monitor-table :deep(.ant-spin-container) {
+.workflow-archive-table :deep(.ant-spin-nested-loading),
+.workflow-archive-table :deep(.ant-spin-container) {
   display: block;
   min-height: 0;
 }
 
-.workflow-monitor-table :deep(.ant-table) {
+.workflow-archive-table :deep(.ant-table) {
   flex: none;
 }
 </style>

@@ -6,6 +6,7 @@ import {
   CheckOutlined,
   CloseOutlined,
   DownloadOutlined,
+  FolderOpenOutlined,
   PrinterOutlined,
   RollbackOutlined,
   SaveOutlined,
@@ -18,7 +19,9 @@ import { Button } from 'ant-design-vue';
 
 interface Props {
   actionPermissions?: RuntimeActionPermissions;
+  adminArchiveSubmitting: boolean;
   canCc: boolean;
+  canAdminArchive: boolean;
   canDownload: boolean;
   canPrint: boolean;
   canUrge: boolean;
@@ -38,6 +41,7 @@ defineProps<Props>();
 
 const emit = defineEmits<{
   action: [action: WorkflowAction];
+  adminArchive: [];
   approve: [];
   cancel: [];
   cc: [];
@@ -157,6 +161,16 @@ const emit = defineEmits<{
       撤回
     </Button>
     <Button
+      v-if="canAdminArchive"
+      :disabled="saving || submitting || ccSubmitting || urgeSubmitting || withdrawSubmitting || downloading || adminArchiveSubmitting"
+      :loading="adminArchiveSubmitting"
+      type="primary"
+      @click="emit('adminArchive')"
+    >
+      <FolderOpenOutlined />
+      归档
+    </Button>
+    <Button
       v-if="canPrint"
       :disabled="saving || submitting || ccSubmitting || urgeSubmitting || withdrawSubmitting || downloading"
       @click="emit('print')"
@@ -174,7 +188,7 @@ const emit = defineEmits<{
       下载
     </Button>
     <Button
-      :disabled="saving || submitting || ccSubmitting || urgeSubmitting || downloading"
+      :disabled="saving || submitting || ccSubmitting || urgeSubmitting || downloading || adminArchiveSubmitting"
       @click="emit('cancel')"
     >
       <CloseOutlined />

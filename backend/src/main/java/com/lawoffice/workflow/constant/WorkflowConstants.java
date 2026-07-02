@@ -254,4 +254,13 @@ public final class WorkflowConstants {
         private AdminOperationStatus() {
         }
     }
+
+    public static final class ArchiveSource {
+        public static final String AUTO = "auto";
+        public static final String MONITOR_MANUAL = "monitor_manual";
+        public static final String ARCHIVE_MANUAL = "archive_manual";
+
+        private ArchiveSource() {
+        }
+    }
 }

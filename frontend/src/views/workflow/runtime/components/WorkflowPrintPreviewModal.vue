@@ -8,10 +8,14 @@ import { nextTick, ref } from 'vue';
 
 import { Button, Modal, Spin } from 'ant-design-vue';
 
-import { listWorkflowAttachments } from '#/api/workflow';
+import {
+  listWorkflowArchiveAttachments,
+  listWorkflowAttachments,
+} from '#/api/workflow';
 import WorkflowPrintTemplate from './WorkflowPrintTemplate.vue';
 
 interface PrintPayload {
+  attachmentAccessScope?: 'archive' | 'runtime';
   detail?: InstanceDetailInfo;
 }
 
@@ -19,6 +23,7 @@ const openState = ref(false);
 const loading = ref(false);
 const detail = ref<InstanceDetailInfo>();
 const attachments = ref<WorkflowAttachmentInfo[]>([]);
+const attachmentAccessScope = ref<'archive' | 'runtime'>('runtime');
 const printContentRef = ref<HTMLElement>();
 
 function sanitizeFileName(value: string) {
@@ -44,6 +49,7 @@ function escapeHtml(value: string) {
 
 async function open(payload: PrintPayload) {
   detail.value = payload.detail;
+  attachmentAccessScope.value = payload.attachmentAccessScope ?? 'runtime';
   attachments.value = [];
   openState.value = true;
   await loadAttachments();
@@ -56,7 +62,9 @@ async function loadAttachments() {
   }
   loading.value = true;
   try {
-    attachments.value = await listWorkflowAttachments(processInstanceId);
+    attachments.value = attachmentAccessScope.value === 'archive'
+      ? await listWorkflowArchiveAttachments(processInstanceId)
+      : await listWorkflowAttachments(processInstanceId);
   } finally {
     loading.value = false;
   }

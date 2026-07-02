@@ -14,6 +14,7 @@ import com.lawoffice.system.service.IUserService;
 import com.lawoffice.util.EntityFillUtils;
 import com.lawoffice.workflow.constant.WorkflowConstants;
 import com.lawoffice.workflow.entity.AdminOperationRecord;
+import com.lawoffice.workflow.entity.ArchiveRecord;
 import com.lawoffice.workflow.entity.CcRecord;
 import com.lawoffice.workflow.entity.FormInstance;
 import com.lawoffice.workflow.entity.OperationRecord;
@@ -22,6 +23,7 @@ import com.lawoffice.workflow.entity.ProcessModel;
 import com.lawoffice.workflow.entity.Task;
 import com.lawoffice.workflow.entity.TaskCandidate;
 import com.lawoffice.workflow.mapper.AdminOperationRecordMapper;
+import com.lawoffice.workflow.mapper.ArchiveRecordMapper;
 import com.lawoffice.workflow.mapper.CcRecordMapper;
 import com.lawoffice.workflow.mapper.FormInstanceMapper;
 import com.lawoffice.workflow.mapper.OperationRecordMapper;
@@ -50,7 +52,9 @@ import java.time.format.DateTimeFormatter;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.function.Supplier;
+import java.util.stream.Collectors;
 
 @Service
 public class AdminMonitorServiceImpl implements IAdminMonitorService {
@@ -68,7 +72,14 @@ public class AdminMonitorServiceImpl implements IAdminMonitorService {
             Map.entry("createTime", "create_time")
     );
 
+    private static final Set<String> MANUAL_ARCHIVABLE_STATUSES = Set.of(
+            WorkflowConstants.Status.APPROVED,
+            WorkflowConstants.Status.REJECTED,
+            WorkflowConstants.Status.TERMINATED
+    );
+
     private final AdminOperationRecordMapper adminOperationRecordMapper;
+    private final ArchiveRecordMapper archiveRecordMapper;
     private final CcRecordMapper ccRecordMapper;
     private final FormInstanceMapper formInstanceMapper;
     private final IFlowableService flowableService;
@@ -87,6 +98,7 @@ public class AdminMonitorServiceImpl implements IAdminMonitorService {
     private final UserMapper userMapper;
 
     public AdminMonitorServiceImpl(AdminOperationRecordMapper adminOperationRecordMapper,
+            ArchiveRecordMapper archiveRecordMapper,
             CcRecordMapper ccRecordMapper,
             FormInstanceMapper formInstanceMapper,
             IFlowableService flowableService,
@@ -104,6 +116,7 @@ public class AdminMonitorServiceImpl implements IAdminMonitorService {
             PlatformTransactionManager transactionManager,
             UserMapper userMapper) {
         this.adminOperationRecordMapper = adminOperationRecordMapper;
+        this.archiveRecordMapper = archiveRecordMapper;
         this.ccRecordMapper = ccRecordMapper;
         this.formInstanceMapper = formInstanceMapper;
         this.flowableService = flowableService;
@@ -254,13 +267,15 @@ public class AdminMonitorServiceImpl implements IAdminMonitorService {
             return List.of();
         }
         Map<String, ProcessModel> processModelMap = buildProcessModelMap(instances, tenantId);
+        Set<String> archivedInstanceIds = listArchivedInstanceIds(instances, tenantId);
         return instances.stream()
-                .map(instance -> buildMonitorInstanceVO(instance, processModelMap.get(instance.getProcessModelId()), tenantId))
+                .map(instance -> buildMonitorInstanceVO(instance, processModelMap.get(instance.getProcessModelId()),
+                        tenantId, archivedInstanceIds.contains(instance.getId())))
                 .toList();
     }
 
     private AdminMonitorInstanceVO buildMonitorInstanceVO(ProcessInstance instance, ProcessModel processModel,
-            String tenantId) {
+            String tenantId, boolean archived) {
         AdminMonitorInstanceVO vo = new AdminMonitorInstanceVO();
         vo.setId(instance.getId());
         vo.setCreateBy(instance.getCreateBy());
@@ -287,7 +302,32 @@ public class AdminMonitorServiceImpl implements IAdminMonitorService {
         vo.setCurrentAssigneeNames(instance.getCurrentAssigneeNames());
         vo.setTodoTaskCount(countTodoTasks(instance.getId(), tenantId));
         vo.setCanMaintain(isMaintainable(instance));
+        vo.setArchived(archived);
+        vo.setCanArchive(isManuallyArchivable(instance, archived));
         return vo;
+    }
+
+    private Set<String> listArchivedInstanceIds(List<ProcessInstance> instances, String tenantId) {
+        List<String> instanceIds = instances.stream()
+                .map(ProcessInstance::getId)
+                .filter(StringUtils::hasText)
+                .toList();
+        if (instanceIds.isEmpty()) {
+            return Set.of();
+        }
+        return archiveRecordMapper.selectList(new QueryWrapper<ArchiveRecord>()
+                        .select("process_instance_id")
+                        .eq("tenant_id", tenantId)
+                        .eq("delete_flag", 0)
+                        .in("process_instance_id", instanceIds))
+                .stream()
+                .map(ArchiveRecord::getProcessInstanceId)
+                .filter(StringUtils::hasText)
+                .collect(Collectors.toSet());
+    }
+
+    private boolean isManuallyArchivable(ProcessInstance instance, boolean archived) {
+        return !archived && instance != null && MANUAL_ARCHIVABLE_STATUSES.contains(instance.getStatus());
     }
 
     private AdminOperationRecordVO handleReassign(AdminMonitorActionReq req, RequestContext context) {
@@ -728,8 +768,9 @@ public class AdminMonitorServiceImpl implements IAdminMonitorService {
         String categoryId = req == null ? null : req.getCategoryId();
         String processKey = req == null ? null : req.getProcessKey();
         String processName = req == null ? null : req.getProcessName();
+        Integer processVersion = req == null ? null : req.getProcessVersion();
         if (!StringUtils.hasText(categoryId) && !StringUtils.hasText(processKey)
-                && !StringUtils.hasText(processName)) {
+                && !StringUtils.hasText(processName) && processVersion == null) {
             return null;
         }
         QueryWrapper<ProcessModel> wrapper = new QueryWrapper<ProcessModel>()
@@ -748,6 +789,9 @@ public class AdminMonitorServiceImpl implements IAdminMonitorService {
         }
         if (StringUtils.hasText(processName)) {
             wrapper.like("process_name", processName);
+        }
+        if (processVersion != null) {
+            wrapper.eq("version", processVersion);
         }
         return processModelMapper.selectList(wrapper).stream()
                 .map(ProcessModel::getId)

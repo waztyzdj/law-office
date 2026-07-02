@@ -9,6 +9,9 @@ import { onMounted, ref } from 'vue';
 import { Input, message, Modal } from 'ant-design-vue';
 
 import {
+  archiveAdminMonitorInstance,
+  batchArchiveAdminMonitorByQuery,
+  batchArchiveAdminMonitorInstances,
   reassignAdminMonitorTask,
   resendAdminMonitorNotice,
   terminateAdminMonitorInstance,
@@ -23,13 +26,16 @@ import { useWorkflowMonitorTree } from './hooks/useWorkflowMonitorTree';
 
 const {
   activeFilters,
+  buildCurrentQueryReq,
   handleScopeChange,
   handleTableChange,
   loadData,
   loading,
+  onSelectChange,
   pagination,
   records,
   scope,
+  selectedRowKeys,
 } = useWorkflowMonitorTable();
 const {
   expandedKeys,
@@ -53,6 +59,14 @@ const reasonSubmitting = ref(false);
 const reasonAction = ref<'resendNotice' | 'terminate'>('terminate');
 const reasonTarget = ref<AdminMonitorInstanceInfo>();
 const reasonText = ref('');
+const archiveModalOpen = ref(false);
+const archiveSubmitting = ref(false);
+const archivingSelected = ref(false);
+const archivingByQuery = ref(false);
+const archiveMode = ref<'query' | 'selected' | 'single'>('single');
+const archiveTarget = ref<AdminMonitorInstanceInfo>();
+const archiveReason = ref('');
+const archiveFromDetail = ref(false);
 
 const reasonModalTitle = {
   resendNotice: '补发待办通知',
@@ -63,7 +77,11 @@ function handleDetail(record: AdminMonitorInstanceInfo) {
   reassignTarget.value = record;
   reassignProcessInstanceId.value = '';
   reassignTaskId.value = '';
-  drawerRef.value?.open({ instanceId: record.id, mode: 'adminMonitor' });
+  drawerRef.value?.open({
+    canArchive: Boolean(record.canArchive),
+    instanceId: record.id,
+    mode: 'adminMonitor',
+  });
 }
 
 function requireInstanceId(record?: AdminMonitorInstanceInfo) {
@@ -78,7 +96,11 @@ function handleReassign(record: AdminMonitorInstanceInfo) {
   reassignTarget.value = record;
   reassignProcessInstanceId.value = '';
   reassignTaskId.value = '';
-  drawerRef.value?.open({ instanceId: record.id, mode: 'adminMonitor' });
+  drawerRef.value?.open({
+    canArchive: Boolean(record.canArchive),
+    instanceId: record.id,
+    mode: 'adminMonitor',
+  });
 }
 
 function handleAdminReassign(node: ProcessProgressNode) {
@@ -136,6 +158,96 @@ function handleTerminate(record: AdminMonitorInstanceInfo) {
 
 function handleResendNotice(record: AdminMonitorInstanceInfo) {
   openReasonModal('resendNotice', record);
+}
+
+function handleArchive(record: AdminMonitorInstanceInfo) {
+  archiveMode.value = 'single';
+  archiveTarget.value = record;
+  archiveReason.value = '';
+  archiveFromDetail.value = false;
+  archiveModalOpen.value = true;
+}
+
+function handleArchiveSelected() {
+  if (selectedRowKeys.value.length === 0) {
+    message.warning('请选择需要归档的流程');
+    return;
+  }
+  archiveMode.value = 'selected';
+  archiveTarget.value = undefined;
+  archiveReason.value = '';
+  archiveFromDetail.value = false;
+  archiveModalOpen.value = true;
+}
+
+function handleArchiveByQuery() {
+  archiveMode.value = 'query';
+  archiveTarget.value = undefined;
+  archiveReason.value = '';
+  archiveFromDetail.value = false;
+  archiveModalOpen.value = true;
+}
+
+function handleAdminArchive(processInstanceId: string) {
+  if (!processInstanceId) {
+    message.warning('流程实例不存在');
+    return;
+  }
+  archiveMode.value = 'single';
+  archiveTarget.value = { id: processInstanceId };
+  archiveReason.value = '';
+  archiveFromDetail.value = true;
+  archiveModalOpen.value = true;
+}
+
+async function handleConfirmArchive() {
+  const reason = archiveReason.value.trim() || undefined;
+  archiveSubmitting.value = true;
+  if (archiveMode.value === 'selected') {
+    archivingSelected.value = true;
+  }
+  if (archiveMode.value === 'query') {
+    archivingByQuery.value = true;
+  }
+  try {
+    if (archiveMode.value === 'single') {
+      const processInstanceId = archiveTarget.value?.id;
+      if (!processInstanceId) {
+        message.warning('流程实例不存在');
+        return;
+      }
+      await archiveAdminMonitorInstance({ archiveReason: reason, processInstanceId });
+      message.success('归档成功');
+      if (archiveFromDetail.value) {
+        await drawerRef.value?.open({
+          canArchive: false,
+          instanceId: processInstanceId,
+          mode: 'adminMonitor',
+        });
+      }
+    } else if (archiveMode.value === 'selected') {
+      await batchArchiveAdminMonitorInstances({
+        archiveReason: reason,
+        processInstanceIds: selectedRowKeys.value.map(String),
+      });
+      selectedRowKeys.value = [];
+      message.success('批量归档成功');
+    } else {
+      await batchArchiveAdminMonitorByQuery({
+        ...buildCurrentQueryReq(),
+        archiveReason: reason,
+      });
+      selectedRowKeys.value = [];
+      message.success('按查询条件归档成功');
+    }
+    archiveModalOpen.value = false;
+    await loadData();
+  } finally {
+    archiveSubmitting.value = false;
+    archivingSelected.value = false;
+    archivingByQuery.value = false;
+    archiveFromDetail.value = false;
+  }
 }
 
 function openReasonModal(action: 'resendNotice' | 'terminate', record: AdminMonitorInstanceInfo) {
@@ -206,14 +318,21 @@ onMounted(async () => {
       <section class="workflow-monitor-layout__content">
         <WorkflowMonitorTable
           :active-filters="activeFilters"
+          :archiving-by-query="archivingByQuery"
+          :archiving-selected="archivingSelected"
           :data-source="records"
           :loading="loading"
           :pagination="pagination"
           :scope-title="scope.title"
+          :selected-row-keys="selectedRowKeys"
+          @archive="handleArchive"
+          @archive-by-query="handleArchiveByQuery"
+          @archive-selected="handleArchiveSelected"
           @change="handleTableChange"
           @detail="handleDetail"
           @reassign="handleReassign"
           @resend-notice="handleResendNotice"
+          @select-change="onSelectChange"
           @terminate="handleTerminate"
         />
       </section>
@@ -221,6 +340,7 @@ onMounted(async () => {
 
     <WorkflowRuntimeFormDrawer
       ref="drawerRef"
+      @admin-archive="handleAdminArchive"
       @admin-reassign="handleAdminReassign"
     />
 
@@ -236,10 +356,10 @@ onMounted(async () => {
           <div class="workflow-monitor-reassign__label">新处理人</div>
           <UserPicker
             v-model:value="reassignUserId"
-            placeholder="请选择新的处理人"
             :max-count="1"
-          mode="single"
-          org-only
+            mode="single"
+            org-only
+            placeholder="请选择新的处理人"
           />
         </div>
         <div class="workflow-monitor-reassign__reason">
@@ -281,6 +401,33 @@ onMounted(async () => {
         class="workflow-monitor-reason-tip"
       >
         只会补发当前有效待办通知，不会新增待办或改变流程状态。
+      </div>
+    </Modal>
+
+    <Modal
+      v-model:open="archiveModalOpen"
+      :confirm-loading="archiveSubmitting"
+      :title="archiveMode === 'query' ? '按查询条件归档' : '确认归档'"
+      ok-text="确认归档"
+      @ok="handleConfirmArchive"
+    >
+      <div class="workflow-monitor-archive-confirm">
+        <div>
+          {{
+            archiveMode === 'single'
+              ? '确认归档当前流程实例吗？'
+              : archiveMode === 'selected'
+                ? `确认归档选中的 ${selectedRowKeys.length} 个流程实例吗？`
+                : '确认按当前查询条件批量归档未归档流程吗？单次最多处理 1000 条。'
+          }}
+        </div>
+        <Input.TextArea
+          v-model:value="archiveReason"
+          :maxlength="500"
+          :rows="3"
+          placeholder="归档说明，可选"
+          show-count
+        />
       </div>
     </Modal>
   </div>
@@ -337,5 +484,11 @@ onMounted(async () => {
   margin-top: 8px;
   color: rgb(0 0 0 / 45%);
   font-size: 12px;
+}
+
+.workflow-monitor-archive-confirm {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
 }
 </style>

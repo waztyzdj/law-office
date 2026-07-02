@@ -388,6 +388,7 @@ export function useTable(config: UseTableConfig) {
   function handleTableChange(pag: any, filters: any, sorter: any) {
     pagination.pageNum = pag?.current ?? pag?.pageNum ?? pagination.pageNum;
     pagination.pageSize = pag?.pageSize ?? pagination.pageSize;
+    let filterChanged = false;
 
     // 更新筛选状态并持久化 - 使用合并策略
     // 关键修复：当点击列头排序时，filters 参数会传入状态标记值（如 ['filtered']），
@@ -402,7 +403,10 @@ export function useTable(config: UseTableConfig) {
         
         if (filterValue === undefined) {
           // 重置的列,从activeFilters中移除
-          delete updatedFilters[key];
+          if (key in updatedFilters) {
+            delete updatedFilters[key];
+            filterChanged = true;
+          }
         } else if (filterValue === 'filtered' || (Array.isArray(filterValue) && filterValue.includes('filtered'))) {
           // 这是 Ant Design Vue 的状态标记，不是实际的筛选值
           // 保留已有的实际筛选值，不做任何操作
@@ -410,12 +414,19 @@ export function useTable(config: UseTableConfig) {
         } else {
           // 只有当筛选值是实际的数组或对象时，才更新筛选条件
           // 这表示用户通过筛选器明确修改了筛选条件
-          updatedFilters[key] = filterValue;
+          if (JSON.stringify(updatedFilters[key]) !== JSON.stringify(filterValue)) {
+            filterChanged = true;
+            updatedFilters[key] = filterValue;
+          }
         }
       });
 
       activeFilters.value = updatedFilters;
       saveFiltersToStorage(updatedFilters, filtersKey);
+    }
+
+    if (filterChanged) {
+      pagination.pageNum = 1;
     }
 
     // 处理排序参数

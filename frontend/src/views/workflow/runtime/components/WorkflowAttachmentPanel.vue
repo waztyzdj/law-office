@@ -31,8 +31,11 @@ import {
 import {
   bindWorkflowAttachment,
   deleteWorkflowAttachment,
+  downloadWorkflowArchiveAttachment,
+  downloadWorkflowArchiveAttachmentPackage,
   downloadWorkflowAttachment,
   downloadWorkflowAttachmentPackage,
+  listWorkflowArchiveAttachments,
   listWorkflowAttachments,
 } from '#/api/workflow';
 import {
@@ -56,6 +59,7 @@ interface AttachmentItem extends WorkflowAttachmentInfo {
 
 const props = withDefaults(
   defineProps<{
+    accessScope?: 'archive' | 'runtime';
     attachmentSource?: WorkflowAttachmentSource;
     editable?: boolean;
     instanceNo?: string;
@@ -66,6 +70,7 @@ const props = withDefaults(
     taskId?: string;
   }>(),
   {
+    accessScope: 'runtime',
     attachmentSource: 'task',
     editable: false,
   },
@@ -96,7 +101,7 @@ const attachmentPackageFileName = computed(() => {
 });
 
 watch(
-  () => props.processInstanceId,
+  () => [props.processInstanceId, props.accessScope] as const,
   () => {
     void reload();
   },
@@ -111,7 +116,9 @@ async function reload() {
 
   loading.value = true;
   try {
-    const records = await listWorkflowAttachments(props.processInstanceId);
+    const records = props.accessScope === 'archive'
+      ? await listWorkflowArchiveAttachments(props.processInstanceId)
+      : await listWorkflowAttachments(props.processInstanceId);
     attachments.value = records.map(toAttachmentItem);
   } finally {
     loading.value = false;
@@ -277,7 +284,9 @@ async function handleDownload(item: AttachmentItem) {
   }
   setDownloading(item.id, true);
   try {
-    const blob = await downloadWorkflowAttachment(item.id);
+    const blob = props.accessScope === 'archive'
+      ? await downloadWorkflowArchiveAttachment(item.id)
+      : await downloadWorkflowAttachment(item.id);
     downloadBlob(blob, item.fileName?.trim() || 'download');
   } catch {
     message.error('附件下载失败');
@@ -292,7 +301,9 @@ async function handleDownloadAll() {
   }
   downloadingAll.value = true;
   try {
-    const blob = await downloadWorkflowAttachmentPackage(props.processInstanceId);
+    const blob = props.accessScope === 'archive'
+      ? await downloadWorkflowArchiveAttachmentPackage(props.processInstanceId)
+      : await downloadWorkflowAttachmentPackage(props.processInstanceId);
     downloadBlob(blob, attachmentPackageFileName.value);
     message.success('下载成功');
   } catch {

@@ -21,6 +21,7 @@ import com.lawoffice.workflow.mapper.TaskCandidateMapper;
 import com.lawoffice.workflow.mapper.TaskMapper;
 import com.lawoffice.workflow.req.TaskActionReq;
 import com.lawoffice.workflow.service.IAssigneeResolveService;
+import com.lawoffice.workflow.service.IArchiveService;
 import com.lawoffice.workflow.service.ICcRuntimeService;
 import com.lawoffice.workflow.service.IConditionBranchRuntimeService;
 import com.lawoffice.workflow.service.IFlowableService;
@@ -85,6 +86,8 @@ class TaskActionServiceImplTest {
     @Mock
     private SysMessageActionMapper sysMessageActionMapper;
     @Mock
+    private IArchiveService archiveService;
+    @Mock
     private IConditionBranchRuntimeService conditionBranchRuntimeService;
     @Mock
     private ICcRuntimeService ccRuntimeService;
@@ -119,6 +122,7 @@ class TaskActionServiceImplTest {
                 taskCandidateMapper,
                 reminderRecordMapper,
                 sysMessageActionMapper,
+                archiveService,
                 conditionBranchRuntimeService,
                 ccRuntimeService,
                 flowableService,
@@ -144,6 +148,8 @@ class TaskActionServiceImplTest {
                 .thenReturn(java.util.Optional.empty());
         lenient().when(conditionBranchRuntimeService.buildFlowableVariables(any()))
                 .thenReturn(Map.of());
+        lenient().when(archiveService.archiveAutomatically(anyString(), any(RequestContext.class)))
+                .thenReturn(BaseResult.success(null));
     }
 
     @Test

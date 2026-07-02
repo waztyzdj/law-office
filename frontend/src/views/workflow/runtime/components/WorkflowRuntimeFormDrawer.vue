@@ -24,6 +24,8 @@ import { Alert, message, Modal, Select, Space, Spin, Tag } from 'ant-design-vue'
 import {
   downloadWorkflowInstancePackage,
   getAdminMonitorDetail,
+  getWorkflowArchiveDiagram,
+  getWorkflowArchiveDetail,
   getStartForm,
   getWorkflowInstanceDiagram,
   getWorkflowInstanceDetail,
@@ -53,6 +55,7 @@ import { workflowActionTitleMap } from './runtimeTypes';
 import WorkflowPrintPreviewModal from './WorkflowPrintPreviewModal.vue';
 
 interface DrawerPayload {
+  canArchive?: boolean;
   instanceId?: string;
   mode: DrawerMode;
   notice?: string;
@@ -62,6 +65,7 @@ interface DrawerPayload {
 }
 
 const emit = defineEmits<{
+  adminArchive: [processInstanceId: string];
   adminReassign: [node: ProcessProgressNode];
   success: [];
 }>();
@@ -84,6 +88,8 @@ const runtimeNotice = ref('');
 const urgeSubmitting = ref(false);
 const withdrawSubmitting = ref(false);
 const downloadingPackage = ref(false);
+const adminArchiveSubmitting = ref(false);
+const adminMonitorCanArchive = ref(false);
 const attachmentPanelKey = ref(0);
 const attachmentPanelRef = ref<InstanceType<typeof WorkflowAttachmentPanel>>();
 const printPreviewRef = ref<InstanceType<typeof WorkflowPrintPreviewModal>>();
@@ -139,9 +145,14 @@ const shouldSelectNextAssigneeOnApprove = computed(() => {
   const total = taskForm.value.groupTotal ?? 1;
   return completed + 1 >= total;
 });
-const canManualCc = computed(() => Boolean(detail.value?.processInstance?.id));
+const isArchiveMode = computed(() => mode.value === 'archive');
+const canManualCc = computed(
+  () => !isArchiveMode.value && Boolean(detail.value?.processInstance?.id),
+);
 const canPrint = computed(() => detail.value?.processInstance?.status === 'approved');
-const canDownload = computed(() => detail.value?.processInstance?.status === 'approved');
+const canDownload = computed(
+  () => !isArchiveMode.value && detail.value?.processInstance?.status === 'approved',
+);
 const canUrge = computed(
   () => mode.value === 'started' && Boolean(detail.value?.processInstance?.canUrge),
 );
@@ -152,6 +163,12 @@ const isAdminMonitorMode = computed(() => mode.value === 'adminMonitor');
 const canAdminMonitorReassign = computed(
   () =>
     isAdminMonitorMode.value &&
+    hasAccessByCodes([permissionCodes.workflowMonitor.manage]),
+);
+const canAdminArchive = computed(
+  () =>
+    isAdminMonitorMode.value &&
+    adminMonitorCanArchive.value &&
     hasAccessByCodes([permissionCodes.workflowMonitor.manage]),
 );
 const runtimeProcessInstanceId = computed(
@@ -305,6 +322,8 @@ function resetState(payload: DrawerPayload) {
   urgeSubmitting.value = false;
   withdrawSubmitting.value = false;
   downloadingPackage.value = false;
+  adminArchiveSubmitting.value = false;
+  adminMonitorCanArchive.value = Boolean(payload.canArchive);
   attachmentPanelKey.value += 1;
   resetRuntimeFormData(payload.process);
   resetAssigneeSelection();
@@ -375,6 +394,11 @@ async function loadData(payload: DrawerPayload) {
       return;
     }
 
+    if (instanceId && payload.mode === 'archive') {
+      await loadArchiveRuntimeData(instanceId);
+      return;
+    }
+
     if (instanceId) {
       await loadInstanceRuntimeData(instanceId);
     }
@@ -400,6 +424,16 @@ async function loadAdminMonitorRuntimeData(instanceId: string) {
   ]);
   detail.value = nextMonitorDetail.detail;
   adminOperationRecords.value = nextMonitorDetail.adminOperationRecords ?? [];
+  diagram.value = nextDiagram;
+}
+
+async function loadArchiveRuntimeData(instanceId: string) {
+  const [nextArchiveDetail, nextDiagram] = await Promise.all([
+    getWorkflowArchiveDetail(instanceId),
+    getWorkflowArchiveDiagram(instanceId),
+  ]);
+  detail.value = nextArchiveDetail.detail;
+  adminOperationRecords.value = nextArchiveDetail.adminOperationRecords ?? [];
   diagram.value = nextDiagram;
 }
 
@@ -516,7 +550,10 @@ function openPrintPreview() {
   if (!canPrint.value) {
     return;
   }
-  printPreviewRef.value?.open({ detail: detail.value });
+  printPreviewRef.value?.open({
+    attachmentAccessScope: isArchiveMode.value ? 'archive' : 'runtime',
+    detail: detail.value,
+  });
 }
 
 async function handleDownloadPackage() {
@@ -561,6 +598,14 @@ function handleAdminReassign(node: ProcessProgressNode) {
     return;
   }
   emit('adminReassign', node);
+}
+
+function handleAdminArchive() {
+  const processInstanceId = detail.value?.processInstance?.id;
+  if (mode.value !== 'adminMonitor' || !processInstanceId) {
+    return;
+  }
+  emit('adminArchive', processInstanceId);
 }
 
 defineExpose({
@@ -622,6 +667,7 @@ defineExpose({
                 v-if="showAttachmentPanel"
                 :key="attachmentPanelKey"
                 ref="attachmentPanelRef"
+                :access-scope="isArchiveMode ? 'archive' : 'runtime'"
                 :attachment-source="runtimeAttachmentSource"
                 :editable="attachmentEditable"
                 :instance-no="detail?.processInstance?.instanceNo || taskForm?.instanceNo"
@@ -655,9 +701,11 @@ defineExpose({
         </div>
 
         <RuntimeActionBar
-          v-if="showRuntimeActions || canManualCc || canPrint || canDownload || canUrge || canWithdraw"
+          v-if="showRuntimeActions || canManualCc || canPrint || canDownload || canUrge || canWithdraw || canAdminArchive"
           :action-permissions="actionPermissions"
+          :admin-archive-submitting="adminArchiveSubmitting"
           :can-cc="canManualCc"
+          :can-admin-archive="canAdminArchive"
           :can-download="canDownload"
           :can-print="canPrint"
           :can-urge="canUrge"
@@ -672,6 +720,7 @@ defineExpose({
           :urge-submitting="urgeSubmitting"
           :withdraw-submitting="withdrawSubmitting"
           @action="handleRuntimeAction"
+          @admin-archive="handleAdminArchive"
           @approve="handleApprove"
           @cancel="drawerApi.close()"
           @cc="openManualCcPicker"

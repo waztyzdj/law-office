@@ -85,6 +85,24 @@ public class AttachmentRuntimeServiceImpl implements IAttachmentRuntimeService {
     }
 
     @Override
+    public BaseResult<List<AttachmentVO>> listByInstanceForGrantedAccess(String processInstanceId,
+            RequestContext context) {
+        try {
+            String tenantId = RuntimeSupport.requireTenantId(context);
+            if (!StringUtils.hasText(processInstanceId)) {
+                throw new IllegalArgumentException("流程实例ID不能为空");
+            }
+            requireExistingInstance(processInstanceId, tenantId);
+            List<Attachment> attachments = listActiveAttachments(processInstanceId, tenantId);
+            return BaseResult.success(buildAttachmentVOList(attachments));
+        } catch (IllegalArgumentException e) {
+            return BaseResult.error(400, e.getMessage());
+        } catch (Exception e) {
+            return BaseResult.error("查询审批附件失败: " + e.getMessage());
+        }
+    }
+
+    @Override
     @Transactional(rollbackFor = Exception.class)
     public BaseResult<AttachmentVO> bind(AttachmentBindReq req, RequestContext context) {
         try {
@@ -159,8 +177,20 @@ public class AttachmentRuntimeServiceImpl implements IAttachmentRuntimeService {
     }
 
     @Override
+    public FileUploadVO requireFileForGrantedAccess(String attachmentId, RequestContext context) {
+        Attachment attachment = requireAttachmentForGrantedAccess(attachmentId, context);
+        return sysFilesService.getFileById(attachment.getFileId());
+    }
+
+    @Override
     public InputStream downloadContent(String attachmentId, RequestContext context) {
         Attachment attachment = requireAccessibleAttachment(attachmentId, context);
+        return sysFilesService.downloadFileContent(attachment.getFileId());
+    }
+
+    @Override
+    public InputStream downloadContentForGrantedAccess(String attachmentId, RequestContext context) {
+        Attachment attachment = requireAttachmentForGrantedAccess(attachmentId, context);
         return sysFilesService.downloadFileContent(attachment.getFileId());
     }
 
@@ -171,6 +201,22 @@ public class AttachmentRuntimeServiceImpl implements IAttachmentRuntimeService {
             throw new IllegalArgumentException("流程实例ID不能为空");
         }
         ProcessInstance processInstance = requireAccessibleInstance(processInstanceId, tenantId, context);
+        List<Attachment> attachments = listActiveAttachments(processInstanceId, tenantId);
+        if (attachments.isEmpty()) {
+            throw new IllegalArgumentException("暂无可下载附件");
+        }
+        byte[] zipContent = buildAttachmentPackage(attachments);
+        return new WorkflowDownloadFile(buildPackageFileName(processInstance) + ".zip", ZIP_CONTENT_TYPE, zipContent);
+    }
+
+    @Override
+    public WorkflowDownloadFile downloadPackageByInstanceForGrantedAccess(String processInstanceId,
+            RequestContext context) {
+        String tenantId = RuntimeSupport.requireTenantId(context);
+        if (!StringUtils.hasText(processInstanceId)) {
+            throw new IllegalArgumentException("流程实例ID不能为空");
+        }
+        ProcessInstance processInstance = requireExistingInstance(processInstanceId, tenantId);
         List<Attachment> attachments = listActiveAttachments(processInstanceId, tenantId);
         if (attachments.isEmpty()) {
             throw new IllegalArgumentException("暂无可下载附件");
@@ -324,6 +370,37 @@ public class AttachmentRuntimeServiceImpl implements IAttachmentRuntimeService {
         }
         requireAccessibleInstance(attachment.getProcessInstanceId(), tenantId, context);
         return attachment;
+    }
+
+    private Attachment requireAttachmentForGrantedAccess(String attachmentId, RequestContext context) {
+        String tenantId = RuntimeSupport.requireTenantId(context);
+        if (!StringUtils.hasText(attachmentId)) {
+            throw new IllegalArgumentException("附件ID不能为空");
+        }
+        Attachment attachment = attachmentMapper.selectOne(new QueryWrapper<Attachment>()
+                .eq("id", attachmentId)
+                .eq("tenant_id", tenantId)
+                .eq("status", WorkflowConstants.AttachmentStatus.ACTIVE)
+                .eq("delete_flag", 0));
+        if (attachment == null) {
+            throw new IllegalArgumentException("审批附件不存在");
+        }
+        requireExistingInstance(attachment.getProcessInstanceId(), tenantId);
+        return attachment;
+    }
+
+    /**
+     * 归档等外层入口已完成业务鉴权时，只需要确认实例属于当前租户且未被删除。
+     */
+    private ProcessInstance requireExistingInstance(String processInstanceId, String tenantId) {
+        ProcessInstance processInstance = processInstanceMapper.selectOne(new QueryWrapper<ProcessInstance>()
+                .eq("id", processInstanceId)
+                .eq("tenant_id", tenantId)
+                .eq("delete_flag", 0));
+        if (processInstance == null) {
+            throw new IllegalArgumentException("流程实例不存在");
+        }
+        return processInstance;
     }
 
     /**

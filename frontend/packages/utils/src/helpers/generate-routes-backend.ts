@@ -95,7 +95,9 @@ function convertRoutes(
 
 function normalizeViewPath(path: string): string {
   // 去除相对路径前缀
-  const normalizedPath = path.replace(/^(\.\/|\.\.\/)+/, '');
+  const normalizedPath = path
+    .replace(/^(\.\/|\.\.\/)+/, '')
+    .replace(/^(#|@)\//, '');
 
   // 确保路径以 '/' 开头
   const viewPath = normalizedPath.startsWith('/')

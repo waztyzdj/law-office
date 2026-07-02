@@ -216,6 +216,8 @@ export interface StartedInstancePageReq extends BasePageReq {
 }
 
 export interface AdminMonitorInstanceInfo {
+  archived?: boolean;
+  canArchive?: boolean;
   canMaintain?: boolean;
   categoryId?: string;
   currentAssigneeNames?: string;
@@ -240,6 +242,7 @@ export interface AdminMonitorInstanceInfo {
 }
 
 export interface AdminMonitorPageReq extends BasePageReq {
+  archiveReason?: string;
   categoryId?: string;
   currentAssigneeNames?: string;
   currentTaskNames?: string;
@@ -247,6 +250,7 @@ export interface AdminMonitorPageReq extends BasePageReq {
   instanceTitle?: string;
   processKey?: string;
   processName?: string;
+  processVersion?: number;
   starterRealname?: string;
   startTimeGe?: string;
   startTimeLe?: string;
@@ -282,6 +286,72 @@ export interface AdminOperationRecordInfo {
 export interface AdminMonitorDetailInfo {
   adminOperationRecords?: AdminOperationRecordInfo[];
   detail?: InstanceDetailInfo;
+}
+
+export type ArchiveTreeNodeType = 'all' | 'category' | 'process';
+
+export interface ArchiveTreeNodeInfo {
+  categoryId?: string;
+  children?: ArchiveTreeNodeInfo[];
+  key?: string;
+  processKey?: string;
+  processModelId?: string;
+  processName?: string;
+  title?: string;
+  type?: ArchiveTreeNodeType;
+}
+
+export interface ArchiveRecordInfo {
+  archiveReason?: string;
+  archiveSource?: string;
+  archiveTime?: string;
+  archiverRealname?: string;
+  archiverUserId?: string;
+  archiverUsername?: string;
+  categoryId?: string;
+  categoryName?: string;
+  formDefinitionId?: string;
+  formInstanceId?: string;
+  id?: string;
+  instanceNo?: string;
+  instanceStatus?: string;
+  instanceTitle?: string;
+  processEndTime?: string;
+  processInstanceId?: string;
+  processKey?: string;
+  processModelId?: string;
+  processName?: string;
+  processStartTime?: string;
+  processVersion?: number;
+  starterRealname?: string;
+  starterUserId?: string;
+  starterUsername?: string;
+}
+
+export interface ArchivePageReq extends BasePageReq {
+  archiveReason?: string;
+  archiveSource?: string;
+  archiveTimeGe?: string;
+  archiveTimeLe?: string;
+  categoryId?: string;
+  instanceNo?: string;
+  instanceStatus?: string;
+  instanceTitle?: string;
+  processEndTimeGe?: string;
+  processEndTimeLe?: string;
+  processKey?: string;
+  processName?: string;
+  processVersion?: number;
+  processStartTimeGe?: string;
+  processStartTimeLe?: string;
+  starterRealname?: string;
+}
+
+export interface ArchiveActionReq {
+  archiveReason?: string;
+  id?: string;
+  processInstanceId?: string;
+  processInstanceIds?: string[];
 }
 
 export interface WorkflowCcRecordInfo {
@@ -713,6 +783,73 @@ export const resendAdminMonitorNotice = (data: AdminMonitorActionReq) =>
     '/workflow/admin/monitor/resend-notice',
     data,
   );
+export const archiveAdminMonitorInstance = (data: ArchiveActionReq) =>
+  requestClient.post<ArchiveRecordInfo>('/workflow/admin/monitor/archive', data);
+export const batchArchiveAdminMonitorInstances = (data: ArchiveActionReq) =>
+  requestClient.post<ArchiveRecordInfo[]>(
+    '/workflow/admin/monitor/batch-archive',
+    data,
+  );
+export const batchArchiveAdminMonitorByQuery = (params: AdminMonitorPageReq) =>
+  requestClient.post<ArchiveRecordInfo[]>(
+    '/workflow/admin/monitor/batch-archive-by-query',
+    normalizeAdminMonitorPageReq(params),
+  );
+export const getWorkflowArchiveTree = () =>
+  requestClient.post<ArchiveTreeNodeInfo[]>('/workflow/admin/archive/tree');
+export const pageWorkflowArchivedRecords = (params: ArchivePageReq) =>
+  requestClient.post<WorkflowPageResult<ArchiveRecordInfo>>(
+    '/workflow/admin/archive/archived-page',
+    normalizeArchivePageReq(params),
+  );
+export const pageWorkflowUnarchivedRecords = (params: ArchivePageReq) =>
+  requestClient.post<WorkflowPageResult<ArchiveRecordInfo>>(
+    '/workflow/admin/archive/unarchived-page',
+    normalizeArchivePageReq(params),
+  );
+export const getWorkflowArchiveDetail = (processInstanceId: string) =>
+  requestClient.post<AdminMonitorDetailInfo>('/workflow/admin/archive/detail', {
+    processInstanceId,
+  });
+export const getWorkflowArchiveDiagram = (processInstanceId: string) =>
+  requestClient.post<InstanceDiagramInfo>('/workflow/admin/archive/diagram', {
+    processInstanceId,
+  });
+export const listWorkflowArchiveAttachments = (processInstanceId: string) =>
+  requestClient.post<WorkflowAttachmentInfo[]>(
+    '/workflow/admin/archive/attachment/list',
+    { processInstanceId },
+  );
+export const downloadWorkflowArchiveAttachment = (id: string) =>
+  requestClient.download<Blob>('/workflow/admin/archive/attachment/download', {
+    data: { id },
+    method: 'POST',
+  });
+export const downloadWorkflowArchiveAttachmentPackage = (processInstanceId: string) =>
+  requestClient.download<Blob>(
+    '/workflow/admin/archive/attachment/download-all',
+    {
+      data: { processInstanceId },
+      method: 'POST',
+    },
+  );
+export const archiveWorkflowInstance = (data: ArchiveActionReq) =>
+  requestClient.post<ArchiveRecordInfo>('/workflow/admin/archive/archive', data);
+export const batchArchiveWorkflowInstances = (data: ArchiveActionReq) =>
+  requestClient.post<ArchiveRecordInfo[]>(
+    '/workflow/admin/archive/batch-archive',
+    data,
+  );
+export const batchArchiveWorkflowByQuery = (params: ArchivePageReq) =>
+  requestClient.post<ArchiveRecordInfo[]>(
+    '/workflow/admin/archive/batch-archive-by-query',
+    normalizeArchivePageReq(params),
+  );
+export const downloadWorkflowArchivePackage = (processInstanceId: string) =>
+  requestClient.download<Blob>('/workflow/admin/archive/download', {
+    data: { processInstanceId },
+    method: 'POST',
+  });
 export const pageWorkflowCcRecords = (params: WorkflowCcPageReq) =>
   requestClient.post<WorkflowPageResult<WorkflowCcRecordInfo>>(
     '/workflow/cc/page',
@@ -889,6 +1026,11 @@ function normalizeAdminMonitorPageReq(
     instanceTitle: params.instanceTitle ?? queryParams.instanceTitle_like,
     processKey: params.processKey ?? queryParams.processKey_eq,
     processName: params.processName ?? queryParams.processName_like,
+    processVersion: normalizeVersionFilter(
+      params.processVersion ??
+      queryParams.processVersion_eq ??
+      queryParams.processVersion_like,
+    ),
     starterRealname: params.starterRealname ?? queryParams.starterRealname_like,
     startTimeGe:
       params.startTimeGe ??
@@ -912,6 +1054,70 @@ function normalizeAdminMonitorPageReq(
       queryParams.updateTime_lt ??
       queryParams.updateTime_eq,
   };
+}
+
+function normalizeArchivePageReq(params: ArchivePageReq): ArchivePageReq {
+  const queryParams = params.queryParams ?? {};
+  return {
+    ...params,
+    archiveSource: params.archiveSource ?? queryParams.archiveSource_eq,
+    archiveTimeGe:
+      params.archiveTimeGe ??
+      queryParams.archiveTime_ge ??
+      queryParams.archiveTime_gt ??
+      queryParams.archiveTime_eq,
+    archiveTimeLe:
+      params.archiveTimeLe ??
+      queryParams.archiveTime_le ??
+      queryParams.archiveTime_lt ??
+      queryParams.archiveTime_eq,
+    categoryId: params.categoryId ?? queryParams.categoryId_eq,
+    instanceNo: params.instanceNo ?? queryParams.instanceNo_like,
+    instanceStatus: params.instanceStatus ?? queryParams.instanceStatus_eq,
+    instanceTitle: params.instanceTitle ?? queryParams.instanceTitle_like,
+    processEndTimeGe:
+      params.processEndTimeGe ??
+      queryParams.processEndTime_ge ??
+      queryParams.processEndTime_gt ??
+      queryParams.processEndTime_eq,
+    processEndTimeLe:
+      params.processEndTimeLe ??
+      queryParams.processEndTime_le ??
+      queryParams.processEndTime_lt ??
+      queryParams.processEndTime_eq,
+    processKey: params.processKey ?? queryParams.processKey_eq,
+    processName: params.processName ?? queryParams.processName_like,
+    processVersion: normalizeVersionFilter(
+      params.processVersion ??
+      queryParams.processVersion_eq ??
+      queryParams.processVersion_like,
+    ),
+    processStartTimeGe:
+      params.processStartTimeGe ??
+      queryParams.processStartTime_ge ??
+      queryParams.processStartTime_gt ??
+      queryParams.processStartTime_eq,
+    processStartTimeLe:
+      params.processStartTimeLe ??
+      queryParams.processStartTime_le ??
+      queryParams.processStartTime_lt ??
+      queryParams.processStartTime_eq,
+    starterRealname: params.starterRealname ?? queryParams.starterRealname_like,
+  };
+}
+
+function normalizeVersionFilter(value: unknown): number | undefined {
+  if (value === undefined || value === null || value === '') {
+    return undefined;
+  }
+  if (typeof value === 'number') {
+    return Number.isFinite(value) ? value : undefined;
+  }
+  const text = String(value).trim().replace(/^v/i, '');
+  if (!/^\d+$/.test(text)) {
+    return undefined;
+  }
+  return Number(text);
 }
 
 function normalizeWorkflowCcPageReq(params: WorkflowCcPageReq): WorkflowCcPageReq {

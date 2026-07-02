@@ -448,6 +448,26 @@ FormCreate 表单实例表，用于保存发起后的表单数据、schema 快�
 - `form_data_snapshot_json`：判断时表单数据快照。
 - `matched_time`：命中时间。
 
+### `wf_archive_record`
+
+流程归档记录表，用于把正常结束或人工确认归档的流程实例纳入档案口径查询。归档记录保存列表查询所需快照，不改变流程实例原状态。
+
+重点字段：
+
+- `process_instance_id`：流程实例 ID，同一租户同一有效实例只允许一条归档记录。
+- `process_model_id`：流程模型版本 ID。
+- `category_id`、`category_name`：归档时流程分类快照，`category_id` 对应 `wf_process_category.id`。
+- `process_key`、`process_name`、`process_version`：归档时流程定义编码、名称和版本快照。
+- `form_instance_id`、`form_definition_id`：表单实例和表单定义版本 ID。
+- `instance_no`、`instance_title`：归档时审批编号和实例标题快照。
+- `starter_user_id`、`starter_username`、`starter_realname`：发起人快照。
+- `instance_status`：归档时流程实例状态，对应 `wf_process_instance.status`，取值 `approved`、`rejected`、`terminated`；第一版自动归档只覆盖正常结束，手动归档只覆盖已终止实例。
+- `process_start_time`、`process_end_time`：流程发起和结束时间快照。
+- `archive_source`：归档来源，取值 `auto`、`monitor_manual`、`archive_manual`。
+- `archive_reason`：归档说明。
+- `archiver_user_id`、`archiver_username`、`archiver_realname`：归档人快照，自动归档可为空或系统用户。
+- `archive_time`：归档时间。
+
 ## `sys_log`
 
 操作日志表。

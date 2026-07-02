@@ -29,6 +29,7 @@ export function getWorkflowMonitorColumns(
 ): TableColumnsResult {
   const { hasAccessByCodes } = useAccess();
   const canManage = hasAccessByCodes([permissionCodes.workflowMonitor.manage]);
+  const actionWidth = canManage ? 320 : 100;
   const columns = [
     { dataIndex: 'instanceTitle', options: { width: 260 }, title: '标题' },
     {
@@ -40,6 +41,7 @@ export function getWorkflowMonitorColumns(
       dataIndex: 'processVersion',
       options: {
         align: 'center' as const,
+        columnType: 'number' as const,
         customRender: ({ record }: { record: AdminMonitorInstanceInfo }) =>
           record.processVersion ? `v${record.processVersion}` : '-',
         width: 90,
@@ -117,11 +119,14 @@ export function getWorkflowMonitorColumns(
                     '终止',
                   )
                 : null,
+              canManage && record.canArchive
+                ? h('a', { onClick: () => emit('archive', record) }, '归档')
+                : null,
             ],
           ),
         fixed: 'right' as const,
         hasFilter: false,
-        width: canManage ? 260 : 100,
+        width: actionWidth,
       },
       title: '操作',
     },
@@ -132,6 +137,6 @@ export function getWorkflowMonitorColumns(
     filterState,
     emit,
     pagination,
-    { minTableWidth: 1550, tableKey: 'workflow_monitor' },
+    { minTableWidth: canManage ? 1610 : 1550, tableKey: 'workflow_monitor' },
   );
 }

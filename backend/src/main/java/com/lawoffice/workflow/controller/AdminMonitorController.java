@@ -5,12 +5,15 @@ import com.lawoffice.framework.result.BaseResult;
 import com.lawoffice.framework.util.RequestContextUtils;
 import com.lawoffice.framework.vo.PageVO;
 import com.lawoffice.system.annotation.RequiresPermission;
+import com.lawoffice.workflow.req.ArchiveActionReq;
 import com.lawoffice.workflow.req.AdminMonitorActionReq;
 import com.lawoffice.workflow.req.AdminMonitorPageReq;
 import com.lawoffice.workflow.service.IAdminMonitorService;
+import com.lawoffice.workflow.service.IArchiveService;
 import com.lawoffice.workflow.vo.AdminMonitorDetailVO;
 import com.lawoffice.workflow.vo.AdminMonitorInstanceVO;
 import com.lawoffice.workflow.vo.AdminOperationRecordVO;
+import com.lawoffice.workflow.vo.ArchiveRecordVO;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.HttpServletRequest;
@@ -28,9 +31,12 @@ import java.util.List;
 public class AdminMonitorController {
 
     private final IAdminMonitorService adminMonitorService;
+    private final IArchiveService archiveService;
 
-    public AdminMonitorController(IAdminMonitorService adminMonitorService) {
+    public AdminMonitorController(IAdminMonitorService adminMonitorService,
+            IArchiveService archiveService) {
         this.adminMonitorService = adminMonitorService;
+        this.archiveService = archiveService;
     }
 
     @PostMapping("/page")
@@ -76,6 +82,33 @@ public class AdminMonitorController {
             HttpServletRequest request) {
         RequestContext context = RequestContextUtils.buildContext(request);
         return adminMonitorService.resendNotice(req, context);
+    }
+
+    @PostMapping("/archive")
+    @Operation(summary = "流程监控手动归档已结束流程")
+    @RequiresPermission("workflow:monitor:manage")
+    public BaseResult<ArchiveRecordVO> archive(@Valid @RequestBody ArchiveActionReq req,
+            HttpServletRequest request) {
+        RequestContext context = RequestContextUtils.buildContext(request);
+        return archiveService.archiveFromMonitor(req, context);
+    }
+
+    @PostMapping("/batch-archive")
+    @Operation(summary = "流程监控批量归档已结束流程")
+    @RequiresPermission("workflow:monitor:manage")
+    public BaseResult<List<ArchiveRecordVO>> batchArchive(@Valid @RequestBody ArchiveActionReq req,
+            HttpServletRequest request) {
+        RequestContext context = RequestContextUtils.buildContext(request);
+        return archiveService.batchArchiveFromMonitor(req, context);
+    }
+
+    @PostMapping("/batch-archive-by-query")
+    @Operation(summary = "流程监控按查询条件批量归档已结束流程")
+    @RequiresPermission("workflow:monitor:manage")
+    public BaseResult<List<ArchiveRecordVO>> batchArchiveByQuery(@RequestBody(required = false) AdminMonitorPageReq req,
+            HttpServletRequest request) {
+        RequestContext context = RequestContextUtils.buildContext(request);
+        return archiveService.batchArchiveByQueryFromMonitor(req, context);
     }
 
     @PostMapping("/operation-records")

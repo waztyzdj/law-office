@@ -22,6 +22,10 @@ export const permissionCodes = {
   tenant: createBasePermissionCodes('tenant'),
   user: createBasePermissionCodes('user'),
   workflowCategory: createBasePermissionCodes('workflow:category'),
+  workflowArchive: {
+    manage: 'workflow:archive:manage',
+    view: 'workflow:archive:view',
+  },
   workflowForm: createBasePermissionCodes('workflow:form'),
   workflowMonitor: {
     manage: 'workflow:monitor:manage',

@@ -27,6 +27,7 @@ import com.lawoffice.workflow.mapper.TaskMapper;
 import com.lawoffice.workflow.req.SelectedAssigneeReq;
 import com.lawoffice.workflow.req.TaskActionReq;
 import com.lawoffice.workflow.service.IAssigneeResolveService;
+import com.lawoffice.workflow.service.IArchiveService;
 import com.lawoffice.workflow.service.ICcRuntimeService;
 import com.lawoffice.workflow.service.IConditionBranchRuntimeService;
 import com.lawoffice.workflow.service.IFlowableService;
@@ -63,6 +64,7 @@ public class TaskActionServiceImpl implements ITaskActionService {
     private final TaskCandidateMapper taskCandidateMapper;
     private final ReminderRecordMapper reminderRecordMapper;
     private final SysMessageActionMapper sysMessageActionMapper;
+    private final IArchiveService archiveService;
     private final IConditionBranchRuntimeService conditionBranchRuntimeService;
     private final ICcRuntimeService ccRuntimeService;
     private final IFlowableService flowableService;
@@ -81,6 +83,7 @@ public class TaskActionServiceImpl implements ITaskActionService {
             TaskCandidateMapper taskCandidateMapper,
             ReminderRecordMapper reminderRecordMapper,
             SysMessageActionMapper sysMessageActionMapper,
+            IArchiveService archiveService,
             IConditionBranchRuntimeService conditionBranchRuntimeService,
             ICcRuntimeService ccRuntimeService,
             IFlowableService flowableService,
@@ -98,6 +101,7 @@ public class TaskActionServiceImpl implements ITaskActionService {
         this.taskCandidateMapper = taskCandidateMapper;
         this.reminderRecordMapper = reminderRecordMapper;
         this.sysMessageActionMapper = sysMessageActionMapper;
+        this.archiveService = archiveService;
         this.conditionBranchRuntimeService = conditionBranchRuntimeService;
         this.ccRuntimeService = ccRuntimeService;
         this.flowableService = flowableService;
@@ -444,6 +448,7 @@ public class TaskActionServiceImpl implements ITaskActionService {
         }
         EntityFillUtils.fillAuditFields(processInstance, context, false);
         processInstanceMapper.updateById(processInstance);
+        archiveIfProcessCompleted(processInstance, context);
     }
 
     /**
@@ -471,6 +476,7 @@ public class TaskActionServiceImpl implements ITaskActionService {
         }
         EntityFillUtils.fillAuditFields(processInstance, context, false);
         processInstanceMapper.updateById(processInstance);
+        archiveIfProcessCompleted(processInstance, context);
     }
 
     /**
@@ -492,6 +498,7 @@ public class TaskActionServiceImpl implements ITaskActionService {
         }
         EntityFillUtils.fillAuditFields(processInstance, context, false);
         processInstanceMapper.updateById(processInstance);
+        archiveIfProcessCompleted(processInstance, context);
     }
 
     private void completeReject(Task task, ProcessInstance processInstance, FormInstance formInstance,
@@ -506,6 +513,7 @@ public class TaskActionServiceImpl implements ITaskActionService {
         EntityFillUtils.fillAuditFields(processInstance, context, false);
         processInstanceMapper.updateById(processInstance);
         instanceStateService.archiveFormInstance(formInstance, context);
+        archiveCompletedProcessInstance(processInstance, context);
     }
 
     private void completeAddSignTask(Task task, ProcessInstance processInstance, FormInstance formInstance,
@@ -1127,6 +1135,24 @@ public class TaskActionServiceImpl implements ITaskActionService {
 
     private String requireTenantId(RequestContext context) {
         return workflowRuntimeLookupService.requireTenantId(context);
+    }
+
+    /**
+     * 流程自然结束后同步生成归档记录。归档失败需要回滚本次审批事务，避免流程已结束但档案缺失。
+     */
+    private void archiveIfProcessCompleted(ProcessInstance processInstance, RequestContext context) {
+        if (WorkflowConstants.Status.APPROVED.equals(processInstance.getStatus())
+                || WorkflowConstants.Status.REJECTED.equals(processInstance.getStatus())) {
+            archiveCompletedProcessInstance(processInstance, context);
+        }
+    }
+
+    private void archiveCompletedProcessInstance(ProcessInstance processInstance, RequestContext context) {
+        BaseResult<?> archiveResult = archiveService.archiveAutomatically(processInstance.getId(), context);
+        if (archiveResult == null || !Integer.valueOf(200).equals(archiveResult.getCode())) {
+            String message = archiveResult == null ? "归档失败" : archiveResult.getMessage();
+            throw new IllegalStateException(message);
+        }
     }
 
     private <T> BaseResult<T> executeInTransaction(Supplier<BaseResult<T>> action, String errorMessage) {

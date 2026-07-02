@@ -25,6 +25,17 @@ public interface IAttachmentRuntimeService {
     BaseResult<List<AttachmentVO>> listByInstance(String processInstanceId, RequestContext context);
 
     /**
+     * 在调用方已经完成业务入口鉴权后查询流程实例附件。
+     * <p>
+     * 该方法不再校验普通运行时实例访问权，仅用于流程归档等独立只读入口。
+     *
+     * @param processInstanceId 流程实例ID
+     * @param context 请求上下文
+     * @return 附件列表
+     */
+    BaseResult<List<AttachmentVO>> listByInstanceForGrantedAccess(String processInstanceId, RequestContext context);
+
+    /**
      * 绑定已上传文件为审批附件。
      *
      * @param req 附件绑定请求
@@ -52,6 +63,15 @@ public interface IAttachmentRuntimeService {
     FileUploadVO requireFile(String attachmentId, RequestContext context);
 
     /**
+     * 在调用方已经完成业务入口鉴权后按附件ID获取文件元数据。
+     *
+     * @param attachmentId 审批附件ID
+     * @param context 请求上下文
+     * @return 文件元数据
+     */
+    FileUploadVO requireFileForGrantedAccess(String attachmentId, RequestContext context);
+
+    /**
      * 按审批附件ID下载文件内容，访问权按流程实例校验。
      *
      * @param attachmentId 审批附件ID
@@ -61,6 +81,15 @@ public interface IAttachmentRuntimeService {
     InputStream downloadContent(String attachmentId, RequestContext context);
 
     /**
+     * 在调用方已经完成业务入口鉴权后按附件ID下载文件内容。
+     *
+     * @param attachmentId 审批附件ID
+     * @param context 请求上下文
+     * @return 文件内容流
+     */
+    InputStream downloadContentForGrantedAccess(String attachmentId, RequestContext context);
+
+    /**
      * 打包下载流程实例下当前用户可访问的全部有效附件，不包含审批单 PDF。
      *
      * @param processInstanceId 流程实例ID
@@ -68,4 +97,13 @@ public interface IAttachmentRuntimeService {
      * @return ZIP 文件
      */
     WorkflowDownloadFile downloadPackageByInstance(String processInstanceId, RequestContext context);
+
+    /**
+     * 在调用方已经完成业务入口鉴权后打包下载流程实例有效附件。
+     *
+     * @param processInstanceId 流程实例ID
+     * @param context 请求上下文
+     * @return ZIP 文件
+     */
+    WorkflowDownloadFile downloadPackageByInstanceForGrantedAccess(String processInstanceId, RequestContext context);
 }
