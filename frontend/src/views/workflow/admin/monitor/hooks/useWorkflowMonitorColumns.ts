@@ -31,6 +31,11 @@ export function getWorkflowMonitorColumns(
   const canManage = hasAccessByCodes([permissionCodes.workflowMonitor.manage]);
   const actionWidth = canManage ? 320 : 100;
   const columns = [
+    {
+      dataIndex: 'instanceNo',
+      options: { width: 170 },
+      title: '流水号',
+    },
     { dataIndex: 'instanceTitle', options: { width: 260 }, title: '标题' },
     {
       dataIndex: 'processName',
@@ -47,6 +52,18 @@ export function getWorkflowMonitorColumns(
         width: 90,
       },
       title: '版本',
+    },
+    {
+      dataIndex: 'status',
+      options: {
+        align: 'center' as const,
+        columnType: 'select' as const,
+        customRender: ({ record }: { record: AdminMonitorInstanceInfo }) =>
+          h(WorkflowStatusTag, { status: record.status }),
+        selectOptions: processInstanceStatusOptions,
+        width: 110,
+      },
+      title: '状态',
     },
     {
       dataIndex: 'starterRealname',
@@ -84,18 +101,6 @@ export function getWorkflowMonitorColumns(
       dataIndex: 'updateTime',
       options: { align: 'center' as const, columnType: 'datetime' as const, width: 180 },
       title: '更新时间',
-    },
-    {
-      dataIndex: 'status',
-      options: {
-        align: 'center' as const,
-        columnType: 'select' as const,
-        customRender: ({ record }: { record: AdminMonitorInstanceInfo }) =>
-          h(WorkflowStatusTag, { status: record.status }),
-        selectOptions: processInstanceStatusOptions,
-        width: 110,
-      },
-      title: '状态',
     },
     {
       dataIndex: 'action',
@@ -137,6 +142,6 @@ export function getWorkflowMonitorColumns(
     filterState,
     emit,
     pagination,
-    { minTableWidth: canManage ? 1610 : 1550, tableKey: 'workflow_monitor' },
+    { minTableWidth: canManage ? 1780 : 1720, tableKey: 'workflow_monitor' },
   );
 }

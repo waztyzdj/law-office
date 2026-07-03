@@ -32,12 +32,12 @@ export function getWorkflowArchiveColumns(
   const { hasAccessByCodes } = useAccess();
   const canManage = hasAccessByCodes([permissionCodes.workflowArchive.manage]);
   const columns = [
-    { dataIndex: 'instanceTitle', options: { width: 260 }, title: '标题' },
     {
       dataIndex: 'instanceNo',
       options: { width: 170 },
       title: '流水号',
     },
+    { dataIndex: 'instanceTitle', options: { width: 260 }, title: '标题' },
     {
       dataIndex: 'processName',
       options: { width: 180 },
@@ -53,6 +53,20 @@ export function getWorkflowArchiveColumns(
         width: 90,
       },
       title: '版本',
+    },
+    {
+      dataIndex: 'instanceStatus',
+      options: {
+        align: 'center' as const,
+        columnType: 'select' as const,
+        customRender: ({ record }: { record: ArchiveRecordInfo }) =>
+          h(WorkflowStatusTag, { status: record.instanceStatus }),
+        selectOptions: processInstanceStatusOptions.filter((item) =>
+          ['approved', 'rejected', 'terminated'].includes(String(item.value)),
+        ),
+        width: 110,
+      },
+      title: '状态',
     },
     {
       dataIndex: 'starterRealname',
@@ -72,20 +86,6 @@ export function getWorkflowArchiveColumns(
       dataIndex: 'processEndTime',
       options: { align: 'center' as const, columnType: 'datetime' as const, width: 180 },
       title: '结束时间',
-    },
-    {
-      dataIndex: 'instanceStatus',
-      options: {
-        align: 'center' as const,
-        columnType: 'select' as const,
-        customRender: ({ record }: { record: ArchiveRecordInfo }) =>
-          h(WorkflowStatusTag, { status: record.instanceStatus }),
-        selectOptions: processInstanceStatusOptions.filter((item) =>
-          ['approved', 'rejected', 'terminated'].includes(String(item.value)),
-        ),
-        width: 110,
-      },
-      title: '状态',
     },
     ...(tab === 'archived'
       ? [

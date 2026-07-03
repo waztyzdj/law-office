@@ -232,6 +232,8 @@
 
 - 新增 `idx_wft_tenant_group_status(tenant_id, task_group_id, status, delete_flag)`：同组任务查询。
 - 新增 `idx_wft_tenant_due_status(tenant_id, status, due_time, delete_flag)`：超时扫描。
+- 新增 `idx_wft_tenant_assignee_status_complete(tenant_id, assignee_user_id, status, delete_flag, complete_time, update_time, create_time)`：我的已办按办理时间倒序查询。
+- 新增 `idx_wft_tenant_instance_status_complete(tenant_id, process_instance_id, status, delete_flag, complete_time, update_time, create_time)`：我的已办按流程实例去重取最后办理任务。
 - 保留 `idx_wft_tenant_assignee_status_time` 和 `idx_wft_tenant_instance_status`。
 
 ### `wf_task_candidate`
@@ -740,7 +742,8 @@
 工作流业务文档 Provider：
 
 - 模块名称：审批中心。
-- 业务数据目录名称：可使用流程名称、实例标题或审批编号组合。
+- 流程类型目录：按 `process_key` 合并同一流程定义的不同版本，展示名称取该流程编码下最新版本的流程名称。
+- 业务数据目录名称：优先使用 `{instanceTitle}-{instanceNo}`，没有审批编号时使用 `{instanceTitle}-{发起时间}`。
 - 访问权：发起人、当前任务处理人、候选人、历史任务处理人、审批记录操作人、抄送人。
 - 权限：二期业务文档中心只读展示，下载和预览按 Provider 校验。
 

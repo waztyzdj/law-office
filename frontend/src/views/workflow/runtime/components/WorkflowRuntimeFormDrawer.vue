@@ -22,6 +22,7 @@ import { useVbenDrawer } from '@vben/common-ui';
 import { Alert, message, Modal, Select, Space, Spin, Tag } from 'ant-design-vue';
 
 import {
+  downloadWorkflowArchivePackage,
   downloadWorkflowInstancePackage,
   getAdminMonitorDetail,
   getWorkflowArchiveDiagram,
@@ -150,9 +151,7 @@ const canManualCc = computed(
   () => !isArchiveMode.value && Boolean(detail.value?.processInstance?.id),
 );
 const canPrint = computed(() => detail.value?.processInstance?.status === 'approved');
-const canDownload = computed(
-  () => !isArchiveMode.value && detail.value?.processInstance?.status === 'approved',
-);
+const canDownload = computed(() => canPrint.value);
 const canUrge = computed(
   () => mode.value === 'started' && Boolean(detail.value?.processInstance?.canUrge),
 );
@@ -563,7 +562,9 @@ async function handleDownloadPackage() {
   }
   downloadingPackage.value = true;
   try {
-    const blob = await downloadWorkflowInstancePackage(processInstanceId);
+    const blob = isArchiveMode.value
+      ? await downloadWorkflowArchivePackage(processInstanceId)
+      : await downloadWorkflowInstancePackage(processInstanceId);
     downloadBlob(blob, `${buildDownloadFileName()}.zip`);
     message.success('下载成功');
   } finally {

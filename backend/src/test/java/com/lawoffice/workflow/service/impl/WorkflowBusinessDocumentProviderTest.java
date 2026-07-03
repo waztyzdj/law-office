@@ -5,8 +5,12 @@ import com.lawoffice.document.dto.BusinessDocumentAccessContext;
 import com.lawoffice.workflow.constant.WorkflowConstants;
 import com.lawoffice.workflow.entity.ProcessInstance;
 import com.lawoffice.workflow.entity.ProcessModel;
+import com.lawoffice.workflow.mapper.CcRecordMapper;
+import com.lawoffice.workflow.mapper.OperationRecordMapper;
 import com.lawoffice.workflow.mapper.ProcessInstanceMapper;
 import com.lawoffice.workflow.mapper.ProcessModelMapper;
+import com.lawoffice.workflow.mapper.TaskCandidateMapper;
+import com.lawoffice.workflow.mapper.TaskMapper;
 import com.lawoffice.workflow.service.IRuntimeAccessService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -14,7 +18,9 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import java.nio.charset.StandardCharsets;
 import java.time.LocalDateTime;
+import java.util.Base64;
 import java.util.List;
 import java.util.Map;
 
@@ -31,13 +37,22 @@ class WorkflowBusinessDocumentProviderTest {
     private static final String TENANT_ID = "tenant-1";
     private static final String INSTANCE_ID = "instance-1";
     private static final String PROCESS_MODEL_ID = "model-1";
+    private static final String PROCESS_KEY = "contract_approval";
     private static final BusinessDocumentAccessContext ACCESS_CONTEXT =
             new BusinessDocumentAccessContext("starter", "starter-1", TENANT_ID, List.of(), List.of());
 
     @Mock
+    private CcRecordMapper ccRecordMapper;
+    @Mock
+    private OperationRecordMapper operationRecordMapper;
+    @Mock
     private ProcessInstanceMapper processInstanceMapper;
     @Mock
     private ProcessModelMapper processModelMapper;
+    @Mock
+    private TaskCandidateMapper taskCandidateMapper;
+    @Mock
+    private TaskMapper taskMapper;
     @Mock
     private IRuntimeAccessService runtimeAccessService;
 
@@ -46,8 +61,12 @@ class WorkflowBusinessDocumentProviderTest {
     @BeforeEach
     void setUp() {
         provider = new WorkflowBusinessDocumentProvider(
+                ccRecordMapper,
+                operationRecordMapper,
                 processInstanceMapper,
                 processModelMapper,
+                taskCandidateMapper,
+                taskMapper,
                 runtimeAccessService
         );
     }
@@ -60,24 +79,24 @@ class WorkflowBusinessDocumentProviderTest {
 
     @Test
     void shouldResolveProcessNameAsGroupName() {
-        ProcessModel model = new ProcessModel();
-        model.setId(PROCESS_MODEL_ID);
-        model.setProcessName("合同审批");
+        ProcessModel model = processModel("合同审批");
         when(processModelMapper.selectList(any(Wrapper.class))).thenReturn(List.of(model));
 
-        Map<String, String> names = provider.resolveGroupNames(List.of(PROCESS_MODEL_ID), ACCESS_CONTEXT);
+        String groupId = encodedGroupId(PROCESS_KEY);
+        Map<String, String> names = provider.resolveGroupNames(List.of(groupId), ACCESS_CONTEXT);
 
-        assertEquals("合同审批", names.get(PROCESS_MODEL_ID));
+        assertEquals("合同审批", names.get(groupId));
     }
 
     @Test
     void shouldResolveInstanceGroupIdAndFolderNameWithInstanceNo() {
         when(processInstanceMapper.selectList(any(Wrapper.class))).thenReturn(List.of(instance("HT-001")));
+        when(processModelMapper.selectList(any(Wrapper.class))).thenReturn(List.of(processModel("采购合同审批")));
 
         Map<String, String> groupIds = provider.resolveRecordGroupIds(List.of(INSTANCE_ID), ACCESS_CONTEXT);
         Map<String, String> recordNames = provider.resolveRecordNames(List.of(INSTANCE_ID), ACCESS_CONTEXT);
 
-        assertEquals(PROCESS_MODEL_ID, groupIds.get(INSTANCE_ID));
+        assertEquals(encodedGroupId(PROCESS_KEY), groupIds.get(INSTANCE_ID));
         assertEquals("采购合同审批-HT-001", recordNames.get(INSTANCE_ID));
     }
 
@@ -117,5 +136,22 @@ class WorkflowBusinessDocumentProviderTest {
         instance.setInstanceNo(instanceNo);
         instance.setStartTime(LocalDateTime.of(2026, 6, 28, 10, 30));
         return instance;
+    }
+
+    private ProcessModel processModel(String processName) {
+        ProcessModel model = new ProcessModel();
+        model.setId(PROCESS_MODEL_ID);
+        model.setTenantId(TENANT_ID);
+        model.setProcessKey(PROCESS_KEY);
+        model.setProcessName(processName);
+        model.setVersion(2);
+        model.setStatus(WorkflowConstants.Status.PUBLISHED);
+        return model;
+    }
+
+    private String encodedGroupId(String processKey) {
+        return Base64.getUrlEncoder()
+                .withoutPadding()
+                .encodeToString(processKey.getBytes(StandardCharsets.UTF_8));
     }
 }

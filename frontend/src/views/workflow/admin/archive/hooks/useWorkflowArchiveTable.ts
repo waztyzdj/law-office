@@ -24,6 +24,8 @@ export interface WorkflowArchiveScope {
 }
 
 const FILTERS_KEY = 'workflow_archive_list_filters';
+const DEFAULT_SORT_FIELD = 'processEndTime';
+const DEFAULT_SORT_ORDER = 'desc';
 
 export function useWorkflowArchiveTable() {
   const activeTab = ref<WorkflowArchiveTab>('archived');
@@ -104,10 +106,8 @@ export function useWorkflowArchiveTable() {
       ...(Object.keys(queryParams).length > 0 ? { queryParams } : {}),
       ...extra,
     };
-    if (currentSort.sortField) {
-      params.sortField = currentSort.sortField;
-      params.sortOrder = currentSort.sortOrder || 'desc';
-    }
+    params.sortField = currentSort.sortField || DEFAULT_SORT_FIELD;
+    params.sortOrder = currentSort.sortOrder || DEFAULT_SORT_ORDER;
     return params;
   }
 

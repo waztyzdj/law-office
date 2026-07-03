@@ -5,6 +5,7 @@ import com.lawoffice.framework.dto.BaseDTO;
 import com.lawoffice.framework.dto.BasePageDTO;
 import com.lawoffice.workflow.constant.WorkflowConstants;
 import com.lawoffice.workflow.entity.ProcessCategory;
+import com.lawoffice.workflow.mapper.ArchiveRecordMapper;
 import com.lawoffice.workflow.mapper.FormDefinitionMapper;
 import com.lawoffice.workflow.mapper.ProcessCategoryMapper;
 import com.lawoffice.workflow.mapper.ProcessModelMapper;
@@ -17,12 +18,15 @@ import org.springframework.util.StringUtils;
 @Service
 public class ProcessCategoryServiceImpl extends AbstractWorkflowConfigServiceImpl<ProcessCategoryMapper, ProcessCategory, ProcessCategoryVO> implements IProcessCategoryService {
 
+    private final ArchiveRecordMapper archiveRecordMapper;
     private final FormDefinitionMapper formDefinitionMapper;
     private final ProcessModelMapper processModelMapper;
 
     @Autowired
-    public ProcessCategoryServiceImpl(FormDefinitionMapper formDefinitionMapper,
+    public ProcessCategoryServiceImpl(ArchiveRecordMapper archiveRecordMapper,
+            FormDefinitionMapper formDefinitionMapper,
             ProcessModelMapper processModelMapper) {
+        this.archiveRecordMapper = archiveRecordMapper;
         this.formDefinitionMapper = formDefinitionMapper;
         this.processModelMapper = processModelMapper;
     }
@@ -79,6 +83,9 @@ public class ProcessCategoryServiceImpl extends AbstractWorkflowConfigServiceImp
             }
             if (countActive(processModelMapper, tenantId, "category_id", id) > 0) {
                 throw new IllegalArgumentException("分类下存在流程模型，不能删除");
+            }
+            if (countActive(archiveRecordMapper, tenantId, "category_id", id) > 0) {
+                throw new IllegalArgumentException("分类下存在归档记录，不能删除");
             }
         }
     }

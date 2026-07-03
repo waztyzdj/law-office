@@ -1,6 +1,7 @@
 package com.lawoffice.workflow.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
+import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.lawoffice.framework.dto.RequestContext;
 import com.lawoffice.framework.result.BaseResult;
@@ -78,6 +79,18 @@ public class RuntimeQueryServiceImpl implements IRuntimeQueryService {
             "(select pi.starter_realname from wf_process_instance pi "
                     + "where pi.id = wf_task.process_instance_id "
                     + "and pi.tenant_id = wf_task.tenant_id and pi.delete_flag = 0)";
+    private static final String DONE_TASK_INSTANCE_TITLE_SORT_SQL =
+            "(select pi.instance_title from wf_process_instance pi "
+                    + "where pi.id = t.process_instance_id "
+                    + "and pi.tenant_id = t.tenant_id and pi.delete_flag = 0)";
+    private static final String DONE_TASK_INSTANCE_START_TIME_SORT_SQL =
+            "(select pi.start_time from wf_process_instance pi "
+                    + "where pi.id = t.process_instance_id "
+                    + "and pi.tenant_id = t.tenant_id and pi.delete_flag = 0)";
+    private static final String DONE_TASK_INSTANCE_STARTER_REALNAME_SORT_SQL =
+            "(select pi.starter_realname from wf_process_instance pi "
+                    + "where pi.id = t.process_instance_id "
+                    + "and pi.tenant_id = t.tenant_id and pi.delete_flag = 0)";
     private static final String STARTED_PROCESS_NAME_SORT_SQL =
             "(select pm.process_name from wf_process_model pm "
                     + "where pm.id = wf_process_instance.process_model_id "
@@ -94,6 +107,19 @@ public class RuntimeQueryServiceImpl implements IRuntimeQueryService {
             Map.entry("completeTime", "complete_time"),
             Map.entry("createTime", "create_time"),
             Map.entry("updateTime", "update_time")
+    );
+    private static final Map<String, String> DONE_TASK_SORT_FIELDS = Map.ofEntries(
+            Map.entry("instanceTitle", DONE_TASK_INSTANCE_TITLE_SORT_SQL),
+            Map.entry("taskName", "t.task_name"),
+            Map.entry("taskType", "t.task_type"),
+            Map.entry("approvalMode", "t.approval_mode"),
+            Map.entry("starterRealname", DONE_TASK_INSTANCE_STARTER_REALNAME_SORT_SQL),
+            Map.entry("assigneeRealname", "t.assignee_realname"),
+            Map.entry("startTime", DONE_TASK_INSTANCE_START_TIME_SORT_SQL),
+            Map.entry("status", "t.status"),
+            Map.entry("completeTime", "t.complete_time"),
+            Map.entry("createTime", "t.create_time"),
+            Map.entry("updateTime", "t.update_time")
     );
     private static final Map<String, String> STARTED_INSTANCE_SORT_FIELDS = Map.ofEntries(
             Map.entry("instanceTitle", "instance_title"),
@@ -316,7 +342,7 @@ public class RuntimeQueryServiceImpl implements IRuntimeQueryService {
     @Override
     public BaseResult<PageVO<RuntimeTaskVO>> pageDone(TaskPageReq req, RequestContext context) {
         try {
-            return BaseResult.success(pageTasks(req, context, WorkflowConstants.Status.DONE));
+            return BaseResult.success(pageLatestDoneTasks(req, context));
         } catch (IllegalArgumentException e) {
             return BaseResult.error(400, e.getMessage());
         } catch (Exception e) {
@@ -488,6 +514,9 @@ public class RuntimeQueryServiceImpl implements IRuntimeQueryService {
         if (req != null && StringUtils.hasText(req.getTaskType())) {
             wrapper.eq("task_type", req.getTaskType());
         }
+        if (req != null && StringUtils.hasText(req.getApprovalMode())) {
+            wrapper.eq("approval_mode", req.getApprovalMode());
+        }
         if (req != null && StringUtils.hasText(req.getTaskName())) {
             wrapper.like("task_name", req.getTaskName());
         }
@@ -547,6 +576,34 @@ public class RuntimeQueryServiceImpl implements IRuntimeQueryService {
         return new PageVO<>(records, page.getTotal(), page.getCurrent(), page.getSize());
     }
 
+    private PageVO<RuntimeTaskVO> pageLatestDoneTasks(TaskPageReq req, RequestContext context) {
+        String tenantId = requireTenantId(context);
+        String userId = requireUserId(context);
+        int pageNum = req == null ? 1 : Math.max(req.getPageNum(), 1);
+        int pageSize = req == null ? 10 : Math.max(req.getPageSize(), 1);
+        LocalDateTime startTimeGe = parseOptionalDateTime(req == null ? null : req.getStartTimeGe(), "发起时间开始值不合法");
+        LocalDateTime startTimeLe = parseOptionalDateTime(req == null ? null : req.getStartTimeLe(), "发起时间结束值不合法");
+        LocalDateTime completeTimeGe = parseOptionalDateTime(req == null ? null : req.getCompleteTimeGe(), "办理时间开始值不合法");
+        LocalDateTime completeTimeLe = parseOptionalDateTime(req == null ? null : req.getCompleteTimeLe(), "办理时间结束值不合法");
+        boolean hasInstanceFilters = hasInstanceFilters(req) || startTimeGe != null || startTimeLe != null;
+        String orderBySql = buildDoneTaskOrderBySql(req);
+
+        IPage<Task> page = taskMapper.selectLatestDonePage(new Page<>(pageNum, pageSize),
+                tenantId,
+                userId,
+                WorkflowConstants.Status.CLAIMED,
+                DONE_TASK_STATUSES,
+                req,
+                startTimeGe,
+                startTimeLe,
+                completeTimeGe,
+                completeTimeLe,
+                hasInstanceFilters,
+                orderBySql);
+        List<RuntimeTaskVO> records = runtimeViewAssemblerService.buildRuntimeTaskRecords(page.getRecords(), tenantId);
+        return new PageVO<>(records, page.getTotal(), page.getCurrent(), page.getSize());
+    }
+
     /**
      * 我发起的列表默认按流程最近一次状态变化时间排序；点击列头时只允许排序白名单字段进入 SQL。
      */
@@ -571,6 +628,44 @@ public class RuntimeQueryServiceImpl implements IRuntimeQueryService {
             return;
         }
         wrapper.orderByDesc("complete_time").orderByDesc("update_time").orderByDesc("create_time");
+    }
+
+    /**
+     * 已办列表先在 SQL 层按流程实例去重，再分页。排序字段必须从白名单映射为固定 SQL 片段，
+     * 不能把前端字段名直接拼入 order by。
+     */
+    private String buildDoneTaskOrderBySql(TaskPageReq req) {
+        String sortField = req == null ? null : req.getSortField();
+        if (!StringUtils.hasText(sortField)) {
+            return "t.complete_time desc, t.update_time desc, t.create_time desc, t.id desc";
+        }
+        String[] fields = sortField.split(",");
+        String sortOrder = req == null ? null : req.getSortOrder();
+        String[] orders = StringUtils.hasText(sortOrder) ? sortOrder.split(",") : new String[]{"desc"};
+        List<String> orderItems = new java.util.ArrayList<>();
+        for (int i = 0; i < fields.length; i++) {
+            String field = fields[i].trim();
+            if (!StringUtils.hasText(field)) {
+                continue;
+            }
+            String column = DONE_TASK_SORT_FIELDS.get(field);
+            if (!StringUtils.hasText(column)) {
+                throw new IllegalArgumentException("不支持的排序字段");
+            }
+            String order = i < orders.length ? orders[i].trim() : orders[orders.length - 1].trim();
+            if ("asc".equalsIgnoreCase(order)) {
+                orderItems.add(column + " asc");
+            } else if ("desc".equalsIgnoreCase(order)) {
+                orderItems.add(column + " desc");
+            } else {
+                throw new IllegalArgumentException("不支持的排序方向");
+            }
+        }
+        if (orderItems.isEmpty()) {
+            return "t.complete_time desc, t.update_time desc, t.create_time desc, t.id desc";
+        }
+        orderItems.add("t.id desc");
+        return String.join(", ", orderItems);
     }
 
     /**
@@ -648,6 +743,19 @@ public class RuntimeQueryServiceImpl implements IRuntimeQueryService {
                 throw new IllegalArgumentException(message);
             }
         }
+    }
+
+    private LocalDateTime parseOptionalDateTime(String value, String message) {
+        if (!StringUtils.hasText(value)) {
+            return null;
+        }
+        return parseDateTime(value, message);
+    }
+
+    private boolean hasInstanceFilters(TaskPageReq req) {
+        return req != null && (StringUtils.hasText(req.getInstanceTitle())
+                || StringUtils.hasText(req.getInstanceNo())
+                || StringUtils.hasText(req.getStarterRealname()));
     }
 
     private Task requireTodoTask(String taskId, String tenantId) {

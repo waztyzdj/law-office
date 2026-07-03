@@ -326,6 +326,13 @@ FormCreate 表单实例表，用于保存发起后的表单数据、schema 快�
 - `claim_time`：自动认领时间。
 - `complete_time`：完成时间。
 
+关键索引：
+
+- `idx_wft_tenant_assignee_status_time(tenant_id, assignee_user_id, status, delete_flag, create_time)`：待办/已办按处理人和状态查询的基础索引。
+- `idx_wft_tenant_instance_status(tenant_id, process_instance_id, status, delete_flag)`：按流程实例聚合任务状态。
+- `idx_wft_tenant_assignee_status_complete(tenant_id, assignee_user_id, status, delete_flag, complete_time, update_time, create_time)`：我的已办按办理时间倒序查询。
+- `idx_wft_tenant_instance_status_complete(tenant_id, process_instance_id, status, delete_flag, complete_time, update_time, create_time)`：我的已办按流程实例去重取最后办理任务。
+
 ### `wf_process_instance_assignee`
 
 流程实例节点审批人快照表，用于保存运行时选择的审批人，避免组织关系变更影响已流转实例。
