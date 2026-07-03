@@ -18,7 +18,7 @@ import {
   copyWorkflowProcessTemplate,
   getWorkflowFormById,
   listWorkflowCategories,
-  pageLatestWorkflowForms,
+  listWorkflowForms,
 } from '#/api/workflow';
 
 interface DrawerPayload {
@@ -205,7 +205,7 @@ function buildFormOptions(form?: WorkflowFormDefinitionInfo) {
 }
 
 function mapFormOptions(forms: WorkflowFormDefinitionInfo[], source?: WorkflowFormDefinitionInfo) {
-  const options = forms
+  const options = latestPublishedForms(forms)
     .filter((item) => item.id)
     .map((item) => ({
       label: `${item.formName ?? item.formKey ?? item.id} v${item.version ?? 1}`,
@@ -215,6 +215,23 @@ function mapFormOptions(forms: WorkflowFormDefinitionInfo[], source?: WorkflowFo
     options.unshift(...buildFormOptions(source));
   }
   return options;
+}
+
+function latestPublishedForms(forms: WorkflowFormDefinitionInfo[]) {
+  const latestMap = new Map<string, WorkflowFormDefinitionInfo>();
+  for (const form of forms) {
+    if (!form.id) {
+      continue;
+    }
+    const key = form.formKey ?? form.id;
+    const current = latestMap.get(key);
+    if (!current || (form.version ?? 0) > (current.version ?? 0)) {
+      latestMap.set(key, form);
+    }
+  }
+  return [...latestMap.values()].sort((left, right) =>
+    (left.formKey ?? left.id ?? '').localeCompare(right.formKey ?? right.id ?? ''),
+  );
 }
 
 function buildCopyKey(sourceKey?: string) {
@@ -238,11 +255,9 @@ function buildInitialValues(record: WorkflowProcessModelInfo) {
 }
 
 async function loadOptions(record: WorkflowProcessModelInfo) {
-  const [categories, formPage, formDetail] = await Promise.all([
+  const [categories, forms, formDetail] = await Promise.all([
     listWorkflowCategories({ queryParams: { status: 'enabled' } }),
-    pageLatestWorkflowForms({
-      pageNum: 1,
-      pageSize: 500,
+    listWorkflowForms({
       queryParams: { status: 'published' },
       sortField: 'form_key',
       sortOrder: 'asc',
@@ -252,7 +267,7 @@ async function loadOptions(record: WorkflowProcessModelInfo) {
       : Promise.resolve(undefined),
   ]);
   categoryOptions.value = mapCategoryOptions(categories ?? []);
-  formOptions.value = mapFormOptions(formPage.records ?? [], formDetail);
+  formOptions.value = mapFormOptions(forms ?? [], formDetail);
   formApi.setState({ schema: buildFormSchema() });
 }
 

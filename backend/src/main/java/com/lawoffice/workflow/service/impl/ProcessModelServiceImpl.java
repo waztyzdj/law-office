@@ -53,6 +53,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 @Service
 public class ProcessModelServiceImpl extends AbstractWorkflowConfigServiceImpl<ProcessModelMapper, ProcessModel, ProcessModelVO> implements IProcessModelService {
@@ -122,7 +123,8 @@ public class ProcessModelServiceImpl extends AbstractWorkflowConfigServiceImpl<P
 
             Page<ProcessModel> page = new Page<>(basePageDTO.getPageNum(), basePageDTO.getPageSize());
             Page<ProcessModel> resultPage = baseMapper.selectPage(page, wrapper);
-            List<ProcessModelVO> voList = BeanUtil.copyToList(resultPage.getRecords(), ProcessModelVO.class);
+            List<ProcessModelVO> voList = buildProcessModelVOList(resultPage.getRecords(),
+                    resolveTenantId(null, basePageDTO.getContext()));
             PageVO<ProcessModelVO> pageVO = new PageVO<>(voList, resultPage.getTotal(), resultPage.getCurrent(), resultPage.getSize());
             return BaseResult.success(pageVO);
         } catch (Exception e) {
@@ -142,7 +144,7 @@ public class ProcessModelServiceImpl extends AbstractWorkflowConfigServiceImpl<P
                     .orderByDesc("version")
                     .orderByDesc("create_time");
             List<ProcessModel> models = baseMapper.selectList(wrapper);
-            return BaseResult.success(BeanUtil.copyToList(models, ProcessModelVO.class));
+            return BaseResult.success(buildProcessModelVOList(models, tenantId));
         } catch (IllegalArgumentException e) {
             return BaseResult.error(400, e.getMessage());
         } catch (Exception e) {
@@ -225,7 +227,7 @@ public class ProcessModelServiceImpl extends AbstractWorkflowConfigServiceImpl<P
             String tenantId = resolveTenantId(null, context);
             ProcessModel model = requireCurrent(id, tenantId, "流程模型不存在");
             if (WorkflowConstants.Status.PUBLISHED.equals(model.getStatus())) {
-                return BaseResult.success(BeanUtil.toBean(model, ProcessModelVO.class));
+                return BaseResult.success(buildProcessModelVO(model, tenantId));
             }
             if (!WorkflowConstants.Status.DRAFT.equals(model.getStatus())) {
                 throw new IllegalArgumentException("只有草稿流程可以发布");
@@ -239,7 +241,7 @@ public class ProcessModelServiceImpl extends AbstractWorkflowConfigServiceImpl<P
             fillUpdate(model, context);
             updateById(model);
             disableOtherPublishedVersions(model, context);
-            return BaseResult.success(BeanUtil.toBean(model, ProcessModelVO.class));
+            return BaseResult.success(buildProcessModelVO(model, tenantId));
         } catch (IllegalArgumentException e) {
             return BaseResult.error(400, e.getMessage());
         } catch (Exception e) {
@@ -264,7 +266,7 @@ public class ProcessModelServiceImpl extends AbstractWorkflowConfigServiceImpl<P
             EntityFillUtils.fillAuditFields(draft, context, true);
             save(draft);
             copyChildren(source.getId(), draft.getId(), tenantId, context);
-            return BaseResult.success(BeanUtil.toBean(draft, ProcessModelVO.class));
+            return BaseResult.success(buildProcessModelVO(draft, tenantId));
         } catch (IllegalArgumentException e) {
             return BaseResult.error(400, e.getMessage());
         } catch (Exception e) {
@@ -295,7 +297,7 @@ public class ProcessModelServiceImpl extends AbstractWorkflowConfigServiceImpl<P
             copyChildren(sourceModel.getId(), targetModel.getId(), tenantId, context,
                     sourceModel.getFormDefinitionId().equals(targetForm.getId()));
 
-            return BaseResult.success(BeanUtil.toBean(targetModel, ProcessModelVO.class));
+            return BaseResult.success(buildProcessModelVO(targetModel, tenantId));
         } catch (IllegalArgumentException e) {
             return BaseResult.error(400, e.getMessage());
         } catch (Exception e) {
@@ -343,6 +345,59 @@ public class ProcessModelServiceImpl extends AbstractWorkflowConfigServiceImpl<P
         if (model.getVersion() == null) {
             model.setVersion(resolveNextVersion(model.getTenantId(), model.getProcessKey()));
         }
+    }
+
+    private List<ProcessModelVO> buildProcessModelVOList(List<ProcessModel> models, String tenantId) {
+        Map<String, FormDefinition> formMap = buildFormDefinitionMap(models, tenantId);
+        return models.stream()
+                .map(model -> buildProcessModelVO(model, formMap.get(model.getFormDefinitionId())))
+                .toList();
+    }
+
+    private ProcessModelVO buildProcessModelVO(ProcessModel model, String tenantId) {
+        if (model == null) {
+            return null;
+        }
+        FormDefinition form = null;
+        if (StringUtils.hasText(model.getFormDefinitionId())) {
+            form = formDefinitionMapper.selectOne(new QueryWrapper<FormDefinition>()
+                    .select("id", "form_key", "form_name", "version")
+                    .eq("id", model.getFormDefinitionId())
+                    .eq("tenant_id", tenantId)
+                    .eq("delete_flag", 0)
+                    .last("LIMIT 1"));
+        }
+        return buildProcessModelVO(model, form);
+    }
+
+    private ProcessModelVO buildProcessModelVO(ProcessModel model, FormDefinition form) {
+        ProcessModelVO vo = BeanUtil.toBean(model, ProcessModelVO.class);
+        if (form != null) {
+            vo.setFormKey(form.getFormKey());
+            vo.setFormName(form.getFormName());
+            vo.setFormVersion(form.getVersion());
+        }
+        return vo;
+    }
+
+    private Map<String, FormDefinition> buildFormDefinitionMap(List<ProcessModel> models, String tenantId) {
+        Set<String> formIds = models.stream()
+                .map(ProcessModel::getFormDefinitionId)
+                .filter(StringUtils::hasText)
+                .collect(Collectors.toSet());
+        if (formIds.isEmpty()) {
+            return Map.of();
+        }
+        return formDefinitionMapper.selectList(new QueryWrapper<FormDefinition>()
+                        .select("id", "form_key", "form_name", "version")
+                        .in("id", formIds)
+                        .eq("tenant_id", tenantId)
+                        .eq("delete_flag", 0))
+                .stream()
+                .collect(Collectors.toMap(
+                        FormDefinition::getId,
+                        form -> form,
+                        (left, right) -> left));
     }
 
     private String resolveSourceModelId(ProcessTemplateCopyReq req) {

@@ -16,7 +16,7 @@ import { cleanFormPayload, useVbenForm, z } from '#/adapter/form';
 import {
   getWorkflowProcessById,
   listWorkflowCategories,
-  pageLatestWorkflowForms,
+  listWorkflowForms,
   saveWorkflowProcess,
 } from '#/api/workflow';
 
@@ -245,12 +245,29 @@ function buildInitialValues(payload: DrawerPayload) {
 }
 
 function mapFormOptions(forms: WorkflowFormDefinitionInfo[]) {
-  return forms
+  return latestPublishedForms(forms)
     .filter((item) => item.id)
     .map((item) => ({
       label: `${item.formName ?? item.formKey ?? item.id} v${item.version ?? 1}`,
       value: item.id!,
     }));
+}
+
+function latestPublishedForms(forms: WorkflowFormDefinitionInfo[]) {
+  const latestMap = new Map<string, WorkflowFormDefinitionInfo>();
+  for (const form of forms) {
+    if (!form.id) {
+      continue;
+    }
+    const key = form.formKey ?? form.id;
+    const current = latestMap.get(key);
+    if (!current || (form.version ?? 0) > (current.version ?? 0)) {
+      latestMap.set(key, form);
+    }
+  }
+  return [...latestMap.values()].sort((left, right) =>
+    (left.formKey ?? left.id ?? '').localeCompare(right.formKey ?? right.id ?? ''),
+  );
 }
 
 function mapCategoryOptions(categories: WorkflowCategoryInfo[]) {
@@ -263,17 +280,15 @@ function mapCategoryOptions(categories: WorkflowCategoryInfo[]) {
 }
 
 async function loadOptions() {
-  const [formPage, categories] = await Promise.all([
-    pageLatestWorkflowForms({
-      pageNum: 1,
-      pageSize: 500,
+  const [forms, categories] = await Promise.all([
+    listWorkflowForms({
       queryParams: { status: 'published' },
       sortField: 'form_key',
       sortOrder: 'asc',
     }),
     listWorkflowCategories({ queryParams: { status: 'enabled' } }),
   ]);
-  formOptions.value = mapFormOptions(formPage.records ?? []);
+  formOptions.value = mapFormOptions(forms ?? []);
   categoryOptions.value = mapCategoryOptions(categories ?? []);
   formApi.setState({ schema: buildFormSchema() });
 }

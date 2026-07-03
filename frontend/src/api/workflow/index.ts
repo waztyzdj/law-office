@@ -51,6 +51,9 @@ export interface WorkflowProcessModelInfo {
   flowableDeploymentId?: string;
   flowableProcessDefinitionId?: string;
   formDefinitionId?: string;
+  formKey?: string;
+  formName?: string;
+  formVersion?: number;
   nodeJson?: string;
   processKey?: string;
   processName?: string;

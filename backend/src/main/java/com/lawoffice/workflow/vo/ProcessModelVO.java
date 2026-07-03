@@ -13,6 +13,9 @@ public class ProcessModelVO extends BaseVO {
     private String tenantId;
     private String categoryId;
     private String formDefinitionId;
+    private String formKey;
+    private String formName;
+    private Integer formVersion;
     private String processKey;
     private String processName;
     private Integer version;

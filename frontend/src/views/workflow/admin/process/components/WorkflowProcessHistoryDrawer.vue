@@ -128,6 +128,9 @@ function resolveCategory(record: WorkflowProcessModelInfo) {
 }
 
 function resolveForm(record: WorkflowProcessModelInfo) {
+  if (record.formName || record.formKey) {
+    return `${record.formName ?? record.formKey} v${record.formVersion ?? 1}`;
+  }
   return props.formMap[record.formDefinitionId ?? ''] ?? record.formDefinitionId ?? '-';
 }
 

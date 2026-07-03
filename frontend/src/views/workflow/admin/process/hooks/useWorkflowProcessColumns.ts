@@ -60,9 +60,7 @@ export function getWorkflowProcessColumns(
       dataIndex: 'formDefinitionId',
       options: {
         customRender: ({ record }: { record: WorkflowProcessModelInfo }) =>
-          context.formMap[record.formDefinitionId ?? ''] ??
-          record.formDefinitionId ??
-          '-',
+          resolveFormLabel(record, context.formMap),
         width: 220,
       },
       title: '绑定表单',
@@ -167,4 +165,14 @@ export function getWorkflowProcessColumns(
     pagination,
     { minTableWidth: 1790, tableKey: 'workflow_process' },
   );
+}
+
+function resolveFormLabel(
+  record: WorkflowProcessModelInfo,
+  formMap: Record<string, string>,
+) {
+  if (record.formName || record.formKey) {
+    return `${record.formName ?? record.formKey} v${record.formVersion ?? 1}`;
+  }
+  return formMap[record.formDefinitionId ?? ''] ?? record.formDefinitionId ?? '-';
 }
