@@ -34,6 +34,7 @@ import com.lawoffice.workflow.vo.AttachmentVO;
 import com.lawoffice.workflow.vo.ArchiveRecordVO;
 import com.lawoffice.workflow.vo.ArchiveTreeNodeVO;
 import com.lawoffice.workflow.vo.InstanceDiagramVO;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.interceptor.TransactionAspectSupport;
@@ -51,6 +52,7 @@ import java.util.UUID;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
+@Slf4j
 @Service
 public class ArchiveServiceImpl implements IArchiveService {
 
@@ -129,7 +131,7 @@ public class ArchiveServiceImpl implements IArchiveService {
         } catch (IllegalArgumentException e) {
             return BaseResult.error(400, e.getMessage());
         } catch (Exception e) {
-            return BaseResult.error("查询流程归档树失败: " + e.getMessage());
+            return systemError("查询流程归档树失败", e);
         }
     }
 
@@ -151,7 +153,7 @@ public class ArchiveServiceImpl implements IArchiveService {
         } catch (IllegalArgumentException e) {
             return BaseResult.error(400, e.getMessage());
         } catch (Exception e) {
-            return BaseResult.error("查询流程归档失败: " + e.getMessage());
+            return systemError("查询流程归档失败", e);
         }
     }
 
@@ -173,7 +175,7 @@ public class ArchiveServiceImpl implements IArchiveService {
         } catch (IllegalArgumentException e) {
             return BaseResult.error(400, e.getMessage());
         } catch (Exception e) {
-            return BaseResult.error("查询未归档流程失败: " + e.getMessage());
+            return systemError("查询未归档流程失败", e);
         }
     }
 
@@ -186,7 +188,7 @@ public class ArchiveServiceImpl implements IArchiveService {
         } catch (IllegalArgumentException e) {
             return BaseResult.error(400, e.getMessage());
         } catch (Exception e) {
-            return BaseResult.error("查询流程归档详情失败: " + e.getMessage());
+            return systemError("查询流程归档详情失败", e);
         }
     }
 
@@ -199,7 +201,7 @@ public class ArchiveServiceImpl implements IArchiveService {
         } catch (IllegalArgumentException e) {
             return BaseResult.error(400, e.getMessage());
         } catch (Exception e) {
-            return BaseResult.error("查询流程归档图谱失败: " + e.getMessage());
+            return systemError("查询流程归档图谱失败", e);
         }
     }
 
@@ -212,7 +214,7 @@ public class ArchiveServiceImpl implements IArchiveService {
         } catch (IllegalArgumentException e) {
             return BaseResult.error(400, e.getMessage());
         } catch (Exception e) {
-            return BaseResult.error("查询流程归档附件失败: " + e.getMessage());
+            return systemError("查询流程归档附件失败", e);
         }
     }
 
@@ -248,7 +250,7 @@ public class ArchiveServiceImpl implements IArchiveService {
             return BaseResult.error(400, e.getMessage());
         } catch (Exception e) {
             markRollbackIfActive();
-            return BaseResult.error("自动归档流程失败: " + e.getMessage());
+            return systemError("自动归档流程失败", e);
         }
     }
 
@@ -293,7 +295,7 @@ public class ArchiveServiceImpl implements IArchiveService {
             return BaseResult.error(400, e.getMessage());
         } catch (Exception e) {
             markRollbackIfActive();
-            return BaseResult.error("按查询条件批量归档流程失败: " + e.getMessage());
+            return systemError("按查询条件批量归档流程失败", e);
         }
     }
 
@@ -327,7 +329,7 @@ public class ArchiveServiceImpl implements IArchiveService {
             return BaseResult.error(400, e.getMessage());
         } catch (Exception e) {
             markRollbackIfActive();
-            return BaseResult.error(errorPrefix + e.getMessage());
+            return systemError(stripErrorSuffix(errorPrefix), e);
         }
     }
 
@@ -360,7 +362,7 @@ public class ArchiveServiceImpl implements IArchiveService {
             return BaseResult.error(400, e.getMessage());
         } catch (Exception e) {
             markRollbackIfActive();
-            return BaseResult.error("按查询条件批量归档流程失败: " + e.getMessage());
+            return systemError("按查询条件批量归档流程失败", e);
         }
     }
 
@@ -397,8 +399,20 @@ public class ArchiveServiceImpl implements IArchiveService {
             return BaseResult.error(400, e.getMessage());
         } catch (Exception e) {
             markRollbackIfActive();
-            return BaseResult.error("归档流程失败: " + e.getMessage());
+            return systemError("归档流程失败", e);
         }
+    }
+
+    private <T> BaseResult<T> systemError(String message, Exception e) {
+        log.error(message, e);
+        return BaseResult.error(message);
+    }
+
+    private String stripErrorSuffix(String errorPrefix) {
+        if (errorPrefix == null) {
+            return "归档流程失败";
+        }
+        return errorPrefix.endsWith(": ") ? errorPrefix.substring(0, errorPrefix.length() - 2) : errorPrefix;
     }
 
     private List<ArchiveTreeNodeVO> buildArchiveTree(String tenantId) {
@@ -653,7 +667,7 @@ public class ArchiveServiceImpl implements IArchiveService {
     }
 
     /**
-     * 自动归档只处理自然结束，手动归档只处理管理员终止，避免把撤回或运行中流程纳入档案口径。
+     * 自动归档只处理自然结束，手动归档只处理已结束未归档流程，避免把撤回或运行中流程纳入档案口径。
      */
     private void validateArchiveStatus(ProcessInstance processInstance, String archiveSource) {
         if (WorkflowConstants.ArchiveSource.AUTO.equals(archiveSource)) {

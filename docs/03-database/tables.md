@@ -468,7 +468,7 @@ FormCreate 表单实例表，用于保存发起后的表单数据、schema 快�
 - `form_instance_id`、`form_definition_id`：表单实例和表单定义版本 ID。
 - `instance_no`、`instance_title`：归档时审批编号和实例标题快照。
 - `starter_user_id`、`starter_username`、`starter_realname`：发起人快照。
-- `instance_status`：归档时流程实例状态，对应 `wf_process_instance.status`，取值 `approved`、`rejected`、`terminated`；第一版自动归档只覆盖正常结束，手动归档只覆盖已终止实例。
+- `instance_status`：归档时流程实例状态，对应 `wf_process_instance.status`，取值 `approved`、`rejected`、`terminated`；自动归档覆盖正常结束实例，手动归档覆盖已结束且未归档实例。
 - `process_start_time`、`process_end_time`：流程发起和结束时间快照。
 - `archive_source`：归档来源，取值 `auto`、`monitor_manual`、`archive_manual`。
 - `archive_reason`：归档说明。

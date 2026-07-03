@@ -40,7 +40,7 @@ public interface IArchiveService {
     BaseResult<PageVO<ArchiveRecordVO>> pageArchived(ArchivePageReq req, RequestContext context);
 
     /**
-     * 分页查询可人工归档的终止流程实例。
+     * 分页查询可人工归档的已结束流程实例。
      * <p>
      * 已通过、已拒绝、已终止且尚未归档的实例进入未归档池，撤回、运行中、草稿和已归档实例均不返回。
      *
@@ -53,7 +53,7 @@ public interface IArchiveService {
     /**
      * 查询流程归档详情。
      * <p>
-     * 已归档实例和已终止未归档实例均允许从归档菜单查看详情，其它状态不允许通过归档入口查看。
+     * 已归档实例和未归档池中的已结束实例均允许从归档菜单查看详情，其它状态不允许通过归档入口查看。
      *
      * @param processInstanceId 流程实例 ID
      * @param context 请求上下文

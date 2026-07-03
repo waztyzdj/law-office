@@ -42,6 +42,7 @@ import com.lawoffice.workflow.service.ITaskNotificationService;
 import com.lawoffice.workflow.vo.AdminMonitorDetailVO;
 import com.lawoffice.workflow.vo.AdminMonitorInstanceVO;
 import com.lawoffice.workflow.vo.AdminOperationRecordVO;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
@@ -56,6 +57,7 @@ import java.util.Set;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
+@Slf4j
 @Service
 public class AdminMonitorServiceImpl implements IAdminMonitorService {
 
@@ -152,7 +154,7 @@ public class AdminMonitorServiceImpl implements IAdminMonitorService {
         } catch (IllegalArgumentException e) {
             return BaseResult.error(400, e.getMessage());
         } catch (Exception e) {
-            return BaseResult.error("查询流程监控失败: " + e.getMessage());
+            return systemError("查询流程监控失败", e);
         }
     }
 
@@ -177,7 +179,7 @@ public class AdminMonitorServiceImpl implements IAdminMonitorService {
         } catch (IllegalArgumentException e) {
             return BaseResult.error(400, e.getMessage());
         } catch (Exception e) {
-            return BaseResult.error("查询流程监控详情失败: " + e.getMessage());
+            return systemError("查询流程监控详情失败", e);
         }
     }
 
@@ -211,7 +213,7 @@ public class AdminMonitorServiceImpl implements IAdminMonitorService {
         } catch (IllegalArgumentException e) {
             return BaseResult.error(400, e.getMessage());
         } catch (Exception e) {
-            return BaseResult.error("查询流程维护记录失败: " + e.getMessage());
+            return systemError("查询流程维护记录失败", e);
         }
     }
 
@@ -451,9 +453,15 @@ public class AdminMonitorServiceImpl implements IAdminMonitorService {
             insertFailedRecord(req, operationType, e.getMessage(), context);
             return BaseResult.error(400, e.getMessage());
         } catch (Exception e) {
-            insertFailedRecord(req, operationType, e.getMessage(), context);
-            return BaseResult.error("流程监控维护失败: " + e.getMessage());
+            log.error("流程监控维护失败", e);
+            insertFailedRecord(req, operationType, "流程监控维护失败", context);
+            return BaseResult.error("流程监控维护失败");
         }
+    }
+
+    private <T> BaseResult<T> systemError(String message, Exception e) {
+        log.error(message, e);
+        return BaseResult.error(message);
     }
 
     private AdminOperationRecord insertSuccessRecord(String processInstanceId, String taskId, String operationType,

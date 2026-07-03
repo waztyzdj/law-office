@@ -61,9 +61,8 @@ export function useWorkflowArchiveTable() {
           : await pageWorkflowUnarchivedRecords(params);
       records.value = page.records ?? [];
       pagination.total = page.total ?? 0;
-    } catch (error) {
+    } catch {
       message.error('加载归档数据失败');
-      console.error('加载流程归档列表失败:', error);
     } finally {
       loading.value = false;
     }
@@ -194,7 +193,7 @@ function loadFiltersFromStorage(): Record<WorkflowArchiveTab, Record<string, any
 function saveFiltersToStorage(filters: Record<WorkflowArchiveTab, Record<string, any>>) {
   try {
     localStorage.setItem(FILTERS_KEY, JSON.stringify(filters));
-  } catch (error) {
-    console.error('保存流程归档筛选条件失败:', error);
+  } catch {
+    // localStorage 不可用时忽略筛选缓存，不影响列表查询。
   }
 }

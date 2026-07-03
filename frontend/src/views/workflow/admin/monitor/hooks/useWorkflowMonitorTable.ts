@@ -59,9 +59,8 @@ export function useWorkflowMonitorTable() {
         records.value.some((record) => record.id === key && record.canArchive),
       );
       pagination.total = page.total ?? 0;
-    } catch (error) {
+    } catch {
       message.error('加载数据失败');
-      console.error('加载流程监控列表失败:', error);
     } finally {
       loading.value = false;
     }
@@ -170,7 +169,7 @@ function loadFiltersFromStorage(): Record<string, any> {
 function saveFiltersToStorage(filters: Record<string, any>) {
   try {
     localStorage.setItem(FILTERS_KEY, JSON.stringify(filters));
-  } catch (error) {
-    console.error('保存流程监控筛选条件失败:', error);
+  } catch {
+    // localStorage 不可用时忽略筛选缓存，不影响列表查询。
   }
 }
