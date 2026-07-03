@@ -7,7 +7,7 @@
     <parent>
         <groupId>org.springframework.boot</groupId>
         <artifactId>spring-boot-starter-parent</artifactId>
-        <version>3.2.5</version>
+        <version>3.5.16</version>
         <relativePath/>
     </parent>
 
@@ -26,9 +26,26 @@
         <druid-spring-boot.version>1.2.23</druid-spring-boot.version>
         <jasypt-spring-boot.version>3.0.5</jasypt-spring-boot.version>
         <jjwt.version>0.12.5</jjwt.version>
-        <springdoc.version>2.3.0</springdoc.version>
+        <springdoc.version>2.8.17</springdoc.version>
         <flowable.version>7.2.0</flowable.version>
+        <poi.version>5.5.1</poi.version>
     </properties>
+
+    <dependencyManagement>
+        <dependencies>
+            <!-- EasyExcel 4.0.3 默认仍带 POI 5.2.5；这里统一覆盖到已修复漏洞的 POI 版本。 -->
+            <dependency>
+                <groupId>org.apache.poi</groupId>
+                <artifactId>poi</artifactId>
+                <version>${poi.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.apache.poi</groupId>
+                <artifactId>poi-ooxml</artifactId>
+                <version>${poi.version}</version>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
 
     <dependencies>
         <!-- Hutool 工具类 -->
@@ -122,14 +139,14 @@
         <dependency>
             <groupId>com.alibaba</groupId>
             <artifactId>easyexcel</artifactId>
-            <version>3.3.3</version>
+            <version>4.0.3</version>
         </dependency>
 
         <!-- PDFBox for workflow approval download package PDF generation -->
         <dependency>
             <groupId>org.apache.pdfbox</groupId>
             <artifactId>pdfbox</artifactId>
-            <version>2.0.30</version>
+            <version>2.0.34</version>
         </dependency>
 
         <!-- Spring Boot AOP Starter -->
@@ -155,7 +172,7 @@
         <dependency>
             <groupId>com.alibaba.fastjson2</groupId>
             <artifactId>fastjson2</artifactId>
-            <version>2.0.40</version>
+            <version>2.0.62</version>
         </dependency>
 
         <!-- Spring Boot Data Redis Starter -->
@@ -182,19 +199,26 @@
         <dependency>
             <groupId>io.minio</groupId>
             <artifactId>minio</artifactId>
-            <version>8.5.7</version>
+            <version>9.0.3</version>
+        </dependency>
+
+        <!-- MinIO 9.x 使用 OkHttp 5.x 多平台依赖，JVM 项目需要显式引入 JVM artifact。 -->
+        <dependency>
+            <groupId>com.squareup.okhttp3</groupId>
+            <artifactId>okhttp-jvm</artifactId>
+            <version>5.3.2</version>
         </dependency>
 
         <!-- Apache Shiro Core (不使用 web starter，避免 javax.servlet 依赖) -->
         <dependency>
             <groupId>org.apache.shiro</groupId>
             <artifactId>shiro-core</artifactId>
-            <version>2.0.2</version>
+            <version>2.2.1</version>
         </dependency>
         <dependency>
             <groupId>org.apache.shiro</groupId>
             <artifactId>shiro-spring</artifactId>
-            <version>2.0.2</version>
+            <version>2.2.1</version>
             <exclusions>
                 <!-- 排除旧的 shiro-web，因为它依赖 javax.servlet -->
                 <exclusion>

@@ -1,7 +1,7 @@
 package com.lawoffice.util;
 
 import io.minio.*;
-import io.minio.http.Method;
+import io.minio.Http.Method;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
@@ -72,7 +72,7 @@ public class MinioUtils {
                     PutObjectArgs.builder()
                             .bucket(bucketName)
                             .object(objectName)
-                            .stream(file.getInputStream(), file.getSize(), -1)
+                            .stream(file.getInputStream(), file.getSize(), -1L)
                             .contentType(file.getContentType())
                             .build()
             );
@@ -106,7 +106,7 @@ public class MinioUtils {
                     PutObjectArgs.builder()
                             .bucket(bucketName)
                             .object(objectName)
-                            .stream(inputStream, -1, 10485760) // 10MB part size
+                            .stream(inputStream, -1L, 10485760L) // 10MB part size
                             .contentType(contentType)
                             .build()
             );
@@ -135,7 +135,7 @@ public class MinioUtils {
                     PutObjectArgs.builder()
                             .bucket(bucketName)
                             .object(objectName)
-                            .stream(inputStream, -1, 10485760)
+                            .stream(inputStream, -1L, 10485760L)
                             .contentType(contentType)
                             .build()
             );
@@ -158,7 +158,7 @@ public class MinioUtils {
                     PutObjectArgs.builder()
                             .bucket(bucketName)
                             .object(actualObjectName)
-                            .stream(inputStream, -1, 10485760)
+                            .stream(inputStream, -1L, 10485760L)
                             .contentType(contentType)
                             .build()
             );
@@ -249,7 +249,7 @@ public class MinioUtils {
                     PutObjectArgs.builder()
                             .bucket(bucketName)
                             .object(objectName)
-                            .stream(inputStream, -1, 10485760)
+                            .stream(inputStream, -1L, 10485760L)
                             .contentType("application/octet-stream")
                             .build()
             );
