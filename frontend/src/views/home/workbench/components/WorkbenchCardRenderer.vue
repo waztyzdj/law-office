@@ -46,6 +46,12 @@ const emit = defineEmits<{
 }>();
 
 const router = useRouter();
+type MessageTabKey = 'read-message' | 'timeout-message' | 'unread-message' | 'urge-message';
+interface MessageTab {
+  key: MessageTabKey;
+  label: string;
+  total: number;
+}
 const meta = computed(() =>
   getWorkbenchCardMeta(props.card.cardCode, props.card.componentKey),
 );
@@ -73,7 +79,8 @@ const quickEntryDraggingKey = ref('');
 const quickEntryEditMode = ref(false);
 const localQuickEntryItems = ref<WorkbenchCardItem[]>([]);
 const ccActiveTab = ref<'read-cc' | 'unread-cc'>('unread-cc');
-const messageActiveTab = ref<'read-message' | 'unread-message' | 'urge-message'>('unread-message');
+const messageActiveTab = ref<MessageTabKey>('unread-message');
+const messageTabAutoSelected = ref(true);
 const todoActiveTab = ref<'done' | 'todo'>('todo');
 const listPageSize = computed(() => {
   const limit = readCardLimit();
@@ -110,18 +117,39 @@ const ccTabs = computed(() => [
   { key: 'read-cc' as const, label: '\u5DF2\u8BFB', total: Number(summary.value.readTotal ?? 0) },
 ]);
 const hasUrgeMessages = computed(() => Number(summary.value.urgeTotal ?? 0) > 0);
+const hasTimeoutMessages = computed(() => Number(summary.value.timeoutTotal ?? 0) > 0);
 const messageTabs = computed(() => {
-  const tabs = [
-    { key: 'unread-message' as const, label: '\u672A\u8BFB', total: Number(summary.value.unreadTotal ?? 0) },
-    { key: 'read-message' as const, label: '\u5DF2\u8BFB', total: Number(summary.value.readTotal ?? 0) },
+  const tabs: MessageTab[] = [
+    { key: 'unread-message', label: '\u672A\u8BFB', total: Number(summary.value.unreadTotal ?? 0) },
+    { key: 'read-message', label: '\u5DF2\u8BFB', total: Number(summary.value.readTotal ?? 0) },
   ];
+  if (hasTimeoutMessages.value) {
+    tabs.unshift({
+      key: 'timeout-message' as const,
+      label: '\u8D85\u65F6',
+      total: Number(summary.value.timeoutTotal ?? 0),
+    });
+  }
   if (hasUrgeMessages.value) {
-    return [
-      { key: 'urge-message' as const, label: '\u50AC\u529E', total: Number(summary.value.urgeTotal ?? 0) },
-      ...tabs,
-    ];
+    tabs.unshift({
+      key: 'urge-message' as const,
+      label: '\u50AC\u529E',
+      total: Number(summary.value.urgeTotal ?? 0),
+    });
   }
   return tabs;
+});
+const messageEmptyDescription = computed(() => {
+  if (messageActiveTab.value === 'urge-message') {
+    return '\u50AC\u529E\u6D88\u606F\u6682\u65E0\u6570\u636E';
+  }
+  if (messageActiveTab.value === 'timeout-message') {
+    return '\u8D85\u65F6\u6D88\u606F\u6682\u65E0\u6570\u636E';
+  }
+  if (messageActiveTab.value === 'unread-message') {
+    return '\u672A\u8BFB\u6D88\u606F\u6682\u65E0\u6570\u636E';
+  }
+  return '\u5DF2\u8BFB\u6D88\u606F\u6682\u65E0\u6570\u636E';
 });
 const hasPagination = computed(() => currentListItems.value.length > listPageSize.value);
 const showListFooter = computed(() =>
@@ -157,14 +185,38 @@ watch(
 );
 
 watch(
-  () => [hasUrgeMessages.value, messageActiveTab.value],
-  ([nextHasUrge, activeTab]) => {
-    if (!nextHasUrge && activeTab === 'urge-message') {
-      messageActiveTab.value = 'unread-message';
+  () => ({
+    activeTab: messageActiveTab.value,
+    hasTimeout: hasTimeoutMessages.value,
+    hasUrge: hasUrgeMessages.value,
+    isMessage: isMessage.value,
+  }),
+  ({ activeTab, isMessage }) => {
+    if (!isMessage) {
+      return;
+    }
+    const preferredTab = getPreferredMessageTab();
+    if (
+      !isMessageTabAvailable(activeTab) ||
+      (messageTabAutoSelected.value && activeTab !== preferredTab)
+    ) {
+      messageActiveTab.value = preferredTab;
+      messageTabAutoSelected.value = true;
       listPage.value = 1;
     }
   },
   { immediate: true },
+);
+
+watch(
+  () => props.card.cardCode,
+  () => {
+    if (isMessage.value) {
+      messageTabAutoSelected.value = true;
+      messageActiveTab.value = getPreferredMessageTab();
+      listPage.value = 1;
+    }
+  },
 );
 
 watch(
@@ -187,9 +239,30 @@ function handleCcTabChange(tabKey: 'read-cc' | 'unread-cc') {
   listPage.value = 1;
 }
 
-function handleMessageTabChange(tabKey: 'read-message' | 'unread-message' | 'urge-message') {
+function handleMessageTabChange(tabKey: MessageTabKey) {
   messageActiveTab.value = tabKey;
+  messageTabAutoSelected.value = false;
   listPage.value = 1;
+}
+
+function getPreferredMessageTab(): MessageTabKey {
+  if (hasUrgeMessages.value) {
+    return 'urge-message';
+  }
+  if (hasTimeoutMessages.value) {
+    return 'timeout-message';
+  }
+  return 'unread-message';
+}
+
+function isMessageTabAvailable(tabKey: MessageTabKey) {
+  if (tabKey === 'urge-message') {
+    return hasUrgeMessages.value;
+  }
+  if (tabKey === 'timeout-message') {
+    return hasTimeoutMessages.value;
+  }
+  return true;
 }
 
 function readCardLimit() {
@@ -828,7 +901,7 @@ function getMetricStyle(item: WorkbenchCardItem): CSSProperties {
         <Empty
           v-else
           class="workbench-card__empty"
-          :description="`${messageActiveTab === 'unread-message' ? '\u672A\u8BFB\u6D88\u606F' : messageActiveTab === 'urge-message' ? '\u50AC\u529E\u6D88\u606F' : '\u5DF2\u8BFB\u6D88\u606F'}\u6682\u65E0\u6570\u636E`"
+          :description="messageEmptyDescription"
           :image="Empty.PRESENTED_IMAGE_SIMPLE"
         />
       </div>

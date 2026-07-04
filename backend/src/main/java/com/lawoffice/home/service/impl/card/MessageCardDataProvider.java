@@ -21,6 +21,7 @@ import java.util.Set;
 @Component
 public class MessageCardDataProvider extends AbstractWorkbenchCardDataProvider implements IWorkbenchCardDataProvider {
 
+    private static final Set<String> TIMEOUT_BIZ_TYPES = Set.of("workflow_timeout");
     private static final Set<String> URGE_BIZ_TYPES = Set.of("workflow_urge");
 
     private final IMessageService messageService;
@@ -43,14 +44,16 @@ public class MessageCardDataProvider extends AbstractWorkbenchCardDataProvider i
         WorkbenchCardDataVO vo = emptyData(card);
         vo.getSummary().put("unreadTotal", total(unreadPage));
         vo.getSummary().put("readTotal", total(readPage));
-        vo.getSummary().put("urgeTotal", countUrgeMessages(unreadPage));
+        vo.getSummary().put("urgeTotal", countSpecialMessages(unreadPage, URGE_BIZ_TYPES));
+        vo.getSummary().put("timeoutTotal", countSpecialMessages(unreadPage, TIMEOUT_BIZ_TYPES));
         long urgent = unreadPage == null || unreadPage.getRecords() == null ? 0 : unreadPage.getRecords().stream()
                 .filter(message -> message.getPriority() != null && message.getPriority() >= MessageConstants.PRIORITY_URGENT)
                 .count();
         vo.getSummary().put("urgent", urgent);
         List<Map<String, Object>> items = new ArrayList<>();
         items.addAll(mapMessageItems(unreadPage, "unread-message"));
-        items.addAll(mapUrgeMessageItems(unreadPage));
+        items.addAll(mapSpecialMessageItems(unreadPage, "urge-message", URGE_BIZ_TYPES));
+        items.addAll(mapSpecialMessageItems(unreadPage, "timeout-message", TIMEOUT_BIZ_TYPES));
         items.addAll(mapMessageItems(readPage, "read-message"));
         vo.setItems(items);
         return vo;
@@ -83,25 +86,25 @@ public class MessageCardDataProvider extends AbstractWorkbenchCardDataProvider i
                 .toList();
     }
 
-    private long countUrgeMessages(PageVO<MessageInboxVO> page) {
+    private long countSpecialMessages(PageVO<MessageInboxVO> page, Set<String> bizTypes) {
         if (page == null || page.getRecords() == null) {
             return 0;
         }
         return page.getRecords().stream()
-                .filter(this::isUrgeMessage)
+                .filter(message -> isUnreadMessageOfTypes(message, bizTypes))
                 .count();
     }
 
-    private List<Map<String, Object>> mapUrgeMessageItems(PageVO<MessageInboxVO> page) {
+    private List<Map<String, Object>> mapSpecialMessageItems(PageVO<MessageInboxVO> page, String type, Set<String> bizTypes) {
         if (page == null || page.getRecords() == null) {
             return List.of();
         }
         return page.getRecords().stream()
-                .filter(this::isUrgeMessage)
+                .filter(message -> isUnreadMessageOfTypes(message, bizTypes))
                 .map(message -> item(
                         message.getId(),
                         message.getTitle(),
-                        "urge-message",
+                        type,
                         "unread",
                         message.getSendTime(),
                         HomeWorkbenchConstants.TARGET_TYPE_ROUTE,
@@ -110,10 +113,10 @@ public class MessageCardDataProvider extends AbstractWorkbenchCardDataProvider i
                 .toList();
     }
 
-    private boolean isUrgeMessage(MessageInboxVO message) {
+    private boolean isUnreadMessageOfTypes(MessageInboxVO message, Set<String> bizTypes) {
         return message != null
                 && message.getReadStatus() != null
                 && message.getReadStatus() == MessageConstants.READ_STATUS_UNREAD
-                && URGE_BIZ_TYPES.contains(message.getBizType());
+                && bizTypes.contains(message.getBizType());
     }
 }
