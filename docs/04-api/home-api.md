@@ -7,9 +7,7 @@
 - `home:card:cc`：查看我的抄送卡片。
 - `home:card:quick-entry`：查看快捷入口卡片。
 - `home:card:message`：查看我的消息卡片。
-- `home:card:recent`：查看近期工作卡片。
 - `home:card:metrics`：查看指标概览卡片。
-- `home:card:risk`：查看风险预警卡片。
 - `home:card:manage`：管理工作台卡片配置和系统默认快捷入口。
 
 说明：
@@ -31,9 +29,6 @@
 | POST | `/home/workbench/quick-entry/list` | `home:workbench:view` + `home:card:quick-entry` | 查询当前用户快捷入口。 |
 | POST | `/home/workbench/quick-entry/save` | `home:workbench:view` + `home:card:quick-entry` | 保存当前用户个人快捷入口。 |
 | POST | `/home/workbench/quick-entry/delete` | `home:workbench:view` + `home:card:quick-entry` | 删除当前用户个人快捷入口。 |
-| POST | `/home/workbench/recent/page` | `home:workbench:view` + `home:card:recent` | 分页查询当前用户近期工作记录。 |
-| POST | `/home/workbench/recent/record` | `home:workbench:view` | 记录当前用户访问或打开的工作对象。 |
-| POST | `/home/workbench/recent/clear` | `home:workbench:view` + `home:card:recent` | 清空当前用户近期工作记录。 |
 
 ### 查询工作台布局
 
@@ -194,9 +189,7 @@
 - `cc`：复用审批中心 `pageCc`，返回当前用户未读抄送、已读抄送总数和明细，均按到达时间倒序排列。
 - `quick-entry`：复用工作台快捷入口服务，返回当前用户可访问的系统默认入口和个人入口。
 - `message`：复用消息中心收件箱，返回当前用户未读消息、已读消息总数和明细。
-- `recent`：复用 `home_workbench_recent_record`，返回当前用户近期工作记录。
 - `metrics`：聚合我的待办、我的抄送和我的消息数量，作为工作台轻量指标，不替代统计报表中心。
-- `risk`：聚合已超时审批待办和高优先级未读消息，作为当前用户风险提醒。
 
 ### 查询快捷入口
 
@@ -271,60 +264,6 @@
 
 - 只能删除当前用户自己的快捷入口。
 - 系统默认入口不能通过用户端删除，只能在个性化设置中隐藏或由管理员停用。
-
-### 查询近期工作
-
-请求体：
-
-```json
-{
-  "recordType": "document",
-  "pageNum": 1,
-  "pageSize": 10
-}
-```
-
-说明：
-
-- `recordType` 可选，支持 `menu`、`workflow`、`document`、`message`、`business`。
-- 后端只返回当前用户当前租户下的有效记录，并在返回前复核业务对象访问权。
-
-### 记录近期工作
-
-请求体：
-
-```json
-{
-  "recordType": "workflow",
-  "bizId": "processInstanceId",
-  "title": "费用审批",
-  "targetType": "route",
-  "targetPath": "/workflow/runtime/started",
-  "moduleCode": "workflow",
-  "sourceTime": "2026-07-03 10:00:00"
-}
-```
-
-约束：
-
-- 该接口只记录当前用户自己的访问行为。
-- 后端根据 `recordType`、`moduleCode`、`bizId` 和 `targetPath` 生成 `recordKey`，同一用户、同一租户、同一 `recordType + recordKey` 合并为一条记录，更新 `last_visit_time` 和 `visit_count`。
-- 后端可按模块策略忽略无效或无权限对象。
-
-### 清空近期工作
-
-请求体：
-
-```json
-{
-  "recordType": "document"
-}
-```
-
-说明：
-
-- `recordType` 为空时清空当前用户当前租户下全部近期工作记录。
-- 清空只逻辑删除工作台近期记录，不删除原业务数据、系统日志或文档记录。
 
 ## 管理端接口
 
@@ -468,26 +407,16 @@
 - 两个 Tab 均按消息到达时间倒序排列。
 - 点击明细后进入消息中心或打开消息详情，标记已读等操作复用消息中心能力。
 
-### 近期工作卡片
-
-- 数据来自 `home_workbench_recent_record`，必要时可补充系统日志和各业务模块最近记录。
-- 返回前必须复核业务对象访问权。
-
 ### 指标概览卡片
 
 - 数据来自审批、消息、文档等模块的轻量统计接口或 Provider。
 - 只展示当前用户维度或其有数据权限的范围。
 - 不承担统计报表中心的复杂分析口径。
 
-### 风险预警卡片
-
-- 数据来自审批超时、催办、流程异常、高优先级消息和后续业务模块风险 Provider。
-- 工作台只展示和跳转，不直接改变业务状态。
-
 ## 安全与性能
 
 - 所有接口必须按当前登录用户和当前租户过滤数据。
 - 卡片数据接口必须有服务端安全上限；列表型卡片的 `limit` 只控制前端每页行数，后端可返回多页所需数据并由工作台卡片分页展示。
 - 工作台页面应支持先加载布局再分卡片加载数据；单个卡片失败不能影响其它卡片。
-- 快捷入口、近期工作和卡片配置中的 `config` 只允许保存展示参数，不允许保存可执行脚本、任意组件路径或 SQL。
+- 快捷入口和卡片配置中的 `config` 只允许保存展示参数，不允许保存可执行脚本、任意组件路径或 SQL。
 - 后端不得返回当前用户无权访问的审批、消息、文档、日志或业务对象。

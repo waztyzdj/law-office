@@ -6,8 +6,6 @@ export type WorkbenchCardCode =
   | 'message'
   | 'metrics'
   | 'quick-entry'
-  | 'recent'
-  | 'risk'
   | 'todo';
 
 export type WorkbenchCardSize = 'full' | 'large' | 'medium' | 'small';
@@ -150,17 +148,6 @@ export interface WorkbenchLayoutSaveReq {
   }>;
 }
 
-export interface WorkbenchRecentRecordReq {
-  bizId?: string;
-  moduleCode?: string;
-  recordType: string;
-  sourceTime?: string;
-  targetParamsJson?: string;
-  targetPath?: string;
-  targetType?: string;
-  title: string;
-}
-
 export function getWorkbenchLayout() {
   return requestClient.post<WorkbenchLayout>('/home/workbench/layout', {});
 }
@@ -175,10 +162,6 @@ export function resetWorkbenchLayout() {
 
 export function getWorkbenchCardData(data: WorkbenchCardDataReq) {
   return requestClient.post<WorkbenchCardData>('/home/workbench/card/data', data);
-}
-
-export function recordWorkbenchRecent(data: WorkbenchRecentRecordReq) {
-  return requestClient.post<void>('/home/workbench/recent/record', data);
 }
 
 export function listWorkbenchQuickEntries(data: WorkbenchQuickEntryListReq = {}) {

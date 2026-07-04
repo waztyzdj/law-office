@@ -38,25 +38,11 @@ export const workbenchCardRegistry: WorkbenchCardMeta[] = [
     tone: 'orange',
   },
   {
-    accent: '#4f46e5',
-    code: 'recent',
-    componentKey: 'WorkbenchRecentCard',
-    icon: 'lucide:history',
-    tone: 'indigo',
-  },
-  {
     accent: '#15803d',
     code: 'metrics',
     componentKey: 'WorkbenchMetricsCard',
     icon: 'lucide:activity',
     tone: 'green',
-  },
-  {
-    accent: '#dc2626',
-    code: 'risk',
-    componentKey: 'WorkbenchRiskCard',
-    icon: 'lucide:shield-alert',
-    tone: 'red',
   },
 ];
 

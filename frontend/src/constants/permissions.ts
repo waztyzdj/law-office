@@ -30,8 +30,6 @@ export const permissionCodes = {
     message: 'home:card:message',
     metrics: 'home:card:metrics',
     quickEntry: 'home:card:quick-entry',
-    recent: 'home:card:recent',
-    risk: 'home:card:risk',
     todo: 'home:card:todo',
   },
   workflowCategory: createBasePermissionCodes('workflow:category'),

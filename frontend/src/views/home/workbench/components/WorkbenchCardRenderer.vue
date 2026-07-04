@@ -25,8 +25,6 @@ import {
   message,
 } from 'ant-design-vue';
 
-import { recordWorkbenchRecent } from '#/api/home/workbench';
-
 import { getWorkbenchCardMeta } from '../registry';
 import WorkbenchCardPagination from './WorkbenchCardPagination.vue';
 
@@ -60,9 +58,6 @@ const cardDisplayName = computed(() => {
   }
   if (props.card.cardCode === 'message') {
     return '\u6211\u7684\u6D88\u606F';
-  }
-  if (props.card.cardCode === 'recent') {
-    return '\u5386\u53F2\u64CD\u4F5C';
   }
   return props.card.cardName;
 });
@@ -143,7 +138,6 @@ const metricToneStyles: Record<string, MetricToneStyle> = {
   cyan: { color: '#0891b2', icon: 'lucide:send' },
   orange: { color: '#ea580c', icon: 'lucide:bell' },
 };
-const allowedRecentRecordTypes = ['business', 'document', 'menu', 'message', 'workflow'];
 
 watch(
   () => [
@@ -305,7 +299,7 @@ function buildRouteQuery(item: WorkbenchCardItem, baseQuery: LocationQueryRaw) {
   }
   const path = typeof item.targetPath === 'string' ? item.targetPath : '';
   const shouldOpenTodoTask =
-    (props.card.cardCode === 'todo' || props.card.cardCode === 'risk') &&
+    props.card.cardCode === 'todo' &&
     item.type !== 'quick-entry' &&
     (path.split('?')[0] || '') === '/workflow/todo';
   if (shouldOpenTodoTask) {
@@ -317,84 +311,6 @@ function buildRouteQuery(item: WorkbenchCardItem, baseQuery: LocationQueryRaw) {
   return query;
 }
 
-function resolveRecentRecordType(item: WorkbenchCardItem) {
-  const type = String(item.type || '');
-  if (allowedRecentRecordTypes.includes(type)) {
-    return type;
-  }
-  if (props.card.cardCode === 'quick-entry') {
-    return item.targetType === 'menu' ? 'menu' : 'business';
-  }
-  if (props.card.cardCode === 'message') {
-    return 'message';
-  }
-  if (props.card.cardCode === 'todo' || props.card.cardCode === 'risk') {
-    return type === 'message' ? 'message' : 'workflow';
-  }
-  if (props.card.cardCode === 'cc') {
-    return 'workflow';
-  }
-  return 'business';
-}
-
-function stringifyTargetParams(query: LocationQueryRaw) {
-  const params = Object.entries(query).reduce<Record<string, string | string[]>>(
-    (result, [key, value]) => {
-      if (value === undefined || value === null) {
-        return result;
-      }
-      if (Array.isArray(value)) {
-        const normalized = value
-          .filter(
-            (item) =>
-              typeof item === 'boolean' ||
-              typeof item === 'number' ||
-              typeof item === 'string',
-          )
-          .map(String);
-        if (normalized.length > 0) {
-          result[key] = normalized;
-        }
-        return result;
-      }
-      if (
-        typeof value === 'boolean' ||
-        typeof value === 'number' ||
-        typeof value === 'string'
-      ) {
-        result[key] = String(value);
-      }
-      return result;
-    },
-    {},
-  );
-  return Object.keys(params).length > 0 ? JSON.stringify(params) : undefined;
-}
-
-function recordRecentVisit(
-  item: WorkbenchCardItem,
-  targetPath: string,
-  query: LocationQueryRaw,
-) {
-  const title = typeof item.title === 'string' ? item.title.trim() : '';
-  if (!title) {
-    return;
-  }
-  const targetType = item.targetType === 'action' ? 'action' : 'route';
-  const targetParamsJson = stringifyTargetParams(query);
-  void recordWorkbenchRecent({
-    bizId: String(item.bizId || item.id || targetPath || title),
-    moduleCode: props.card.cardCode,
-    recordType: resolveRecentRecordType(item),
-    sourceTime: typeof item.occurTime === 'string' ? item.occurTime : undefined,
-    targetParamsJson,
-    targetPath,
-    targetType,
-    title,
-  }).catch(() => {
-    // Ignore recent-record failures so opening the target stays responsive.
-  });
-}
 function handleOpen(item: WorkbenchCardItem) {
   const rawTargetPath = typeof item.targetPath === 'string' ? item.targetPath : '';
   if (!rawTargetPath) {
@@ -402,12 +318,10 @@ function handleOpen(item: WorkbenchCardItem) {
     return;
   }
   if (props.card.cardCode === 'message') {
-    recordRecentVisit(item, rawTargetPath.split('?')[0] || rawTargetPath, {});
     emit('openMessageItem', { card: props.card, item });
     return;
   }
-  if (shouldOpenWorkflowDrawer(item, rawTargetPath)) {
-    recordRecentVisit(item, rawTargetPath.split('?')[0] || rawTargetPath, {});
+  if (shouldOpenWorkflowDrawer(item)) {
     emit('openWorkflowItem', { card: props.card, item });
     return;
   }
@@ -416,7 +330,6 @@ function handleOpen(item: WorkbenchCardItem) {
       message.warning('\u5916\u90E8\u94FE\u63A5\u5730\u5740\u4E0D\u5408\u6CD5');
       return;
     }
-    recordRecentVisit(item, rawTargetPath, {});
     window.open(rawTargetPath, '_blank', 'noopener,noreferrer');
     return;
   }
@@ -426,19 +339,14 @@ function handleOpen(item: WorkbenchCardItem) {
     return;
   }
   const query = buildRouteQuery(item, target.query);
-  recordRecentVisit(item, target.path, query);
   router.push({ path: target.path, query }).catch(() => {
     message.warning('\u8DF3\u8F6C\u5931\u8D25\uFF0C\u8BF7\u7A0D\u540E\u91CD\u8BD5');
   });
 }
 
-function shouldOpenWorkflowDrawer(item: WorkbenchCardItem, targetPath: string) {
-  const path = targetPath.split('?')[0] || '';
+function shouldOpenWorkflowDrawer(item: WorkbenchCardItem) {
   if (props.card.cardCode === 'todo' || props.card.cardCode === 'cc') {
     return true;
-  }
-  if (props.card.cardCode === 'risk') {
-    return path === '/workflow/todo' || path === '/workflow/done';
   }
   return item.type === 'todo' || item.type === 'done' || item.type === 'unread-cc' || item.type === 'read-cc';
 }

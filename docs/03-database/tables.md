@@ -192,7 +192,7 @@
 
 ## 工作台表
 
-以下为工作台一期新增表。工作台业务表统一使用 `home_workbench_*` 前缀，用于保存首页卡片配置、用户个性化布局、快捷入口和近期工作记录。工作台只保存通用首页展示配置和访问记录，不复制审批、消息、文档等业务模块的核心数据。完整字段和索引以 `sql/建表脚本.sql` 为准。
+以下为工作台一期新增表。工作台业务表统一使用 `home_workbench_*` 前缀，用于保存首页卡片配置、用户个性化布局和快捷入口。工作台只保存通用首页展示配置，不复制审批、消息、文档等业务模块的核心数据。完整字段和索引以 `sql/建表脚本.sql` 为准。
 
 ### `home_workbench_card`
 
@@ -200,7 +200,7 @@
 
 重点字段：
 
-- `card_code`：卡片编码，同一租户有效数据内唯一，例如 `todo`、`cc`、`quick-entry`、`message`、`recent`、`metrics`、`risk`。
+- `card_code`：卡片编码，同一租户有效数据内唯一，例如 `todo`、`cc`、`quick-entry`、`message`、`metrics`。
 - `card_name`：卡片名称。
 - `component_key`：前端预置卡片组件标识，只能从组件注册表选择。
 - `permission_code`：卡片权限码，可为空；为空时拥有工作台访问权的用户默认可见。
@@ -267,32 +267,6 @@
 - `idx_home_wqe_tenant_owner_sort(tenant_id, owner_type, owner_user_id, status, delete_flag, sort_no)`：查询系统默认或用户个人快捷入口。
 - `idx_home_wqe_menu_id(menu_id)`：按菜单 ID 查询入口。
 
-### `home_workbench_recent_record`
-
-工作台近期工作记录表，用于保存用户最近访问的菜单、审批、文档、消息或后续业务对象。
-
-重点字段：
-
-- `user_id`：用户 ID。
-- `record_type`：记录类型，取值 `menu`、`workflow`、`document`、`message`、`business`。
-- `record_key`：记录合并键，同一用户同一类型下用于合并最近访问记录；菜单类可使用路由路径，业务类可使用模块和业务 ID 组合。
-- `module_code`：来源模块编码，例如 `workflow`、`document`、`message`。
-- `biz_id`：业务对象 ID，可为空；菜单访问类记录可只保存路径。
-- `title`：展示标题。
-- `target_type`：跳转目标类型，取值 `route`、`action`。
-- `target_path`：内部路由路径。
-- `target_params_json`：跳转参数 JSON。
-- `source_time`：业务发生时间，可与访问时间不同。
-- `last_visit_time`：最近访问时间。
-- `visit_count`：访问次数。
-- `tenant_id`：租户 ID。
-
-关键索引：
-
-- `idx_home_wrr_tenant_user_time(tenant_id, user_id, delete_flag, last_visit_time)`：当前用户近期工作倒序查询。
-- `idx_home_wrr_tenant_user_type_time(tenant_id, user_id, record_type, delete_flag, last_visit_time)`：按类型筛选近期工作。
-- `uk_home_wrr_tenant_user_key_active(tenant_id, user_id, record_type, record_key, delete_flag)`：同一用户同一类型同一合并键只保留一条有效近期记录。
-- `idx_home_wrr_tenant_biz(tenant_id, record_type, biz_id, delete_flag)`：按业务对象合并或清理近期记录。
 
 ## 审批中心表
 

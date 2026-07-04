@@ -3,23 +3,17 @@ package com.lawoffice.home.controller;
 import com.lawoffice.framework.req.BaseReq;
 import com.lawoffice.framework.result.BaseResult;
 import com.lawoffice.framework.util.RequestContextUtils;
-import com.lawoffice.framework.vo.PageVO;
 import com.lawoffice.home.constant.HomeWorkbenchConstants;
 import com.lawoffice.home.req.WorkbenchCardDataReq;
 import com.lawoffice.home.req.WorkbenchLayoutSaveReq;
 import com.lawoffice.home.req.WorkbenchQuickEntryListReq;
 import com.lawoffice.home.req.WorkbenchQuickEntryReq;
-import com.lawoffice.home.req.WorkbenchRecentClearReq;
-import com.lawoffice.home.req.WorkbenchRecentPageReq;
-import com.lawoffice.home.req.WorkbenchRecentRecordReq;
 import com.lawoffice.home.service.IWorkbenchQuickEntryService;
-import com.lawoffice.home.service.IWorkbenchRecentRecordService;
 import com.lawoffice.home.service.IWorkbenchUserCardService;
 import com.lawoffice.home.vo.WorkbenchCardDataVO;
 import com.lawoffice.home.vo.WorkbenchLayoutVO;
 import com.lawoffice.home.vo.WorkbenchQuickEntryListVO;
 import com.lawoffice.home.vo.WorkbenchQuickEntryVO;
-import com.lawoffice.home.vo.WorkbenchRecentRecordVO;
 import com.lawoffice.system.annotation.RequiresPermission;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -39,7 +33,6 @@ public class WorkbenchController {
 
     private final IWorkbenchUserCardService userCardService;
     private final IWorkbenchQuickEntryService quickEntryService;
-    private final IWorkbenchRecentRecordService recentRecordService;
 
     @PostMapping("/layout")
     @RequiresPermission(HomeWorkbenchConstants.PERMISSION_WORKBENCH_VIEW)
@@ -109,40 +102,6 @@ public class WorkbenchController {
             @Valid @RequestBody BaseReq req,
             HttpServletRequest request) {
         quickEntryService.deleteCurrentUserEntry(req.getId(), RequestContextUtils.buildContext(request));
-        return BaseResult.success();
-    }
-
-    @PostMapping("/recent/page")
-    @RequiresPermission({
-            HomeWorkbenchConstants.PERMISSION_WORKBENCH_VIEW,
-            HomeWorkbenchConstants.PERMISSION_CARD_RECENT
-    })
-    @Operation(summary = "分页查询近期工作", description = "分页查询当前用户当前租户下的近期工作记录")
-    public BaseResult<PageVO<WorkbenchRecentRecordVO>> pageRecent(
-            @RequestBody(required = false) WorkbenchRecentPageReq req,
-            HttpServletRequest request) {
-        return BaseResult.success(recentRecordService.pageCurrentUserRecords(req, RequestContextUtils.buildContext(request)));
-    }
-
-    @PostMapping("/recent/record")
-    @RequiresPermission(HomeWorkbenchConstants.PERMISSION_WORKBENCH_VIEW)
-    @Operation(summary = "记录近期工作", description = "记录当前用户访问或打开的工作对象")
-    public BaseResult<WorkbenchRecentRecordVO> recordRecent(
-            @Valid @RequestBody WorkbenchRecentRecordReq req,
-            HttpServletRequest request) {
-        return BaseResult.success(recentRecordService.recordCurrentUserVisit(req, RequestContextUtils.buildContext(request)));
-    }
-
-    @PostMapping("/recent/clear")
-    @RequiresPermission({
-            HomeWorkbenchConstants.PERMISSION_WORKBENCH_VIEW,
-            HomeWorkbenchConstants.PERMISSION_CARD_RECENT
-    })
-    @Operation(summary = "清空近期工作", description = "清空当前用户当前租户下的近期工作记录")
-    public BaseResult<Void> clearRecent(
-            @RequestBody(required = false) WorkbenchRecentClearReq req,
-            HttpServletRequest request) {
-        recentRecordService.clearCurrentUserRecords(req, RequestContextUtils.buildContext(request));
         return BaseResult.success();
     }
 }

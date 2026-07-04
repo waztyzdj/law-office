@@ -20,6 +20,8 @@
 | 字典管理 | 字典和明细 | 基于 `sys_dict`、`sys_dict_item`。 |
 | 文件管理 | 文档中心 | 基于 `sys_files`、`sys_file_acl`、`sys_file_relation` 和 MinIO，支持我的文档、按业务模块和业务数据虚拟分组的业务文档、租户共享、部门共享、共享给我、我的共享、回收站、上传、文件夹、租户内共享和个人归类。 |
 | 日志审计 | 操作日志 | AOP 写入 `sys_log`。 |
+| 首页/工作台 | 工作台页面 | 支持工作台菜单、卡片配置、用户个性化布局、我的待办、我的抄送、快捷入口、我的消息和指标概览。 |
+| 首页/工作台 | 工作台管理 | 支持工作台卡片管理和系统默认快捷入口管理。 |
 
 ## 规划/待完善业务域
 
@@ -27,7 +29,6 @@
 | --- | --- |
 | 案件管理 | 代码目录已预留 `backend/src/main/java/com/lawoffice/case`，详细功能待补充。 |
 | OA 办公 | 代码目录已预留 `backend/src/main/java/com/lawoffice/oa`，详细功能待补充。 |
-| 首页/工作台 | 后端位于 `backend/src/main/java/com/lawoffice/home`，前端位于 `frontend/src/views/home`。 |
 
 ## 维护要求
 

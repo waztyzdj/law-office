@@ -29,7 +29,6 @@
 | `home_workbench_card` | 工作台卡片配置。 |
 | `home_workbench_user_card` | 工作台用户卡片布局。 |
 | `home_workbench_quick_entry` | 工作台快捷入口。 |
-| `home_workbench_recent_record` | 工作台近期工作记录。 |
 
 ## 通用字段
 
