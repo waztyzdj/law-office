@@ -318,7 +318,7 @@ function handleNotificationVisibilityChange() {
 }
 
 function handleNotificationRefresh() {
-  void loadInboxNotifications({ notifyNew: true });
+  void loadInboxNotifications();
 }
 
 function handleNotificationOpenChange(open: boolean) {

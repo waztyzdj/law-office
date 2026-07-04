@@ -32,6 +32,12 @@ export const workflowUrgeMessageTypeOption: SelectOption = {
   value: 'workflow_urge',
 };
 
+export const workflowTimeoutMessageTypeOption: SelectOption = {
+  color: 'orange',
+  label: '超时提醒',
+  value: 'workflow_timeout',
+};
+
 export const priorityOptions: SelectOption[] = [
   { color: 'default', label: '普通', value: 1 },
   { color: 'orange', label: '重要', value: 2 },
@@ -84,6 +90,9 @@ export function getMessageTypeMeta(
   }
   if (bizType === 'workflow_urge') {
     return workflowUrgeMessageTypeOption;
+  }
+  if (bizType === 'workflow_timeout') {
+    return workflowTimeoutMessageTypeOption;
   }
   return (
     messageTypeOptions.find((option) => option.value === messageType) ?? {

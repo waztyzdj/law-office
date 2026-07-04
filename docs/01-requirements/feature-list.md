@@ -27,7 +27,7 @@
 | --- | --- |
 | 案件管理 | 代码目录已预留 `backend/src/main/java/com/lawoffice/case`，详细功能待补充。 |
 | OA 办公 | 代码目录已预留 `backend/src/main/java/com/lawoffice/oa`，详细功能待补充。 |
-| 首页/工作台 | 代码目录已预留 `backend/src/main/java/com/lawoffice/home`，前端已有 dashboard 页面。 |
+| 首页/工作台 | 后端位于 `backend/src/main/java/com/lawoffice/home`，前端位于 `frontend/src/views/home`。 |
 
 ## 维护要求
 

@@ -3,6 +3,7 @@ package com.lawoffice.system.service.impl;
 import com.baomidou.mybatisplus.core.conditions.Wrapper;
 import com.lawoffice.framework.dto.BaseDTO;
 import com.lawoffice.system.entity.DepartRole;
+import com.lawoffice.system.entity.DepartRolePermission;
 import com.lawoffice.system.entity.DepartRoleUser;
 import com.lawoffice.system.entity.SysDepart;
 import com.lawoffice.system.entity.UserDepart;
@@ -13,6 +14,9 @@ import com.lawoffice.system.mapper.PermissionMapper;
 import com.lawoffice.system.mapper.SysDepartMapper;
 import com.lawoffice.system.mapper.UserDepartMapper;
 import com.lawoffice.system.mapper.UserMapper;
+import com.lawoffice.system.service.ITokenService;
+import com.lawoffice.system.service.IUserService;
+import com.lawoffice.system.vo.UserInfoVO;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -47,6 +51,10 @@ class DepartRoleServiceImplTest {
     private UserDepartMapper userDepartMapper;
     @Mock
     private SysDepartMapper sysDepartMapper;
+    @Mock
+    private ITokenService tokenService;
+    @Mock
+    private IUserService userService;
 
     private DepartRoleServiceImpl service;
 
@@ -60,6 +68,8 @@ class DepartRoleServiceImplTest {
         ReflectionTestUtils.setField(service, "userMapper", userMapper);
         ReflectionTestUtils.setField(service, "userDepartMapper", userDepartMapper);
         ReflectionTestUtils.setField(service, "sysDepartMapper", sysDepartMapper);
+        ReflectionTestUtils.setField(service, "tokenService", tokenService);
+        ReflectionTestUtils.setField(service, "userService", userService);
     }
 
     @Test
@@ -121,6 +131,8 @@ class DepartRoleServiceImplTest {
                 .thenReturn(List.of(buildUserDepart("user-1"), buildUserDepart("user-2"), buildUserDepart("user-3")));
         when(departRoleUserMapper.selectList(any(Wrapper.class)))
                 .thenReturn(List.of(buildRoleUser("user-1"), buildRoleUser("user-2")));
+        when(userMapper.selectList(any(Wrapper.class))).thenReturn(List.of(buildUser("u3", "user-3")));
+        when(userService.getCurrentUserDetailInfo("user-3")).thenReturn(buildUserInfo("user-3"));
 
         service.assignUsers("role-2", List.of("user-1", "user-2", "user-3", "user-3", ""));
 
@@ -131,6 +143,32 @@ class DepartRoleServiceImplTest {
         assertEquals("role-2", inserted.getDroleId());
         assertEquals("user-3", inserted.getUserId());
         assertEquals("tenant-1", inserted.getTenantId());
+    }
+
+    @Test
+    void shouldAssignPermissionsByDiffAndRestoreDeletedRelations() {
+        DepartRole role = buildCustomRole();
+        role.setTenantId("tenant-1");
+
+        DepartRolePermission activePermission = buildRolePermission("perm-keep", 0);
+        DepartRolePermission deletedPermission = buildRolePermission("perm-restore", 1);
+        deletedPermission.setId("rp-deleted");
+
+        when(departRoleMapper.selectById("role-2")).thenReturn(role);
+        when(departRolePermissionMapper.selectList(any(Wrapper.class)))
+                .thenReturn(List.of(activePermission))
+                .thenReturn(List.of(deletedPermission));
+        when(departRoleUserMapper.selectList(any(Wrapper.class))).thenReturn(List.of(buildRoleUser("user-1")));
+        when(userMapper.selectList(any(Wrapper.class))).thenReturn(List.of(buildUser("u1", "user-1")));
+        when(userService.getCurrentUserDetailInfo("user-1")).thenReturn(buildUserInfo("user-1"));
+
+        service.assignPermissions("role-2", List.of("perm-keep", "perm-restore", "perm-restore", ""));
+
+        verify(departRolePermissionMapper, never()).insert(any(DepartRolePermission.class));
+        verify(departRolePermissionMapper).updateById(deletedPermission);
+        assertEquals(0, deletedPermission.getDeleteFlag());
+        assertEquals(null, deletedPermission.getDeleteTime());
+        assertEquals(null, deletedPermission.getDeleteBy());
     }
 
     @Test
@@ -150,6 +188,34 @@ class DepartRoleServiceImplTest {
         );
 
         assertEquals("部门角色成员只能选择本部门及下级部门人员", exception.getMessage());
+    }
+
+    @Test
+    void shouldRestoreDeletedRoleUserInsteadOfInsert() {
+        DepartRole role = buildCustomRole();
+        role.setTenantId("tenant-1");
+        DepartRoleUser deletedUser = buildRoleUser("user-3");
+        deletedUser.setId("ru-deleted");
+        deletedUser.setDeleteFlag(1);
+
+        when(departRoleMapper.selectById("role-2")).thenReturn(role);
+        when(sysDepartMapper.selectById("depart-1")).thenReturn(buildDepart());
+        when(sysDepartMapper.selectList(any(Wrapper.class))).thenReturn(List.of(buildDepart()));
+        when(userDepartMapper.selectList(any(Wrapper.class)))
+                .thenReturn(List.of(buildUserDepart("user-1"), buildUserDepart("user-2"), buildUserDepart("user-3")));
+        when(departRoleUserMapper.selectList(any(Wrapper.class)))
+                .thenReturn(List.of(buildRoleUser("user-1"), buildRoleUser("user-2")))
+                .thenReturn(List.of(deletedUser));
+        when(userMapper.selectList(any(Wrapper.class))).thenReturn(List.of(buildUser("u3", "user-3")));
+        when(userService.getCurrentUserDetailInfo("user-3")).thenReturn(buildUserInfo("user-3"));
+
+        service.assignUsers("role-2", List.of("user-1", "user-2", "user-3"));
+
+        verify(departRoleUserMapper, never()).insert(any(DepartRoleUser.class));
+        verify(departRoleUserMapper).updateById(deletedUser);
+        assertEquals(0, deletedUser.getDeleteFlag());
+        assertEquals(null, deletedUser.getDeleteTime());
+        assertEquals(null, deletedUser.getDeleteBy());
     }
 
     @Test
@@ -211,6 +277,14 @@ class DepartRoleServiceImplTest {
         return roleUser;
     }
 
+    private DepartRolePermission buildRolePermission(String permissionId, int deleteFlag) {
+        DepartRolePermission rolePermission = new DepartRolePermission();
+        rolePermission.setRoleId("role-2");
+        rolePermission.setPermissionId(permissionId);
+        rolePermission.setDeleteFlag(deleteFlag);
+        return rolePermission;
+    }
+
     private UserDepart buildUserDepart(String userId) {
         UserDepart userDepart = new UserDepart();
         userDepart.setDepId("depart-1");
@@ -218,6 +292,22 @@ class DepartRoleServiceImplTest {
         userDepart.setTenantId("tenant-1");
         userDepart.setDeleteFlag(0);
         return userDepart;
+    }
+
+    private com.lawoffice.system.entity.User buildUser(String id, String username) {
+        com.lawoffice.system.entity.User user = new com.lawoffice.system.entity.User();
+        user.setId(id);
+        user.setUsername(username);
+        user.setDeleteFlag(0);
+        return user;
+    }
+
+    private UserInfoVO buildUserInfo(String username) {
+        UserInfoVO userInfo = new UserInfoVO();
+        userInfo.setUsername(username);
+        userInfo.setPermissions(List.of("home:workbench:view"));
+        userInfo.setRoles(List.of("ROLE_TEST"));
+        return userInfo;
     }
 
     private SysDepart buildDepart() {

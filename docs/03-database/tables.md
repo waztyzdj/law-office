@@ -190,6 +190,110 @@
 - `relation_type`：关系类型，`1` 表示业务附件，`2` 表示“共享给我”个人整理；历史数据中可能存在 `3` 表示旧版“业务文档”个人整理。
 - `tenant_id`：租户 ID。
 
+## 工作台表
+
+以下为工作台一期新增表。工作台业务表统一使用 `home_workbench_*` 前缀，用于保存首页卡片配置、用户个性化布局、快捷入口和近期工作记录。工作台只保存通用首页展示配置和访问记录，不复制审批、消息、文档等业务模块的核心数据。完整字段和索引以 `sql/建表脚本.sql` 为准。
+
+### `home_workbench_card`
+
+工作台卡片配置表，由系统管理员维护系统允许展示的卡片、默认布局和卡片权限。
+
+重点字段：
+
+- `card_code`：卡片编码，同一租户有效数据内唯一，例如 `todo`、`cc`、`quick-entry`、`message`、`recent`、`metrics`、`risk`。
+- `card_name`：卡片名称。
+- `component_key`：前端预置卡片组件标识，只能从组件注册表选择。
+- `permission_code`：卡片权限码，可为空；为空时拥有工作台访问权的用户默认可见。
+- `status`：状态，取值 `enabled`、`disabled`。
+- `default_visible`：默认是否展示，取值 `0` 否、`1` 是。
+- `default_sort`：默认排序。
+- `default_size`：默认尺寸，取值 `small`、`medium`、`large`、`full`。
+- `default_refresh_interval`：默认刷新间隔，单位秒。
+- `config_json`：卡片扩展配置 JSON，只保存展示参数，不保存脚本、SQL 或任意组件路径。
+- `remark`：备注。
+- `tenant_id`：租户 ID。
+
+关键索引：
+
+- `uk_home_wc_tenant_code_active(tenant_id, card_code, delete_flag)`：同租户有效卡片编码唯一。
+- `idx_home_wc_tenant_status_sort(tenant_id, status, delete_flag, default_sort)`：查询启用卡片和默认排序。
+- `idx_home_wc_component_key(component_key)`：按组件标识排查配置。
+
+### `home_workbench_user_card`
+
+工作台用户卡片布局表，用于保存当前用户在当前租户下的卡片显隐、尺寸和栅格位置。
+
+重点字段：
+
+- `user_id`：用户 ID。
+- `card_code`：卡片编码，对应 `home_workbench_card.card_code`。
+- `visible`：当前用户是否显示，取值 `0` 否、`1` 是。
+- `sort_no`：当前用户内部排序，由服务端根据栅格位置派生，用于兼容旧布局和无坐标兜底。
+- `size`：当前用户尺寸，取值 `small`、`medium`、`large`、`full`。
+- `grid_x` / `grid_y`：当前用户栅格横向、纵向位置，从 `0` 开始。
+- `grid_w` / `grid_h`：当前用户栅格宽度和高度；宽度按 12 列栅格计，高度按工作台行高单位计。
+- `config_json`：预留用户级扩展配置 JSON；一期不用于列表每页行数，卡片展示行数以 `home_workbench_card.config_json` 为准。
+- `tenant_id`：租户 ID。
+
+关键索引：
+
+- `uk_home_wuc_tenant_user_card_active(tenant_id, user_id, card_code, delete_flag)`：同一用户同一卡片只保留一条有效个性化记录。
+- `idx_home_wuc_tenant_user_sort(tenant_id, user_id, delete_flag, sort_no)`：兼容无坐标布局和默认顺序兜底。
+- `idx_home_wuc_tenant_user_grid(tenant_id, user_id, delete_flag, grid_y, grid_x)`：按栅格位置查询当前用户布局。
+
+### `home_workbench_quick_entry`
+
+工作台快捷入口表，用于保存系统默认快捷入口和用户个人快捷入口。
+
+重点字段：
+
+- `owner_type`：归属类型，取值 `system`、`user`；`system` 表示管理员配置的系统默认入口，`user` 表示用户个人入口。
+- `owner_user_id`：归属用户 ID；`owner_type=user` 时保存当前用户 ID，`owner_type=system` 时固定保存 `system`，避免唯一索引受 `NULL` 语义影响。
+- `entry_code`：入口编码，同一租户、同一归属范围有效数据内唯一。
+- `entry_name`：入口名称。
+- `entry_type`：入口类型，取值 `menu`、`route`、`link`、`action`。
+- `menu_id`：菜单 ID，入口指向系统菜单时对应 `sys_permission.id`。
+- `path`：内部路由路径。
+- `permission_code`：入口权限码，可为空；不为空时必须校验当前用户权限。
+- `icon`：入口图标。
+- `sort_no`：排序。
+- `status`：状态，取值 `enabled`、`disabled`。
+- `config_json`：扩展配置 JSON。
+- `tenant_id`：租户 ID。
+
+关键索引：
+
+- `uk_home_wqe_tenant_owner_code_active(tenant_id, owner_type, owner_user_id, entry_code, delete_flag)`：同一归属范围入口编码唯一。
+- `idx_home_wqe_tenant_owner_sort(tenant_id, owner_type, owner_user_id, status, delete_flag, sort_no)`：查询系统默认或用户个人快捷入口。
+- `idx_home_wqe_menu_id(menu_id)`：按菜单 ID 查询入口。
+
+### `home_workbench_recent_record`
+
+工作台近期工作记录表，用于保存用户最近访问的菜单、审批、文档、消息或后续业务对象。
+
+重点字段：
+
+- `user_id`：用户 ID。
+- `record_type`：记录类型，取值 `menu`、`workflow`、`document`、`message`、`business`。
+- `record_key`：记录合并键，同一用户同一类型下用于合并最近访问记录；菜单类可使用路由路径，业务类可使用模块和业务 ID 组合。
+- `module_code`：来源模块编码，例如 `workflow`、`document`、`message`。
+- `biz_id`：业务对象 ID，可为空；菜单访问类记录可只保存路径。
+- `title`：展示标题。
+- `target_type`：跳转目标类型，取值 `route`、`action`。
+- `target_path`：内部路由路径。
+- `target_params_json`：跳转参数 JSON。
+- `source_time`：业务发生时间，可与访问时间不同。
+- `last_visit_time`：最近访问时间。
+- `visit_count`：访问次数。
+- `tenant_id`：租户 ID。
+
+关键索引：
+
+- `idx_home_wrr_tenant_user_time(tenant_id, user_id, delete_flag, last_visit_time)`：当前用户近期工作倒序查询。
+- `idx_home_wrr_tenant_user_type_time(tenant_id, user_id, record_type, delete_flag, last_visit_time)`：按类型筛选近期工作。
+- `uk_home_wrr_tenant_user_key_active(tenant_id, user_id, record_type, record_key, delete_flag)`：同一用户同一类型同一合并键只保留一条有效近期记录。
+- `idx_home_wrr_tenant_biz(tenant_id, record_type, biz_id, delete_flag)`：按业务对象合并或清理近期记录。
+
 ## 审批中心表
 
 审批中心业务表统一使用 `wf_*` 前缀，Flowable 自带 `ACT_*` 表只作为流程运行时数据，不直接暴露给前端。完整字段、枚举和索引以 `sql/建表脚本.sql` 为准，模块设计以 `docs/05-modules/workflow/approval-center-phase1-design.md` 和 `docs/05-modules/workflow/approval-center-phase2-data-model.md` 为准。
@@ -496,3 +600,7 @@ FormCreate 表单实例表，用于保存发起后的表单数据、schema 快�
 - `sql/建表脚本.sql`：基础表结构。
 - `sql/系统权限初始化.sql`：系统管理菜单、按钮权限和管理员角色授权示例。
 - `sql/审批中心权限初始化.sql`：审批中心菜单、按钮权限和管理员角色授权示例。
+- `sql/工作台差异化建表脚本.sql`：已有数据库补充工作台表结构，不包含菜单权限、默认卡片或快捷入口初始化数据。
+- `sql/工作台栅格布局差异SQL.sql`：已有工作台用户布局表补充栅格位置和宽高字段。
+- `sql/工作台权限初始化.sql`：工作台菜单、按钮权限、默认卡片配置、历史默认工作台快捷菜单清理和管理员角色授权示例。
+- `sql/工作台移除默认工作台快捷菜单.sql`：已执行旧版初始化脚本的数据库可单独运行，用于移除系统预置的“工作台”快捷菜单。

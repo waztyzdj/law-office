@@ -31,6 +31,26 @@ erDiagram
 
 `sys_permission.parent_id` 指向同表 `id`，用于构建菜单和权限树。
 
+## 工作台
+
+```mermaid
+erDiagram
+  sys_permission ||--o{ home_workbench_card : controls
+  home_workbench_card ||--o{ home_workbench_user_card : customizes
+  sys_user ||--o{ home_workbench_user_card : owns
+  sys_user ||--o{ home_workbench_quick_entry : owns
+  sys_permission ||--o{ home_workbench_quick_entry : links
+  sys_user ||--o{ home_workbench_recent_record : visits
+```
+
+`home_workbench_card.permission_code` 对应 `sys_permission.perms` 中的按钮权限码，可为空；为空表示拥有工作台访问权的用户默认可见。
+
+`home_workbench_user_card.card_code` 对应 `home_workbench_card.card_code`，用于保存用户个人布局偏好，不改变系统默认卡片配置。
+
+`home_workbench_quick_entry.menu_id` 可指向 `sys_permission.id`，用于把快捷入口绑定到当前用户有权访问的菜单；用户个人快捷入口只能由本人维护。
+
+`home_workbench_recent_record` 只保存近期访问摘要和跳转信息，不复制审批、文档、消息等业务数据。返回近期工作前必须由对应业务模块复核访问权。
+
 ## 部门树
 
 `sys_depart.parent_id` 指向同表 `id`，用于构建组织机构树。

@@ -21,6 +21,19 @@ export const permissionCodes = {
   role: createBasePermissionCodes('role'),
   tenant: createBasePermissionCodes('tenant'),
   user: createBasePermissionCodes('user'),
+  homeWorkbench: {
+    view: 'home:workbench:view',
+  },
+  homeCard: {
+    cc: 'home:card:cc',
+    manage: 'home:card:manage',
+    message: 'home:card:message',
+    metrics: 'home:card:metrics',
+    quickEntry: 'home:card:quick-entry',
+    recent: 'home:card:recent',
+    risk: 'home:card:risk',
+    todo: 'home:card:todo',
+  },
   workflowCategory: createBasePermissionCodes('workflow:category'),
   workflowArchive: {
     manage: 'workflow:archive:manage',

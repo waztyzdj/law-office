@@ -147,6 +147,9 @@ public class MenuServiceImpl implements IMenuService {
      */
     private MenuMetaVO buildMenuMeta(Permission permission) {
         MenuMetaVO meta = new MenuMetaVO();
+
+        // 快捷菜单等用户偏好能力需要回传菜单 ID，后端仍会二次校验权限边界。
+        meta.setId(permission.getId());
         
         // 标题
         meta.setTitle(permission.getName());
@@ -174,6 +177,8 @@ public class MenuServiceImpl implements IMenuService {
         
         // authority需要根据角色权限动态设置，这里暂时留空
         meta.setAuthority(new ArrayList<>());
+
+        meta.setPerms(permission.getPerms());
         
         return meta;
     }

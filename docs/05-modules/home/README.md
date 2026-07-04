@@ -1,21 +1,33 @@
 # 首页/工作台模块
 
-首页模块目录已预留：
+首页模块统一命名为“工作台”，用于承载通用管理系统的个人工作入口、待办聚合、快捷入口、轻量指标、近期工作和风险提醒能力。
+
+首页模块后端目录：
 
 ```text
 backend/src/main/java/com/lawoffice/home
 ```
 
-前端已有 dashboard 页面：
+首页模块前端目录：
 
 ```text
-frontend/src/views/dashboard
+frontend/src/views/home
 ```
 
-后续补充内容：
+## 设计文档
+
+- [工作台一期设计文档](workbench-phase1-design.md)
+- [工作台接口文档](../../04-api/home-api.md)
+- [表结构说明](../../03-database/tables.md)
+
+## 一期范围
 
 - 待办事项。
 - 快捷入口。
 - 统计指标。
 - 最近操作。
 - 风险提醒。
+- 我的消息。
+- 首页卡片配置。
+- 用户个性化布局。
+- 工作台管理端：卡片管理和系统快捷入口管理。

@@ -175,6 +175,7 @@ function autoCollapseMenuByRouteMeta(route: RouteLocationNormalizedLoaded) {
 }
 
 const route = useRoute();
+const hideGlobalBackTop = computed(() => route.name === 'HomeWorkbench');
 
 onMounted(() => {
   autoCollapseMenuByRouteMeta(route);
@@ -425,7 +426,7 @@ const headerSlots = computed(() => {
           @clear-preferences-and-logout="clearPreferencesAndLogout"
         />
       </template>
-      <VbenBackTop />
+      <VbenBackTop v-if="!hideGlobalBackTop" />
     </template>
   </VbenAdminLayout>
 </template>

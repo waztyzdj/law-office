@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue';
+import { onMounted, ref, watch } from 'vue';
+import { useRoute } from 'vue-router';
 
 import type { RuntimeTaskInfo } from '#/api/workflow';
 
@@ -17,6 +18,7 @@ const {
 } = useWorkflowDoneTable();
 
 const drawerRef = ref<InstanceType<typeof WorkflowRuntimeFormDrawer>>();
+const route = useRoute();
 
 function handleDetail(record: RuntimeTaskInfo) {
   drawerRef.value?.open({
@@ -26,7 +28,35 @@ function handleDetail(record: RuntimeTaskInfo) {
   });
 }
 
-onMounted(loadData);
+function getRouteQueryValue(value: unknown) {
+  return typeof value === 'string' ? value : '';
+}
+
+async function openDetailFromRouteQuery() {
+  const instanceId = getRouteQueryValue(route.query.instanceId);
+  if (!instanceId) {
+    return;
+  }
+  const matched = records.value.find((record) => record.processInstanceId === instanceId);
+  await drawerRef.value?.open({
+    instanceId,
+    mode: 'done',
+    task: matched,
+  });
+}
+
+onMounted(async () => {
+  await loadData();
+  await openDetailFromRouteQuery();
+});
+
+watch(
+  () => route.query.instanceId,
+  async () => {
+    await loadData();
+    await openDetailFromRouteQuery();
+  },
+);
 </script>
 
 <template>

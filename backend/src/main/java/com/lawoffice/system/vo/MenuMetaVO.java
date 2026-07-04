@@ -8,6 +8,9 @@ import java.util.List;
 @Data
 @Schema(description = "菜单元数据")
 public class MenuMetaVO {
+
+    @Schema(description = "菜单ID")
+    private String id;
     
     @Schema(description = "菜单标题")
     private String title;
@@ -35,4 +38,7 @@ public class MenuMetaVO {
     
     @Schema(description = "允许访问的角色列表")
     private List<String> authority;
+
+    @Schema(description = "菜单权限编码")
+    private String perms;
 }
