@@ -23,6 +23,7 @@ import WorkbenchGrid from './components/WorkbenchGrid.vue';
 import WorkbenchPersonalizeModal from './components/WorkbenchPersonalizeModal.vue';
 import WorkbenchQuickEntrySettingsModal from './components/WorkbenchQuickEntrySettingsModal.vue';
 import { useWorkbench } from './hooks/useWorkbench';
+import { getWorkbenchItemConfig } from './utils/workbenchCardFormatters';
 
 const personalizeOpen = ref(false);
 const quickEntrySettingsOpen = ref(false);
@@ -266,25 +267,6 @@ async function handleQuickEntrySortSave(items: WorkbenchCardItem[]) {
   await refreshQuickEntryCard();
 }
 
-function getItemConfig(item: WorkbenchCardItem): Record<string, unknown> {
-  const config = item.config;
-  if (config && typeof config === 'object' && !Array.isArray(config)) {
-    return config as Record<string, unknown>;
-  }
-  const configJson = getStringValue(item.configJson);
-  if (!configJson) {
-    return {};
-  }
-  try {
-    const parsed = JSON.parse(configJson) as unknown;
-    return parsed && typeof parsed === 'object' && !Array.isArray(parsed)
-      ? (parsed as Record<string, unknown>)
-      : {};
-  } catch {
-    return {};
-  }
-}
-
 function getNumberValue(value: unknown) {
   return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
 }
@@ -292,7 +274,7 @@ function getNumberValue(value: unknown) {
 function toQuickEntryInfo(item: WorkbenchCardItem): WorkbenchQuickEntryInfo {
   const entryType = getStringValue(item.entryType || item.targetType);
   return {
-    config: getItemConfig(item),
+    config: getWorkbenchItemConfig(item),
     entryCode: getStringValue(item.entryCode),
     entryName: getStringValue(item.entryName || item.title),
     entryType: entryType === 'link' ? 'link' : 'menu',

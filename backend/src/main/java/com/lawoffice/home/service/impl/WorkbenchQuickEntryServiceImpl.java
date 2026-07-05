@@ -224,6 +224,9 @@ public class WorkbenchQuickEntryServiceImpl
      * 内置公共入口不依赖菜单表授权，因此必须限制到固定前端路由。
      */
     private void validateBuiltinMenuPath(String menuId, String path) {
+        if (!StringUtils.hasText(menuId)) {
+            return;
+        }
         String expectedPath = HomeWorkbenchConstants.BUILTIN_MENU_PATHS.get(menuId);
         if (expectedPath == null) {
             return;
