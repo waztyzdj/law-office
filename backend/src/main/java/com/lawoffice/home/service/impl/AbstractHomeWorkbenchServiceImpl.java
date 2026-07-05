@@ -134,6 +134,9 @@ abstract class AbstractHomeWorkbenchServiceImpl<M extends BaseMapper<E>, E exten
         if (!StringUtils.hasText(menuId)) {
             return true;
         }
+        if (isBuiltinPublicMenu(menuId)) {
+            return true;
+        }
         Permission permission = permissionMapper.selectById(menuId);
         if (permission == null || permission.getDeleteFlag() == null || permission.getDeleteFlag() != 0) {
             return false;
@@ -145,10 +148,20 @@ abstract class AbstractHomeWorkbenchServiceImpl<M extends BaseMapper<E>, E exten
         if (!StringUtils.hasText(menuId)) {
             return;
         }
+        if (isBuiltinPublicMenu(menuId)) {
+            return;
+        }
         Permission permission = permissionMapper.selectById(menuId);
         if (permission == null || permission.getDeleteFlag() == null || permission.getDeleteFlag() != 0) {
             throw new IllegalArgumentException("菜单不存在或已删除");
         }
+    }
+
+    /**
+     * 个人中心、消息中心、文档中心是登录用户公共入口，不一定存在于租户菜单授权树中。
+     */
+    private boolean isBuiltinPublicMenu(String menuId) {
+        return HomeWorkbenchConstants.BUILTIN_MENU_IDS.contains(menuId);
     }
 
     protected QueryWrapper<E> activeTenantWrapper(String tenantId) {

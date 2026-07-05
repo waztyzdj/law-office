@@ -200,6 +200,7 @@ public class WorkbenchQuickEntryServiceImpl
         validateIn(entry.getStatus(), "快捷菜单状态不合法", HomeWorkbenchConstants.STATUSES);
         validatePermissionCode(entry.getPermissionCode());
         requireActiveMenu(entry.getMenuId());
+        validateBuiltinMenuPath(entry.getMenuId(), entry.getPath());
         if (HomeWorkbenchConstants.ENTRY_TYPE_MENU.equals(entry.getEntryType())
                 && !StringUtils.hasText(entry.getMenuId())
                 && !StringUtils.hasText(entry.getPath())) {
@@ -215,6 +216,19 @@ public class WorkbenchQuickEntryServiceImpl
         }
         if (!systemEntry && !hasMenuAccess(entry.getMenuId(), entry.getPermissionCode())) {
             throw new IllegalArgumentException("无权添加该快捷菜单");
+        }
+    }
+
+    /**
+     * 内置公共入口不依赖菜单表授权，因此必须限制到固定前端路由。
+     */
+    private void validateBuiltinMenuPath(String menuId, String path) {
+        String expectedPath = HomeWorkbenchConstants.BUILTIN_MENU_PATHS.get(menuId);
+        if (expectedPath == null) {
+            return;
+        }
+        if (!expectedPath.equals(path)) {
+            throw new IllegalArgumentException("内置公共入口路径不合法");
         }
     }
 

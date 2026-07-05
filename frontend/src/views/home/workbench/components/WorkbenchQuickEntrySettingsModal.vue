@@ -74,6 +74,35 @@ interface MenuTreeNode {
   value: string;
 }
 
+interface BuiltinMenuOption {
+  icon: string;
+  id: string;
+  path: string;
+  title: string;
+}
+
+const excludedInternalMenuPaths = new Set(['/home/workbench']);
+const builtinCommonMenus: BuiltinMenuOption[] = [
+  {
+    icon: 'lucide:user',
+    id: 'builtin:profile',
+    path: '/profile',
+    title: '个人中心',
+  },
+  {
+    icon: 'lucide:message-square',
+    id: 'builtin:message-center',
+    path: '/message-center',
+    title: '消息中心',
+  },
+  {
+    icon: 'lucide:folder-open',
+    id: 'builtin:document-center',
+    path: '/document-center',
+    title: '文档中心',
+  },
+];
+
 const props = defineProps<{
   open: boolean;
   record?: WorkbenchQuickEntryInfo;
@@ -136,9 +165,10 @@ const selectedMenuIds = computed(() => {
 });
 const menuTreeData = computed(() => {
   const routeTree = buildMenuTree(accessStore.accessRoutes as AccessRouteItem[]);
-  return routeTree.length > 0
+  const sourceTree = routeTree.length > 0
     ? routeTree
     : buildMenuTreeFromMenus(accessStore.accessMenus);
+  return mergeBuiltinMenus(sourceTree);
 });
 const menuOptions = computed(() => flattenMenuTree(menuTreeData.value));
 const menuOptionMap = computed(() => {
@@ -178,7 +208,11 @@ async function prepareOpen() {
 
 function buildMenuTree(routes: AccessRouteItem[], parents: string[] = []) {
   return routes
-    .filter((route) => !route.meta?.hideInMenu)
+    .filter(
+      (route) =>
+        !route.meta?.hideInMenu &&
+        !isExcludedInternalMenuPath(typeof route.path === 'string' ? route.path : ''),
+    )
     .map((route) => {
       const title = getRouteTitle(route);
       const children = Array.isArray(route.children)
@@ -201,12 +235,18 @@ function buildMenuTree(routes: AccessRouteItem[], parents: string[] = []) {
         value: id || path || [...parents, title].join('/'),
       };
       return node;
-    });
+    })
+    .filter((node) => !node.disabled || Boolean(node.children?.length));
 }
 
 function buildMenuTreeFromMenus(menus: AccessMenuItem[], parents: string[] = []) {
   return menus
-    .filter((menu) => menu.show !== false && !menu.meta?.hideInMenu)
+    .filter(
+      (menu) =>
+        menu.show !== false &&
+        !menu.meta?.hideInMenu &&
+        !isExcludedInternalMenuPath(typeof menu.path === 'string' ? menu.path : ''),
+    )
     .map((menu) => {
       const title = getMenuTitle(menu);
       const children = Array.isArray(menu.children)
@@ -229,7 +269,57 @@ function buildMenuTreeFromMenus(menus: AccessMenuItem[], parents: string[] = [])
         value: id || path || [...parents, title].join('/'),
       };
       return node;
-    });
+    })
+    .filter((node) => !node.disabled || Boolean(node.children?.length));
+}
+
+function isExcludedInternalMenuPath(path: string) {
+  return excludedInternalMenuPaths.has(path.split('?')[0] || path);
+}
+
+function mergeBuiltinMenus(nodes: MenuTreeNode[]) {
+  const existingPaths = collectMenuPaths(nodes);
+  const children = builtinCommonMenus
+    .filter((menu) => !existingPaths.has(menu.path))
+    .map(toBuiltinMenuNode);
+  if (children.length === 0) {
+    return nodes;
+  }
+  return [
+    {
+      children,
+      disabled: true,
+      label: '常用入口',
+      title: '常用入口',
+      value: 'builtin:common',
+    },
+    ...nodes,
+  ];
+}
+
+function collectMenuPaths(nodes: MenuTreeNode[], result = new Set<string>()) {
+  nodes.forEach((node) => {
+    if (node.path) {
+      result.add(node.path.split('?')[0] || node.path);
+    }
+    if (node.children?.length) {
+      collectMenuPaths(node.children, result);
+    }
+  });
+  return result;
+}
+
+function toBuiltinMenuNode(menu: BuiltinMenuOption): MenuTreeNode {
+  const selected = selectedMenuIds.value.has(menu.id);
+  return {
+    disabled: selected,
+    icon: menu.icon,
+    id: menu.id,
+    label: selected ? `${menu.title}（已添加）` : menu.title,
+    path: menu.path,
+    title: menu.title,
+    value: menu.id,
+  };
 }
 
 function getRouteTitle(route: AccessRouteItem) {

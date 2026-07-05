@@ -250,6 +250,7 @@
 
 - 用户端只能维护 `ownerType=user` 且 `ownerUserId` 为当前用户的快捷入口。
 - `entryType=menu` 时必须选择当前用户有权访问的菜单。
+- `entryType=menu` 也支持内置公共入口：`builtin:profile`、`builtin:message-center`、`builtin:document-center`，对应路径固定为 `/profile`、`/message-center`、`/document-center`。
 - `entryType=link` 时必须填写以 `http://` 或 `https://` 开头的外部链接，前端以新窗口打开。
 
 ### 删除个人快捷入口
