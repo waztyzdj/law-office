@@ -89,6 +89,9 @@ public class FavoriteCardDataProvider extends AbstractWorkbenchCardDataProvider 
         return new PageVO<>(records, favoriteFiles.size(), 1, resolveListFetchLimit());
     }
 
+    /**
+     * 收藏文件夹在工作台中不作为列表项展示，而是继承文件夹收藏时间铺开其子文件。
+     */
     private List<FavoriteFileEntry> resolveFavoriteFiles(List<SysFiles> starredItems, String tenantId, String username) {
         Map<String, FavoriteFileEntry> entries = new LinkedHashMap<>();
         Map<String, LocalDateTime> favoriteFolderTimes = new LinkedHashMap<>();
@@ -109,6 +112,9 @@ public class FavoriteCardDataProvider extends AbstractWorkbenchCardDataProvider 
                 .toList();
     }
 
+    /**
+     * 按层展开用户收藏的文件夹，并保留父级收藏时间用于最终倒序排序。
+     */
     private void collectFavoriteFolderFiles(
             Map<String, FavoriteFileEntry> entries,
             Map<String, LocalDateTime> favoriteFolderTimes,
@@ -139,6 +145,9 @@ public class FavoriteCardDataProvider extends AbstractWorkbenchCardDataProvider 
         }
     }
 
+    /**
+     * 同一文件既可能被直接收藏，也可能来自收藏文件夹；直接收藏优先，间接收藏取较新的继承时间。
+     */
     private void putFavoriteFile(
             Map<String, FavoriteFileEntry> entries,
             SysFiles file,

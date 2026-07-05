@@ -379,6 +379,7 @@
 
 - 管理端只维护 `ownerType=system` 的快捷入口。
 - `entryCode` 在同一租户、同一 `ownerType` 有效数据内唯一。
+- 快捷菜单类型仅支持 `menu` 和 `link`。
 - `entryType=menu` 时必须绑定有效菜单或内部路由。
 - `entryType=link` 时必须填写以 `http://` 或 `https://` 开头的外部链接。
 

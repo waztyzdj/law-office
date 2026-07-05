@@ -17,28 +17,12 @@ abstract class AbstractWorkbenchCardDataProvider {
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
     private static final int DEFAULT_LIMIT = 8;
     private static final int LIST_FETCH_LIMIT = 200;
-    private static final int MAX_LIMIT = 50;
     private static final int MAX_QUICK_ENTRY_LIMIT = 99;
 
     protected WorkbenchCardDataVO emptyData(WorkbenchCard card) {
         WorkbenchCardDataVO vo = new WorkbenchCardDataVO();
         vo.setCardCode(card.getCardCode());
         return vo;
-    }
-
-    protected int resolveLimit(WorkbenchCardDataReq req) {
-        return resolveLimit(req, null);
-    }
-
-    protected int resolveLimit(WorkbenchCardDataReq req, WorkbenchCard card) {
-        Integer limit = req == null ? null : req.getLimit();
-        if (limit == null) {
-            limit = readCardLimit(card);
-        }
-        if (limit == null) {
-            return DEFAULT_LIMIT;
-        }
-        return Math.max(1, Math.min(limit, MAX_LIMIT));
     }
 
     protected Integer resolveQuickEntryLimit(WorkbenchCardDataReq req, WorkbenchCard card) {

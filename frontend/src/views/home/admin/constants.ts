@@ -28,9 +28,7 @@ export const workbenchQuickEntryTypeOptions: Array<{
   value: WorkbenchQuickEntryType;
 }> = [
   { label: '内部菜单', value: 'menu' },
-  { label: '内部路由', value: 'route' },
   { label: '外部链接', value: 'link' },
-  { label: '预置动作', value: 'action' },
 ];
 
 export const workbenchCardPermissionOptions = [

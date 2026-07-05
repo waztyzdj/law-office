@@ -29,9 +29,7 @@ public final class HomeWorkbenchConstants {
     public static final String SYSTEM_OWNER_USER_ID = "system";
 
     public static final String ENTRY_TYPE_MENU = "menu";
-    public static final String ENTRY_TYPE_ROUTE = "route";
     public static final String ENTRY_TYPE_LINK = "link";
-    public static final String ENTRY_TYPE_ACTION = "action";
 
     public static final String TARGET_TYPE_ROUTE = "route";
 
@@ -42,5 +40,5 @@ public final class HomeWorkbenchConstants {
 
     public static final Set<String> CARD_SIZES = Set.of(SIZE_SMALL, SIZE_MEDIUM, SIZE_LARGE, SIZE_FULL);
     public static final Set<String> STATUSES = Set.of(STATUS_ENABLED, STATUS_DISABLED);
-    public static final Set<String> ENTRY_TYPES = Set.of(ENTRY_TYPE_MENU, ENTRY_TYPE_ROUTE, ENTRY_TYPE_LINK, ENTRY_TYPE_ACTION);
+    public static final Set<String> ENTRY_TYPES = Set.of(ENTRY_TYPE_MENU, ENTRY_TYPE_LINK);
 }

@@ -86,7 +86,7 @@ export interface WorkbenchCardData {
 }
 
 export type WorkbenchStatus = 'disabled' | 'enabled';
-export type WorkbenchQuickEntryType = 'action' | 'link' | 'menu' | 'route';
+export type WorkbenchQuickEntryType = 'link' | 'menu';
 
 export interface WorkbenchQuickEntryInfo {
   config?: Record<string, unknown>;

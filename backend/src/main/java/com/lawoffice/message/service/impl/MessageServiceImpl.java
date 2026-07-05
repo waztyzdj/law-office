@@ -66,6 +66,9 @@ public class MessageServiceImpl implements IMessageService {
     private static final Set<String> INBOX_MESSAGE_QUERY_FIELDS = Set.of(
             "title", "senderName", "messageType", "priority", "sendTime"
     );
+    private static final Set<String> INBOX_ACTION_QUERY_FIELDS = Set.of(
+            "bizType"
+    );
     private static final Set<String> INBOX_SORT_FIELDS = Set.of(
             "readStatus", "starFlag", "archiveFlag", "createTime", "sendTime"
     );
@@ -932,14 +935,33 @@ public class MessageServiceImpl implements IMessageService {
     }
 
     /**
-     * 收件箱筛选同时涉及收件表和消息主表，先按主表字段收窄消息 ID 后再回到收件表分页。
+     * 收件箱筛选可能涉及收件表、消息主表和动作表，先收窄消息 ID 后再回到收件表分页。
      */
     private List<String> findInboxMessageIds(BasePageReq req, String tenantId) {
         Map<String, Object> messageQueryParams = extractQueryParams(req, INBOX_MESSAGE_QUERY_FIELDS);
-        if (messageQueryParams.isEmpty()) {
+        Map<String, Object> actionQueryParams = extractQueryParams(req, INBOX_ACTION_QUERY_FIELDS);
+        if (messageQueryParams.isEmpty() && actionQueryParams.isEmpty()) {
             return null;
         }
 
+        List<String> messageIds = null;
+        if (!messageQueryParams.isEmpty()) {
+            messageIds = findMessageIdsByMessageQuery(messageQueryParams, tenantId);
+        }
+        if (actionQueryParams.isEmpty()) {
+            return messageIds;
+        }
+        List<String> actionMessageIds = findMessageIdsByActionQuery(actionQueryParams, tenantId);
+        if (messageIds == null) {
+            return actionMessageIds;
+        }
+        Set<String> actionMessageIdSet = actionMessageIds.stream().collect(Collectors.toSet());
+        return messageIds.stream()
+                .filter(actionMessageIdSet::contains)
+                .collect(Collectors.toList());
+    }
+
+    private List<String> findMessageIdsByMessageQuery(Map<String, Object> messageQueryParams, String tenantId) {
         BasePageReq messageReq = new BasePageReq();
         messageReq.setQueryParams(messageQueryParams);
         QueryWrapper<SysMessage> wrapper = QueryWrapperBuilderUtils.build(messageReq);
@@ -947,6 +969,19 @@ public class MessageServiceImpl implements IMessageService {
                 .eq("delete_flag", 0);
         return messageMapper.selectList(wrapper).stream()
                 .map(SysMessage::getId)
+                .collect(Collectors.toList());
+    }
+
+    private List<String> findMessageIdsByActionQuery(Map<String, Object> actionQueryParams, String tenantId) {
+        BasePageReq actionReq = new BasePageReq();
+        actionReq.setQueryParams(actionQueryParams);
+        QueryWrapper<SysMessageAction> wrapper = QueryWrapperBuilderUtils.build(actionReq);
+        wrapper.eq("tenant_id", tenantId)
+                .eq("delete_flag", 0);
+        return actionMapper.selectList(wrapper).stream()
+                .map(SysMessageAction::getMessageId)
+                .filter(StringUtils::hasText)
+                .distinct()
                 .collect(Collectors.toList());
     }
 
@@ -968,7 +1003,9 @@ public class MessageServiceImpl implements IMessageService {
     }
 
     private void validateInboxQuery(BasePageReq req) {
-        validateQueryFields(req, INBOX_SORT_FIELDS, mergeFields(INBOX_RECEIVER_QUERY_FIELDS, INBOX_MESSAGE_QUERY_FIELDS));
+        validateQueryFields(req, INBOX_SORT_FIELDS, mergeFields(
+                mergeFields(INBOX_RECEIVER_QUERY_FIELDS, INBOX_MESSAGE_QUERY_FIELDS),
+                INBOX_ACTION_QUERY_FIELDS));
     }
 
     private void validateSentQuery(BasePageReq req) {

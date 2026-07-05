@@ -85,7 +85,6 @@ const emit = defineEmits<{
 }>();
 
 const accessStore = useAccessStore();
-const loading = ref(false);
 const saving = ref(false);
 const entries = ref<WorkbenchQuickEntryInfo[]>([]);
 const formState = reactive<QuickEntryFormState>({
@@ -332,13 +331,8 @@ function fillForm(entry: WorkbenchQuickEntryInfo) {
 }
 
 async function loadEntries() {
-  loading.value = true;
-  try {
-    const result = await listWorkbenchQuickEntries({ includeSystem: true });
-    entries.value = result.entries || [];
-  } finally {
-    loading.value = false;
-  }
+  const result = await listWorkbenchQuickEntries({ includeSystem: true });
+  entries.value = result.entries || [];
 }
 
 function handleCancel() {

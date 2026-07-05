@@ -14,15 +14,15 @@ import com.lawoffice.message.vo.MessageInboxVO;
 import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 
 @Component
 public class MessageCardDataProvider extends AbstractWorkbenchCardDataProvider implements IWorkbenchCardDataProvider {
 
-    private static final Set<String> TIMEOUT_BIZ_TYPES = Set.of("workflow_timeout");
-    private static final Set<String> URGE_BIZ_TYPES = Set.of("workflow_urge");
+    private static final String TIMEOUT_BIZ_TYPE = "workflow_timeout";
+    private static final String URGE_BIZ_TYPE = "workflow_urge";
 
     private final IMessageService messageService;
 
@@ -40,30 +40,39 @@ public class MessageCardDataProvider extends AbstractWorkbenchCardDataProvider i
         int fetchLimit = resolveListFetchLimit();
         PageVO<MessageInboxVO> unreadPage = loadMessagePage(fetchLimit, MessageConstants.READ_STATUS_UNREAD, context);
         PageVO<MessageInboxVO> readPage = loadMessagePage(fetchLimit, MessageConstants.READ_STATUS_READ, context);
+        PageVO<MessageInboxVO> urgePage = loadMessagePage(fetchLimit, MessageConstants.READ_STATUS_UNREAD,
+                URGE_BIZ_TYPE, context);
+        PageVO<MessageInboxVO> timeoutPage = loadMessagePage(fetchLimit, MessageConstants.READ_STATUS_UNREAD,
+                TIMEOUT_BIZ_TYPE, context);
 
         WorkbenchCardDataVO vo = emptyData(card);
         vo.getSummary().put("unreadTotal", total(unreadPage));
         vo.getSummary().put("readTotal", total(readPage));
-        vo.getSummary().put("urgeTotal", countSpecialMessages(unreadPage, URGE_BIZ_TYPES));
-        vo.getSummary().put("timeoutTotal", countSpecialMessages(unreadPage, TIMEOUT_BIZ_TYPES));
-        long urgent = unreadPage == null || unreadPage.getRecords() == null ? 0 : unreadPage.getRecords().stream()
-                .filter(message -> message.getPriority() != null && message.getPriority() >= MessageConstants.PRIORITY_URGENT)
-                .count();
-        vo.getSummary().put("urgent", urgent);
+        vo.getSummary().put("urgeTotal", total(urgePage));
+        vo.getSummary().put("timeoutTotal", total(timeoutPage));
         List<Map<String, Object>> items = new ArrayList<>();
         items.addAll(mapMessageItems(unreadPage, "unread-message"));
-        items.addAll(mapSpecialMessageItems(unreadPage, "urge-message", URGE_BIZ_TYPES));
-        items.addAll(mapSpecialMessageItems(unreadPage, "timeout-message", TIMEOUT_BIZ_TYPES));
+        items.addAll(mapMessageItems(urgePage, "urge-message"));
+        items.addAll(mapMessageItems(timeoutPage, "timeout-message"));
         items.addAll(mapMessageItems(readPage, "read-message"));
         vo.setItems(items);
         return vo;
     }
 
     private PageVO<MessageInboxVO> loadMessagePage(int limit, int readStatus, RequestContext context) {
+        return loadMessagePage(limit, readStatus, null, context);
+    }
+
+    private PageVO<MessageInboxVO> loadMessagePage(int limit, int readStatus, String bizType, RequestContext context) {
         BasePageReq pageReq = new BasePageReq();
         pageReq.setPageNum(1);
         pageReq.setPageSize(limit);
-        pageReq.setQueryParams(Map.of("readStatus", readStatus));
+        Map<String, Object> queryParams = new HashMap<>();
+        queryParams.put("readStatus", readStatus);
+        if (bizType != null) {
+            queryParams.put("bizType", bizType);
+        }
+        pageReq.setQueryParams(queryParams);
         pageReq.setSortField("createTime");
         pageReq.setSortOrder("desc");
         return messageService.pageInbox(pageReq, context.getUsername());
@@ -84,39 +93,5 @@ public class MessageCardDataProvider extends AbstractWorkbenchCardDataProvider i
                         "/message/inbox",
                         message.getMessageId()))
                 .toList();
-    }
-
-    private long countSpecialMessages(PageVO<MessageInboxVO> page, Set<String> bizTypes) {
-        if (page == null || page.getRecords() == null) {
-            return 0;
-        }
-        return page.getRecords().stream()
-                .filter(message -> isUnreadMessageOfTypes(message, bizTypes))
-                .count();
-    }
-
-    private List<Map<String, Object>> mapSpecialMessageItems(PageVO<MessageInboxVO> page, String type, Set<String> bizTypes) {
-        if (page == null || page.getRecords() == null) {
-            return List.of();
-        }
-        return page.getRecords().stream()
-                .filter(message -> isUnreadMessageOfTypes(message, bizTypes))
-                .map(message -> item(
-                        message.getId(),
-                        message.getTitle(),
-                        type,
-                        "unread",
-                        message.getSendTime(),
-                        HomeWorkbenchConstants.TARGET_TYPE_ROUTE,
-                        "/message/inbox",
-                        message.getMessageId()))
-                .toList();
-    }
-
-    private boolean isUnreadMessageOfTypes(MessageInboxVO message, Set<String> bizTypes) {
-        return message != null
-                && message.getReadStatus() != null
-                && message.getReadStatus() == MessageConstants.READ_STATUS_UNREAD
-                && bizTypes.contains(message.getBizType());
     }
 }

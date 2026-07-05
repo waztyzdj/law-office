@@ -189,6 +189,9 @@ public class WorkbenchQuickEntryServiceImpl
         return "user-" + newId();
     }
 
+    /**
+     * 快捷菜单保存时统一校验类型、菜单有效性和权限，避免用户通过接口保存无权访问的入口。
+     */
     private void validateEntry(WorkbenchQuickEntry entry, boolean systemEntry) {
         requireText(entry.getEntryCode(), "入口编码不能为空");
         requireText(entry.getEntryName(), "入口名称不能为空");
@@ -197,15 +200,10 @@ public class WorkbenchQuickEntryServiceImpl
         validateIn(entry.getStatus(), "快捷菜单状态不合法", HomeWorkbenchConstants.STATUSES);
         validatePermissionCode(entry.getPermissionCode());
         requireActiveMenu(entry.getMenuId());
-        if (!systemEntry
-                && !HomeWorkbenchConstants.ENTRY_TYPE_MENU.equals(entry.getEntryType())
-                && !HomeWorkbenchConstants.ENTRY_TYPE_LINK.equals(entry.getEntryType())) {
-            throw new IllegalArgumentException("个人快捷菜单仅支持内部菜单或外部链接");
-        }
         if (HomeWorkbenchConstants.ENTRY_TYPE_MENU.equals(entry.getEntryType())
                 && !StringUtils.hasText(entry.getMenuId())
                 && !StringUtils.hasText(entry.getPath())) {
-            throw new IllegalArgumentException("菜单入口必须绑定菜单或内部路由");
+            throw new IllegalArgumentException("内部菜单必须绑定菜单或内部路由");
         }
         if (HomeWorkbenchConstants.ENTRY_TYPE_LINK.equals(entry.getEntryType())) {
             validateExternalUrl(entry.getPath());

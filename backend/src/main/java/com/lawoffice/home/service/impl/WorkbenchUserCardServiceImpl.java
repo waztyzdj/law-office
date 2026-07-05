@@ -164,6 +164,9 @@ public class WorkbenchUserCardServiceImpl
         return vo;
     }
 
+    /**
+     * 前端拖拽结果仍需服务端归一化，防止越界布局写入后影响后续渲染。
+     */
     private GridLayout normalizeGridLayout(WorkbenchLayoutSaveReq.Card item, String size) {
         int x = clamp(item.getGridX() == null ? 0 : item.getGridX(), 0, GRID_COLUMNS - GRID_MIN_WIDTH);
         int y = clamp(item.getGridY() == null ? 0 : item.getGridY(), 0, GRID_MAX_ROWS);
@@ -175,6 +178,9 @@ public class WorkbenchUserCardServiceImpl
         return new GridLayout(x, y, w, h);
     }
 
+    /**
+     * 历史布局可能缺少栅格字段，读取时回退到卡片尺寸对应的默认布局。
+     */
     private GridLayout normalizeGridLayout(WorkbenchUserCard userCard, String size, Integer sortNo) {
         if (userCard.getGridW() == null || userCard.getGridH() == null) {
             return defaultGridLayout(size, sortNo);
@@ -189,6 +195,9 @@ public class WorkbenchUserCardServiceImpl
         return new GridLayout(x, y, w, h);
     }
 
+    /**
+     * 默认布局按卡片默认排序顺序铺到 12 列栅格中，保证无个人布局时也能稳定呈现。
+     */
     private GridLayout defaultGridLayout(String size, Integer sortNo) {
         int width = defaultGridWidth(size);
         int index = Math.max((sortNo == null ? 10 : sortNo) / 10 - 1, 0);
@@ -197,6 +206,9 @@ public class WorkbenchUserCardServiceImpl
         return new GridLayout(x, y, width, defaultGridHeight(size));
     }
 
+    /**
+     * sortNo 保留为旧表格排序兼容字段，实际值由栅格位置派生，不再单独由前端维护。
+     */
     private Integer resolveLayoutSortNo(WorkbenchLayoutSaveReq.Card item, WorkbenchCard card, GridLayout gridLayout) {
         if (item.getGridX() == null || item.getGridY() == null) {
             return card.getDefaultSort();
