@@ -19,6 +19,7 @@ import com.lawoffice.workflow.vo.RuntimeTaskVO;
 import org.springframework.stereotype.Component;
 
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 
 @Component
@@ -49,7 +50,7 @@ public class MetricsCardDataProvider extends AbstractWorkbenchCardDataProvider i
         vo.getSummary().put("doneTotal", doneTotal);
         vo.getSummary().put("ccTotal", ccTotal);
         vo.getSummary().put("messageTotal", messageTotal);
-        vo.setItems(java.util.List.of(
+        vo.setItems(List.of(
                 metricItem("todoTotal", "我的待办", todoTotal, "/workflow/todo", "blue", "lucide:check-square"),
                 metricItem("doneTotal", "我的已办", doneTotal, "/workflow/done", "indigo", "lucide:check-check"),
                 metricItem("ccTotal", "我的抄送", ccTotal, "/workflow/cc", "cyan", "lucide:send"),
@@ -63,7 +64,7 @@ public class MetricsCardDataProvider extends AbstractWorkbenchCardDataProvider i
         req.setPageNum(1);
         req.setPageSize(1);
         BaseResult<PageVO<RuntimeTaskVO>> result = runtimeService.pageTodo(req, context);
-        return result.getCode() != null && result.getCode() == 200 ? total(result.getData()) : 0L;
+        return totalOrZero(result);
     }
 
     private long doneTotal(RequestContext context) {
@@ -71,7 +72,7 @@ public class MetricsCardDataProvider extends AbstractWorkbenchCardDataProvider i
         req.setPageNum(1);
         req.setPageSize(1);
         BaseResult<PageVO<RuntimeTaskVO>> result = runtimeService.pageDone(req, context);
-        return result.getCode() != null && result.getCode() == 200 ? total(result.getData()) : 0L;
+        return totalOrZero(result);
     }
 
     private long ccTotal(RequestContext context) {
@@ -79,7 +80,7 @@ public class MetricsCardDataProvider extends AbstractWorkbenchCardDataProvider i
         req.setPageNum(1);
         req.setPageSize(1);
         BaseResult<PageVO<CcRecordVO>> result = runtimeService.pageCc(req, context);
-        return result.getCode() != null && result.getCode() == 200 ? total(result.getData()) : 0L;
+        return totalOrZero(result);
     }
 
     private long messageTotal(RequestContext context) {

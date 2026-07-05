@@ -81,7 +81,7 @@ interface BuiltinMenuOption {
   title: string;
 }
 
-const excludedInternalMenuPaths = new Set(['/home/workbench']);
+const excludedInternalMenuPaths = new Set(['/home', '/home/workbench']);
 const builtinCommonMenus: BuiltinMenuOption[] = [
   {
     icon: 'lucide:user',
@@ -274,7 +274,8 @@ function buildMenuTreeFromMenus(menus: AccessMenuItem[], parents: string[] = [])
 }
 
 function isExcludedInternalMenuPath(path: string) {
-  return excludedInternalMenuPaths.has(path.split('?')[0] || path);
+  const normalizedPath = (path.split('?')[0] || path).replace(/\/+$/, '') || '/';
+  return excludedInternalMenuPaths.has(normalizedPath);
 }
 
 function mergeBuiltinMenus(nodes: MenuTreeNode[]) {

@@ -54,10 +54,7 @@ public class CcCardDataProvider extends AbstractWorkbenchCardDataProvider implem
         pageReq.setPageSize(limit);
         pageReq.setStatus(status);
         BaseResult<PageVO<CcRecordVO>> result = runtimeService.pageCc(pageReq, context);
-        if (result.getCode() == null || result.getCode() != 200) {
-            throw new IllegalArgumentException(result.getMessage());
-        }
-        return result.getData();
+        return requireSuccessPage(result);
     }
 
     private List<Map<String, Object>> mapCcItems(PageVO<CcRecordVO> page, String type) {

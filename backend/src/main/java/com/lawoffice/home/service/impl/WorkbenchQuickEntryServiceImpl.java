@@ -20,6 +20,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
 import java.net.URI;
+import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 
@@ -97,7 +98,7 @@ public class WorkbenchQuickEntryServiceImpl
 
         List<WorkbenchQuickEntry> entries = includeSystem
                 ? queryEnabledEntries(tenantId, HomeWorkbenchConstants.OWNER_SYSTEM, HomeWorkbenchConstants.SYSTEM_OWNER_USER_ID)
-                : new java.util.ArrayList<>();
+                : new ArrayList<>();
         entries.addAll(queryEnabledEntries(tenantId, HomeWorkbenchConstants.OWNER_USER, userId));
 
         WorkbenchQuickEntryListVO vo = new WorkbenchQuickEntryListVO();

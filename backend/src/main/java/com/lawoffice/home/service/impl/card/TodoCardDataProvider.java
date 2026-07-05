@@ -59,10 +59,7 @@ public class TodoCardDataProvider extends AbstractWorkbenchCardDataProvider impl
         pageReq.setSortField("createTime");
         pageReq.setSortOrder("desc");
         BaseResult<PageVO<RuntimeTaskVO>> result = runtimeService.pageTodo(pageReq, context);
-        if (result.getCode() == null || result.getCode() != 200) {
-            throw new IllegalArgumentException(result.getMessage());
-        }
-        return result.getData();
+        return requireSuccessPage(result);
     }
 
     private PageVO<RuntimeTaskVO> loadDonePage(int limit, RequestContext context) {
@@ -72,10 +69,7 @@ public class TodoCardDataProvider extends AbstractWorkbenchCardDataProvider impl
         pageReq.setSortField("completeTime");
         pageReq.setSortOrder("desc");
         BaseResult<PageVO<RuntimeTaskVO>> result = runtimeService.pageDone(pageReq, context);
-        if (result.getCode() == null || result.getCode() != 200) {
-            throw new IllegalArgumentException(result.getMessage());
-        }
-        return result.getData();
+        return requireSuccessPage(result);
     }
 
     private List<Map<String, Object>> mapTodoItems(PageVO<RuntimeTaskVO> page) {

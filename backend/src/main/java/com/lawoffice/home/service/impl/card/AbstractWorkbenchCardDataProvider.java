@@ -2,6 +2,7 @@ package com.lawoffice.home.service.impl.card;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.lawoffice.framework.result.BaseResult;
 import com.lawoffice.framework.vo.PageVO;
 import com.lawoffice.home.entity.WorkbenchCard;
 import com.lawoffice.home.req.WorkbenchCardDataReq;
@@ -15,6 +16,7 @@ import java.util.Map;
 abstract class AbstractWorkbenchCardDataProvider {
 
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
+    private static final int SUCCESS_CODE = 200;
     private static final int DEFAULT_LIMIT = 8;
     private static final int LIST_FETCH_LIMIT = 200;
     private static final int MAX_QUICK_ENTRY_LIMIT = 99;
@@ -60,6 +62,19 @@ abstract class AbstractWorkbenchCardDataProvider {
 
     protected <T> long total(PageVO<T> page) {
         return page == null ? 0L : page.getTotal();
+    }
+
+    protected <T> PageVO<T> requireSuccessPage(BaseResult<PageVO<T>> result) {
+        if (result == null || result.getCode() == null || result.getCode() != SUCCESS_CODE) {
+            throw new IllegalArgumentException(result == null ? "卡片数据加载失败" : result.getMessage());
+        }
+        return result.getData();
+    }
+
+    protected <T> long totalOrZero(BaseResult<PageVO<T>> result) {
+        return result != null && result.getCode() != null && result.getCode() == SUCCESS_CODE
+                ? total(result.getData())
+                : 0L;
     }
 
     protected Map<String, Object> item(String id, String title, String type, String status,
