@@ -265,6 +265,7 @@ public class DocumentFileViewServiceImpl implements IDocumentFileViewService {
         vo.setIzFolder(file.getIzFolder());
         vo.setIzRootFolder(file.getIzRootFolder());
         vo.setIzStar(file.getIzStar());
+        vo.setStarTime(file.getStarTime());
         vo.setDownCount(file.getDownCount());
         vo.setReadCount(file.getReadCount());
         vo.setEnableDown(file.getEnableDown());

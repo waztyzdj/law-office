@@ -594,7 +594,9 @@ public class DocumentCenterServiceImpl extends BaseServiceImpl<SysFilesMapper, S
         DocumentAccessContext context = documentAccessContextService.buildDocumentAccessContext(username, requireTenantId());
         documentSharedSpaceService.assertCanManageDocument(file, context);
         assertNotBusinessReadonlyDocument(file);
-        file.setIzStar(FLAG_YES.equals(file.getIzStar()) ? FLAG_NO : FLAG_YES);
+        boolean starred = !FLAG_YES.equals(file.getIzStar());
+        file.setIzStar(starred ? FLAG_YES : FLAG_NO);
+        file.setStarTime(starred ? LocalDateTime.now() : null);
         fillUpdate(file, username);
         baseMapper.updateById(file);
         return documentFileViewService.buildDocumentVO(file, context);
@@ -1157,15 +1159,18 @@ public class DocumentCenterServiceImpl extends BaseServiceImpl<SysFilesMapper, S
         List<SysFiles> combined = new ArrayList<>();
         combined.addAll(folders);
         combined.addAll(files);
+        String scope = documentScopeService.normalizeScope(pageReq.getScope());
         combined = combined.stream()
                 .filter(file -> matchesDocumentFilters(file, pageReq))
                 .sorted((left, right) -> {
-                    int folderCompare = Boolean.compare(FLAG_YES.equals(right.getIzFolder()), FLAG_YES.equals(left.getIzFolder()));
-                    if (folderCompare != 0) {
-                        return folderCompare;
+                    if (!SCOPE_STARRED.equals(scope)) {
+                        int folderCompare = Boolean.compare(FLAG_YES.equals(right.getIzFolder()), FLAG_YES.equals(left.getIzFolder()));
+                        if (folderCompare != 0) {
+                            return folderCompare;
+                        }
                     }
-                    LocalDateTime rightTime = right.getUpdateTime() != null ? right.getUpdateTime() : right.getCreateTime();
-                    LocalDateTime leftTime = left.getUpdateTime() != null ? left.getUpdateTime() : left.getCreateTime();
+                    LocalDateTime rightTime = resolveSortTime(right, scope);
+                    LocalDateTime leftTime = resolveSortTime(left, scope);
                     int timeCompare = compareNullableTimeDesc(leftTime, rightTime);
                     if (timeCompare != 0) {
                         return timeCompare;
@@ -1184,7 +1189,7 @@ public class DocumentCenterServiceImpl extends BaseServiceImpl<SysFilesMapper, S
     }
 
     /**
-     * 时间排序按最近更新时间优先，空时间统一沉到后面，保证分页结果稳定。
+     * 时间排序按当前 scope 的业务时间优先，空时间统一沉到后面，保证分页结果稳定。
      */
     private int compareNullableTimeDesc(LocalDateTime left, LocalDateTime right) {
         if (left == null && right == null) {
@@ -1197,6 +1202,17 @@ public class DocumentCenterServiceImpl extends BaseServiceImpl<SysFilesMapper, S
             return -1;
         }
         return right.compareTo(left);
+    }
+
+    private LocalDateTime resolveSortTime(SysFiles file, String scope) {
+        if (SCOPE_STARRED.equals(scope)) {
+            return file.getStarTime() != null ? file.getStarTime() : fallbackFileTime(file);
+        }
+        return fallbackFileTime(file);
+    }
+
+    private LocalDateTime fallbackFileTime(SysFiles file) {
+        return file.getUpdateTime() != null ? file.getUpdateTime() : file.getCreateTime();
     }
 
     /**

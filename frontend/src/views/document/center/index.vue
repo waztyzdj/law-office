@@ -5,6 +5,7 @@ import type {
 } from '#/api/document';
 
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
+import { useRoute } from 'vue-router';
 
 import {
   Card,
@@ -24,6 +25,7 @@ import DocumentShareDrawer from './components/DocumentShareDrawer.vue';
 import DocumentTreePanel from './components/DocumentTreePanel.vue';
 import {
   buildDepartScopeOptions,
+  getScopeRootKey,
 } from './tree';
 import { useDocumentNavigation } from './hooks/useDocumentNavigation';
 import { useDocumentActions } from './hooks/useDocumentActions';
@@ -46,6 +48,7 @@ const {
   handleChangeDocumentSortField,
   handleChangeDocumentSortOrder,
 } = useDocumentSort();
+const route = useRoute();
 const shareDrawerRef = ref<InstanceType<typeof DocumentShareDrawer>>();
 const historyModalRef = ref<InstanceType<typeof DocumentHistoryModal>>();
 const imagePreviewModalRef = ref<InstanceType<typeof DocumentImagePreviewModal>>();
@@ -489,6 +492,15 @@ async function reloadAfterCancelShare() {
   await loadData();
 }
 
+function applyInitialScopeFromRoute() {
+  const routeScope = typeof route.query.scope === 'string' ? route.query.scope : '';
+  if (!routeScope || !findScopeOption(routeScope)?.scope) {
+    return;
+  }
+  activeRootKey.value = routeScope;
+  selectedTreeKeys.value = [getScopeRootKey(routeScope)];
+}
+
 const documentTreeInteractions = useDocumentTreeInteractions({
   activeRootKey,
   canCreateInsideFolder,
@@ -591,6 +603,7 @@ function isEditingTreeNode(key: string) {
 
 onMounted(async () => {
   window.addEventListener('keydown', handleTreeShortcutKeydown, true);
+  applyInitialScopeFromRoute();
   const treeReadyPromise = (async () => {
     await loadShareRootContext();
     await loadInitialFolderTrees();

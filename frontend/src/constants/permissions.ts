@@ -26,6 +26,7 @@ export const permissionCodes = {
   },
   homeCard: {
     cc: 'home:card:cc',
+    favorite: 'home:card:favorite',
     manage: 'home:card:manage',
     message: 'home:card:message',
     metrics: 'home:card:metrics',

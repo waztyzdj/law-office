@@ -4,6 +4,7 @@ import type {
   WorkbenchCardItem,
   WorkbenchLayoutCard,
 } from '#/api/home/workbench';
+import type { DocumentFileInfo } from '#/api/document';
 import type { LocationQueryRaw } from 'vue-router';
 import type { CSSProperties } from 'vue';
 
@@ -26,6 +27,14 @@ import {
 } from 'ant-design-vue';
 
 import { getWorkbenchCardMeta } from '../registry';
+import { downloadDocument } from '#/api/document';
+import DocumentImagePreviewModal from '#/views/document/center/components/DocumentImagePreviewModal.vue';
+import DocumentOnlyOfficePreviewModal from '#/views/document/center/components/DocumentOnlyOfficePreviewModal.vue';
+import {
+  canPreviewItem as canPreviewDocumentItem,
+  fileIcon,
+  isImageFile,
+} from '#/views/document/center/components/documentExplorerUtils';
 import WorkbenchCardPagination from './WorkbenchCardPagination.vue';
 
 const props = defineProps<{
@@ -46,6 +55,8 @@ const emit = defineEmits<{
 }>();
 
 const router = useRouter();
+const favoriteImagePreviewModalRef = ref<InstanceType<typeof DocumentImagePreviewModal>>();
+const favoritePreviewModalRef = ref<InstanceType<typeof DocumentOnlyOfficePreviewModal>>();
 type MessageTabKey = 'read-message' | 'timeout-message' | 'unread-message' | 'urge-message';
 interface MessageTab {
   key: MessageTabKey;
@@ -57,24 +68,29 @@ const meta = computed(() =>
 );
 const cardDisplayName = computed(() => {
   if (props.card.cardCode === 'todo') {
-    return '\u6211\u7684\u5F85\u529E';
+    return '我的待办';
   }
   if (props.card.cardCode === 'cc') {
-    return '\u6211\u7684\u6284\u9001';
+    return '我的抄送';
   }
   if (props.card.cardCode === 'message') {
-    return '\u6211\u7684\u6D88\u606F';
+    return '我的消息';
+  }
+  if (props.card.cardCode === 'favorite') {
+    return '我的收藏';
   }
   return props.card.cardName;
 });
 const items = computed(() => props.data?.items ?? []);
 const summary = computed(() => props.data?.summary ?? {});
 const isCc = computed(() => props.card.cardCode === 'cc');
+const isFavorite = computed(() => props.card.cardCode === 'favorite');
 const isMessage = computed(() => props.card.cardCode === 'message');
 const isMetrics = computed(() => props.card.cardCode === 'metrics');
 const isQuickEntry = computed(() => props.card.cardCode === 'quick-entry');
 const isTodo = computed(() => props.card.cardCode === 'todo');
 const listPage = ref(1);
+const favoriteDownloadingId = ref('');
 const quickEntryDraggingKey = ref('');
 const quickEntryEditMode = ref(false);
 const localQuickEntryItems = ref<WorkbenchCardItem[]>([]);
@@ -105,35 +121,36 @@ const pagedItems = computed(() => {
 const quickEntryItems = computed(() =>
   quickEntryEditMode.value ? localQuickEntryItems.value : items.value,
 );
-const todoTargetTitle = computed(() => (todoActiveTab.value === 'todo' ? '\u8FDB\u5165\u5F85\u529E' : '\u8FDB\u5165\u5DF2\u529E'));
-const ccTargetTitle = computed(() => '\u8FDB\u5165\u6211\u7684\u6284\u9001');
-const messageTargetTitle = computed(() => '\u8FDB\u5165\u6211\u7684\u6D88\u606F');
+const todoTargetTitle = computed(() => (todoActiveTab.value === 'todo' ? '进入待办' : '进入已办'));
+const ccTargetTitle = computed(() => '进入我的抄送');
+const favoriteTargetTitle = computed(() => '进入文档中心');
+const messageTargetTitle = computed(() => '进入我的消息');
 const todoTabs = computed(() => [
-  { key: 'todo' as const, label: '\u5F85\u529E', total: Number(summary.value.todoTotal ?? 0) },
-  { key: 'done' as const, label: '\u5DF2\u529E', total: Number(summary.value.doneTotal ?? 0) },
+  { key: 'todo' as const, label: '待办', total: Number(summary.value.todoTotal ?? 0) },
+  { key: 'done' as const, label: '已办', total: Number(summary.value.doneTotal ?? 0) },
 ]);
 const ccTabs = computed(() => [
-  { key: 'unread-cc' as const, label: '\u672A\u8BFB', total: Number(summary.value.unreadTotal ?? 0) },
-  { key: 'read-cc' as const, label: '\u5DF2\u8BFB', total: Number(summary.value.readTotal ?? 0) },
+  { key: 'unread-cc' as const, label: '未读', total: Number(summary.value.unreadTotal ?? 0) },
+  { key: 'read-cc' as const, label: '已读', total: Number(summary.value.readTotal ?? 0) },
 ]);
 const hasUrgeMessages = computed(() => Number(summary.value.urgeTotal ?? 0) > 0);
 const hasTimeoutMessages = computed(() => Number(summary.value.timeoutTotal ?? 0) > 0);
 const messageTabs = computed(() => {
   const tabs: MessageTab[] = [
-    { key: 'unread-message', label: '\u672A\u8BFB', total: Number(summary.value.unreadTotal ?? 0) },
-    { key: 'read-message', label: '\u5DF2\u8BFB', total: Number(summary.value.readTotal ?? 0) },
+    { key: 'unread-message', label: '未读', total: Number(summary.value.unreadTotal ?? 0) },
+    { key: 'read-message', label: '已读', total: Number(summary.value.readTotal ?? 0) },
   ];
   if (hasTimeoutMessages.value) {
     tabs.unshift({
       key: 'timeout-message' as const,
-      label: '\u8D85\u65F6',
+      label: '超时',
       total: Number(summary.value.timeoutTotal ?? 0),
     });
   }
   if (hasUrgeMessages.value) {
     tabs.unshift({
       key: 'urge-message' as const,
-      label: '\u50AC\u529E',
+      label: '催办',
       total: Number(summary.value.urgeTotal ?? 0),
     });
   }
@@ -141,15 +158,15 @@ const messageTabs = computed(() => {
 });
 const messageEmptyDescription = computed(() => {
   if (messageActiveTab.value === 'urge-message') {
-    return '\u50AC\u529E\u6D88\u606F\u6682\u65E0\u6570\u636E';
+    return '催办消息暂无数据';
   }
   if (messageActiveTab.value === 'timeout-message') {
-    return '\u8D85\u65F6\u6D88\u606F\u6682\u65E0\u6570\u636E';
+    return '超时消息暂无数据';
   }
   if (messageActiveTab.value === 'unread-message') {
-    return '\u672A\u8BFB\u6D88\u606F\u6682\u65E0\u6570\u636E';
+    return '未读消息暂无数据';
   }
-  return '\u5DF2\u8BFB\u6D88\u606F\u6682\u65E0\u6570\u636E';
+  return '已读消息暂无数据';
 });
 const hasPagination = computed(() => currentListItems.value.length > listPageSize.value);
 const showListFooter = computed(() =>
@@ -385,9 +402,13 @@ function buildRouteQuery(item: WorkbenchCardItem, baseQuery: LocationQueryRaw) {
 }
 
 function handleOpen(item: WorkbenchCardItem) {
+  if (isFavorite.value) {
+    handleOpenFavoriteModule();
+    return;
+  }
   const rawTargetPath = typeof item.targetPath === 'string' ? item.targetPath : '';
   if (!rawTargetPath) {
-    message.warning('\u8BE5\u4E8B\u9879\u6682\u672A\u914D\u7F6E\u8DF3\u8F6C\u8DEF\u5F84');
+    message.warning('该事项暂未配置跳转路径');
     return;
   }
   if (props.card.cardCode === 'message') {
@@ -400,7 +421,7 @@ function handleOpen(item: WorkbenchCardItem) {
   }
   if (item.targetType === 'link' || isExternalUrl(rawTargetPath)) {
     if (!isExternalUrl(rawTargetPath)) {
-      message.warning('\u5916\u90E8\u94FE\u63A5\u5730\u5740\u4E0D\u5408\u6CD5');
+      message.warning('外部链接地址不合法');
       return;
     }
     window.open(rawTargetPath, '_blank', 'noopener,noreferrer');
@@ -408,12 +429,12 @@ function handleOpen(item: WorkbenchCardItem) {
   }
   const target = splitTargetPath(rawTargetPath);
   if (!target.path) {
-    message.warning('\u8BE5\u4E8B\u9879\u6682\u672A\u914D\u7F6E\u8DF3\u8F6C\u8DEF\u5F84');
+    message.warning('该事项暂未配置跳转路径');
     return;
   }
   const query = buildRouteQuery(item, target.query);
   router.push({ path: target.path, query }).catch(() => {
-    message.warning('\u8DF3\u8F6C\u5931\u8D25\uFF0C\u8BF7\u7A0D\u540E\u91CD\u8BD5');
+    message.warning('跳转失败，请稍后重试');
   });
 }
 
@@ -543,20 +564,94 @@ function handleQuickEntryDragEnd() {
 function handleOpenTodoModule() {
   const path = todoActiveTab.value === 'todo' ? '/workflow/todo' : '/workflow/done';
   router.push({ path }).catch(() => {
-    message.warning('\u8DF3\u8F6C\u5931\u8D25\uFF0C\u8BF7\u7A0D\u540E\u91CD\u8BD5');
+    message.warning('跳转失败，请稍后重试');
   });
 }
 
 function handleOpenCcModule() {
   router.push({ path: '/workflow/cc' }).catch(() => {
-    message.warning('\u8DF3\u8F6C\u5931\u8D25\uFF0C\u8BF7\u7A0D\u540E\u91CD\u8BD5');
+    message.warning('跳转失败，请稍后重试');
   });
 }
 
 function handleOpenMessageModule() {
   router.push({ name: 'MessageCenter', query: { tab: 'inbox' } }).catch(() => {
-    message.warning('\u8DF3\u8F6C\u5931\u8D25\uFF0C\u8BF7\u7A0D\u540E\u91CD\u8BD5');
+    message.warning('跳转失败，请稍后重试');
   });
+}
+
+function handleOpenFavoriteModule() {
+  router.push({ name: 'DocumentCenter', query: { scope: 'starred' } }).catch(() => {
+    message.warning('跳转失败，请稍后重试');
+  });
+}
+
+function toFavoriteDocumentRecord(item: WorkbenchCardItem): DocumentFileInfo {
+  const fileSize = Number(item.fileSize);
+  return {
+    canDownload: item.canDownload !== false,
+    canManage: item.canManage === true,
+    canUpdate: item.canUpdate === true,
+    createTime: typeof item.createTime === 'string' ? item.createTime : undefined,
+    fileName: String(item.fileName || item.title || ''),
+    fileSize: Number.isFinite(fileSize) ? fileSize : undefined,
+    fileType: typeof item.fileType === 'string' ? item.fileType : undefined,
+    id: String(item.bizId || item.id || ''),
+    izFolder: typeof item.izFolder === 'string' ? item.izFolder : '0',
+    izStar: typeof item.izStar === 'string' ? item.izStar : '1',
+    starTime: typeof item.starTime === 'string' ? item.starTime : undefined,
+    storeType: typeof item.storeType === 'string' ? item.storeType : undefined,
+    updateTime: typeof item.updateTime === 'string' ? item.updateTime : undefined,
+  };
+}
+
+function handleFavoritePreview(item: WorkbenchCardItem) {
+  const record = toFavoriteDocumentRecord(item);
+  if (!record.id) {
+    message.warning('文件信息不完整，暂无法预览');
+    return;
+  }
+  if (!canPreviewDocumentItem(record, { scope: 'starred' })) {
+    message.warning('该文件暂不支持在线预览，可下载后查看');
+    return;
+  }
+  if (isImageFile(record)) {
+    favoriteImagePreviewModalRef.value?.open(record);
+    return;
+  }
+  favoritePreviewModalRef.value?.open(record);
+}
+
+async function handleFavoriteDownload(item: WorkbenchCardItem) {
+  const record = toFavoriteDocumentRecord(item);
+  if (!record.id) {
+    message.warning('文件信息不完整，暂无法下载');
+    return;
+  }
+  if (record.canDownload === false) {
+    message.warning('当前文件不允许下载');
+    return;
+  }
+  favoriteDownloadingId.value = record.id;
+  try {
+    const blob = await downloadDocument(record.id);
+    const objectUrl = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = objectUrl;
+    link.download = record.fileName || 'download';
+    document.body.append(link);
+    link.click();
+    link.remove();
+    window.setTimeout(() => URL.revokeObjectURL(objectUrl), 0);
+  } catch (error) {
+    message.error(error instanceof Error ? error.message : '文件下载失败');
+  } finally {
+    favoriteDownloadingId.value = '';
+  }
+}
+
+function isFavoriteDownloading(item: WorkbenchCardItem) {
+  return favoriteDownloadingId.value === toFavoriteDocumentRecord(item).id;
 }
 
 function getItemConfig(item: WorkbenchCardItem): Record<string, unknown> {
@@ -602,6 +697,13 @@ function getMetricStyle(item: WorkbenchCardItem): CSSProperties {
   return {
     '--metric-color': getMetricTone(item).color,
   } as CSSProperties;
+}
+
+function getFavoriteFileIcon(item: WorkbenchCardItem) {
+  if (typeof item.icon === 'string' && item.icon) {
+    return item.icon;
+  }
+  return fileIcon(toFavoriteDocumentRecord(item));
 }
 </script>
 
@@ -671,7 +773,7 @@ function getMetricStyle(item: WorkbenchCardItem): CSSProperties {
             <IconifyIcon icon="lucide:plus" />
           </Button>
         </Tooltip>
-        <Tooltip v-if="isQuickEntry && quickEntryEditMode" title="\u53D6\u6D88\u7F16\u8F91">
+        <Tooltip v-if="isQuickEntry && quickEntryEditMode" title="取消编辑">
           <Button
             size="small"
             type="text"
@@ -680,13 +782,23 @@ function getMetricStyle(item: WorkbenchCardItem): CSSProperties {
             <IconifyIcon icon="lucide:x" />
           </Button>
         </Tooltip>
-        <Tooltip v-if="isQuickEntry" :title="quickEntryEditMode ? '\u4FDD\u5B58\u5FEB\u6377\u83DC\u5355' : '\u8BBE\u7F6E\u5FEB\u6377\u83DC\u5355'">
+        <Tooltip v-if="isQuickEntry" :title="quickEntryEditMode ? '保存快捷菜单' : '设置快捷菜单'">
           <Button
             size="small"
             type="text"
             @click="handleQuickEntrySettings"
           >
             <IconifyIcon :icon="quickEntryEditMode ? 'lucide:check' : 'lucide:settings'" />
+          </Button>
+        </Tooltip>
+        <Tooltip v-if="!isQuickEntry" title="刷新">
+          <Button
+            :disabled="loading"
+            size="small"
+            type="text"
+            @click="handleRefresh"
+          >
+            <IconifyIcon icon="lucide:refresh-cw" />
           </Button>
         </Tooltip>
         <Tooltip v-if="isTodo" :title="todoTargetTitle">
@@ -716,14 +828,13 @@ function getMetricStyle(item: WorkbenchCardItem): CSSProperties {
             <IconifyIcon icon="lucide:external-link" />
           </Button>
         </Tooltip>
-        <Tooltip v-if="!isQuickEntry" title="\u5237\u65B0">
+        <Tooltip v-if="isFavorite" :title="favoriteTargetTitle">
           <Button
-            :disabled="loading"
             size="small"
             type="text"
-            @click="handleRefresh"
+            @click="handleOpenFavoriteModule"
           >
-            <IconifyIcon icon="lucide:refresh-cw" />
+            <IconifyIcon icon="lucide:external-link" />
           </Button>
         </Tooltip>
       </div>
@@ -792,19 +903,19 @@ function getMetricStyle(item: WorkbenchCardItem): CSSProperties {
               >
                 <button
                   class="workbench-card__quick-action"
-                  title="\u7F16\u8F91\u5FEB\u6377\u83DC\u5355"
+                  title="编辑快捷菜单"
                   type="button"
                   @click.stop="handleQuickEntryEdit(item)"
                 >
                   <IconifyIcon icon="lucide:pencil" />
                 </button>
                 <Popconfirm
-                  title="\u786E\u8BA4\u5220\u9664\u8FD9\u4E2A\u5FEB\u6377\u83DC\u5355\uFF1F"
+                  title="确认删除这个快捷菜单？"
                   @confirm="handleQuickEntryDelete(item)"
                 >
                   <button
                     class="workbench-card__quick-action workbench-card__quick-action--danger"
-                    title="\u5220\u9664\u5FEB\u6377\u83DC\u5355"
+                    title="删除快捷菜单"
                     type="button"
                     @click.stop
                   >
@@ -838,7 +949,7 @@ function getMetricStyle(item: WorkbenchCardItem): CSSProperties {
           <template #renderItem="{ item }">
             <ListItem class="workbench-card__item" @click="handleOpen(item)">
               <span class="workbench-card__item-title">
-                {{ item.title || '\u672A\u547D\u540D\u4E8B\u9879' }}
+                {{ item.title || '未命名事项' }}
               </span>
               <span class="workbench-card__item-time">
                 {{ formatTime(item.occurTime) || '-' }}
@@ -849,7 +960,7 @@ function getMetricStyle(item: WorkbenchCardItem): CSSProperties {
         <Empty
           v-else
           class="workbench-card__empty"
-          :description="`${todoActiveTab === 'todo' ? '\u6211\u7684\u5F85\u529E' : '\u6211\u7684\u5DF2\u529E'}\u6682\u65E0\u6570\u636E`"
+          :description="`${todoActiveTab === 'todo' ? '我的待办' : '我的已办'}暂无数据`"
           :image="Empty.PRESENTED_IMAGE_SIMPLE"
         />
       </div>
@@ -864,7 +975,7 @@ function getMetricStyle(item: WorkbenchCardItem): CSSProperties {
           <template #renderItem="{ item }">
             <ListItem class="workbench-card__item" @click="handleOpen(item)">
               <span class="workbench-card__item-title">
-                {{ item.title || '\u672A\u547D\u540D\u4E8B\u9879' }}
+                {{ item.title || '未命名事项' }}
               </span>
               <span class="workbench-card__item-time">
                 {{ formatTime(item.occurTime) || '-' }}
@@ -875,7 +986,7 @@ function getMetricStyle(item: WorkbenchCardItem): CSSProperties {
         <Empty
           v-else
           class="workbench-card__empty"
-          :description="`${ccActiveTab === 'unread-cc' ? '\u672A\u8BFB\u6284\u9001' : '\u5DF2\u8BFB\u6284\u9001'}\u6682\u65E0\u6570\u636E`"
+          :description="`${ccActiveTab === 'unread-cc' ? '未读抄送' : '已读抄送'}暂无数据`"
           :image="Empty.PRESENTED_IMAGE_SIMPLE"
         />
       </div>
@@ -890,7 +1001,7 @@ function getMetricStyle(item: WorkbenchCardItem): CSSProperties {
           <template #renderItem="{ item }">
             <ListItem class="workbench-card__item" @click="handleOpen(item)">
               <span class="workbench-card__item-title">
-                {{ item.title || '\u672A\u547D\u540D\u6D88\u606F' }}
+                {{ item.title || '未命名消息' }}
               </span>
               <span class="workbench-card__item-time">
                 {{ formatTime(item.occurTime) || '-' }}
@@ -906,6 +1017,56 @@ function getMetricStyle(item: WorkbenchCardItem): CSSProperties {
         />
       </div>
 
+      <div v-else-if="isFavorite" class="workbench-card__todo">
+        <List
+          v-if="currentListItems.length > 0"
+          :data-source="pagedItems"
+          class="workbench-card__list"
+          size="small"
+        >
+          <template #renderItem="{ item }">
+            <ListItem
+              class="workbench-card__item workbench-card__favorite-item"
+              title="双击预览"
+              @dblclick="handleFavoritePreview(item)"
+            >
+              <Tooltip title="下载">
+                <Button
+                  class="workbench-card__favorite-download"
+                  :loading="isFavoriteDownloading(item)"
+                  size="small"
+                  type="text"
+                  @dblclick.stop
+                  @click.stop="handleFavoriteDownload(item)"
+                >
+                  <IconifyIcon
+                    v-if="!isFavoriteDownloading(item)"
+                    icon="lucide:download"
+                  />
+                </Button>
+              </Tooltip>
+              <span class="workbench-card__item-main">
+                <span class="workbench-card__item-icon">
+                  <IconifyIcon :icon="getFavoriteFileIcon(item)" />
+                </span>
+                <span class="workbench-card__item-title">
+                  {{ item.title || '未命名文件' }}
+                </span>
+              </span>
+              <span class="workbench-card__item-time">
+                {{ formatTime(item.occurTime) || '-' }}
+              </span>
+            </ListItem>
+          </template>
+        </List>
+        <Empty
+          v-else
+          class="workbench-card__empty"
+          description="我的收藏暂无数据"
+          :image="Empty.PRESENTED_IMAGE_SIMPLE"
+        />
+      </div>
+
       <List
         v-else-if="currentListItems.length > 0"
         :data-source="pagedItems"
@@ -915,7 +1076,7 @@ function getMetricStyle(item: WorkbenchCardItem): CSSProperties {
         <template #renderItem="{ item }">
           <ListItem class="workbench-card__item" @click="handleOpen(item)">
             <span class="workbench-card__item-title">
-              {{ item.title || '\u672A\u547D\u540D\u4E8B\u9879' }}
+              {{ item.title || '未命名事项' }}
             </span>
             <span class="workbench-card__item-time">
               {{ formatTime(item.occurTime) || '-' }}
@@ -927,7 +1088,7 @@ function getMetricStyle(item: WorkbenchCardItem): CSSProperties {
       <Empty
         v-else
         class="workbench-card__empty"
-        :description="`${cardDisplayName}\u6682\u65E0\u6570\u636E`"
+        :description="`${cardDisplayName}暂无数据`"
         :image="Empty.PRESENTED_IMAGE_SIMPLE"
       />
 
@@ -943,6 +1104,14 @@ function getMetricStyle(item: WorkbenchCardItem): CSSProperties {
       </div>
     </template>
   </Card>
+  <DocumentImagePreviewModal
+    v-if="isFavorite"
+    ref="favoriteImagePreviewModalRef"
+  />
+  <DocumentOnlyOfficePreviewModal
+    v-if="isFavorite"
+    ref="favoritePreviewModalRef"
+  />
 </template>
 
 <style scoped>
@@ -1095,6 +1264,28 @@ function getMetricStyle(item: WorkbenchCardItem): CSSProperties {
   background: hsl(var(--accent));
 }
 
+.workbench-card__favorite-item .workbench-card__item-main {
+  flex: 1 1 auto;
+}
+
+.workbench-card__item-main {
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+  gap: 8px;
+}
+
+.workbench-card__item-icon {
+  display: inline-flex;
+  width: 18px;
+  height: 18px;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  color: hsl(var(--muted-foreground));
+  font-size: 16px;
+}
+
 .workbench-card__item-title {
   min-width: 0;
   overflow: hidden;
@@ -1108,6 +1299,19 @@ function getMetricStyle(item: WorkbenchCardItem): CSSProperties {
   color: hsl(var(--muted-foreground));
   font-size: 12px;
   white-space: nowrap;
+}
+
+.workbench-card__favorite-download {
+  display: inline-flex;
+  width: 26px;
+  height: 26px;
+  align-items: center;
+  justify-content: center;
+  color: hsl(var(--muted-foreground));
+}
+
+.workbench-card__favorite-download:hover {
+  color: hsl(var(--primary));
 }
 
 .workbench-card__empty {

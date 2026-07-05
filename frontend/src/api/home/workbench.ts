@@ -3,6 +3,7 @@ import type { BasePageReq } from '#/framework/api/base.api';
 
 export type WorkbenchCardCode =
   | 'cc'
+  | 'favorite'
   | 'message'
   | 'metrics'
   | 'quick-entry'

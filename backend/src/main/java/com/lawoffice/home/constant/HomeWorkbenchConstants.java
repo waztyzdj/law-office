@@ -19,6 +19,7 @@ public final class HomeWorkbenchConstants {
     public static final String CARD_QUICK_ENTRY = "quick-entry";
     public static final String CARD_MESSAGE = "message";
     public static final String CARD_METRICS = "metrics";
+    public static final String CARD_FAVORITE = "favorite";
 
     public static final String STATUS_ENABLED = "enabled";
     public static final String STATUS_DISABLED = "disabled";

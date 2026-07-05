@@ -38,6 +38,13 @@ export const workbenchCardRegistry: WorkbenchCardMeta[] = [
     tone: 'orange',
   },
   {
+    accent: '#f59e0b',
+    code: 'favorite',
+    componentKey: 'WorkbenchFavoriteCard',
+    icon: 'lucide:star',
+    tone: 'amber',
+  },
+  {
     accent: '#15803d',
     code: 'metrics',
     componentKey: 'WorkbenchMetricsCard',

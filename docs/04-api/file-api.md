@@ -25,7 +25,7 @@
 
 核心接口：
 
-- `POST /document/files/page`：分页查询文档，`scope` 支持 `all`、`my`、`business`、`shared`、`sharedByMe`、`starred`、`trash`；`scope=all` 用于全局搜索本人有查询权限的未删除文件，`scope=business` 用于按“业务模块虚拟目录 -> 业务数据虚拟目录 -> 附件/个人整理文件夹”查询当前用户有业务访问权且仍有关联关系的业务文档，`scope=shared` 时可用 `shareTargetType`、`shareTargetId` 过滤租户共享或部门共享，并包含本人共享到该目标的文件；`scope=starred` 根目录返回本人收藏的未删除文件和文件夹，传 `parentId` 时浏览该收藏文件夹的直接子级；`scope=trash` 根目录只返回已删除文件夹树的顶层节点，可传 `parentId` 浏览已删除文件夹的直接子级。
+- `POST /document/files/page`：分页查询文档，`scope` 支持 `all`、`my`、`business`、`shared`、`sharedByMe`、`starred`、`trash`；`scope=all` 用于全局搜索本人有查询权限的未删除文件，`scope=business` 用于按“业务模块虚拟目录 -> 业务数据虚拟目录 -> 附件/个人整理文件夹”查询当前用户有业务访问权且仍有关联关系的业务文档，`scope=shared` 时可用 `shareTargetType`、`shareTargetId` 过滤租户共享或部门共享，并包含本人共享到该目标的文件；`scope=starred` 根目录返回本人收藏的未删除文件和文件夹并按收藏时间倒序排列，传 `parentId` 时浏览该收藏文件夹的直接子级；`scope=trash` 根目录只返回已删除文件夹树的顶层节点，可传 `parentId` 浏览已删除文件夹的直接子级。
 - `POST /document/files/page` 可传 `folderOnly=true`，用于左侧树等只需要文件夹节点的场景；后端仅返回文件夹并按文件夹子节点计算 `hasChild`，普通右侧列表不传该参数。
 - `POST /document/files/tree/batch`：批量加载左侧树多个节点的下一层文件夹。请求体为 `{ "items": [{ "key": "my", "scope": "my", "parentId": "...", "shareTargetType": "tenant", "shareTargetId": "..." }] }`；响应为 `{ [key]: DocumentFileVO[] }`。前端首次进入文档中心时用该接口一次加载多个根分类的首层目录，避免多个 `/document/page` 请求返回顺序不同造成树闪动。
 - `POST /document/files/tree/prefetch`：批量预取左侧树多个父级目录的下一层文件夹。请求体为 `{ "parentIds": ["..."], "scope": "my", "shareTargetType": "tenant", "shareTargetId": "..." }`，一次最多处理 100 个父级目录；响应为 `{ [parentId]: DocumentFileVO[] }`。该接口复用文档分页查询的权限和 scope 规则，只用于前端树展开后的下一级缓存预热，不改变树的展开状态。
@@ -41,7 +41,7 @@
 - `POST /document/files/batch-restore`：批量从回收站恢复，任一文件校验失败时整体回滚。请求体：`{ "ids": ["..."] }`。
 - `POST /document/files/purge`：从回收站彻底删除本人拥有的文档及其子级，同时清理文件授权、个人归类关系、历史版本记录和对象存储文件。请求体：`{ "id": "..." }`。
 - `POST /document/files/trash/clear`：清空本人回收站。
-- `POST /document/files/star`：切换收藏状态。请求体：`{ "id": "..." }`。
+- `POST /document/files/star`：切换收藏状态。请求体：`{ "id": "..." }`；收藏时写入 `starTime`，取消收藏时清空 `starTime`。
 - `POST /document/files/share`：覆盖保存共享目标。
 - `POST /document/files/shares`：查询共享目标。请求体：`{ "id": "..." }`。
 - `POST /document/files/status`：查询文档中心状态栏详情。请求体：`{ "id": "..." }`。

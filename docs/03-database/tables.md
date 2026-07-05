@@ -142,11 +142,12 @@
 - `parent_id`
 - `tenant_id`
 - `iz_folder`
-- `iz_star`
+- `iz_star`：是否收藏，取值 `1` 是、`0` 否。
+- `star_time`：收藏时间，用于文档中心和工作台“我的收藏”按收藏时间倒序展示；历史收藏可由迁移脚本回填更新时间或创建时间。
 - `share_perms`
 - `enable_down`
 - `enable_updat`
-- 关键索引：`idx_sf_tenant_parent_active_folder_time` 支撑文档中心按目录加载子级、左侧树只加载文件夹和列表默认排序；`idx_sf_tenant_owner_active_parent` 支撑本人目录、回收站和按所有者确认文件归属；`idx_sf_tenant_owner_store_parent_active` 支撑共享给我、我的共享、业务文档等个人整理文件夹查询。
+- 关键索引：`idx_sf_tenant_parent_active_folder_time` 支撑文档中心按目录加载子级、左侧树只加载文件夹和列表默认排序；`idx_sf_tenant_owner_active_parent` 支撑本人目录、回收站和按所有者确认文件归属；`idx_sf_tenant_owner_store_parent_active` 支撑共享给我、我的共享、业务文档等个人整理文件夹查询；`idx_sf_tenant_owner_star_time` 支撑当前用户收藏列表按收藏时间查询。
 
 ## `sys_file_version`
 
@@ -200,7 +201,7 @@
 
 重点字段：
 
-- `card_code`：卡片编码，同一租户有效数据内唯一，例如 `todo`、`cc`、`quick-entry`、`message`、`metrics`。
+- `card_code`：卡片编码，同一租户有效数据内唯一，例如 `todo`、`cc`、`quick-entry`、`message`、`favorite`、`metrics`。
 - `card_name`：卡片名称。
 - `component_key`：前端预置卡片组件标识，只能从组件注册表选择。
 - `permission_code`：卡片权限码，可为空；为空时拥有工作台访问权的用户默认可见。

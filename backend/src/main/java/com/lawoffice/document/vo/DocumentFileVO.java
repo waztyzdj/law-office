@@ -27,6 +27,9 @@ public class DocumentFileVO extends BaseVO {
 
     private String izStar;
 
+    @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss", timezone = "GMT+8")
+    private LocalDateTime starTime;
+
     private Integer downCount;
 
     private Integer readCount;

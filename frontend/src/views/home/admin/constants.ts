@@ -38,6 +38,7 @@ export const workbenchCardPermissionOptions = [
   { label: '我的抄送卡片', value: 'home:card:cc' },
   { label: '快捷菜单卡片', value: 'home:card:quick-entry' },
   { label: '我的消息卡片', value: 'home:card:message' },
+  { label: '我的收藏卡片', value: 'home:card:favorite' },
   { label: '指标概览卡片', value: 'home:card:metrics' },
   { label: '工作台管理', value: 'home:card:manage' },
 ];
@@ -47,5 +48,6 @@ export const workbenchCardComponentOptions = [
   { label: '我的抄送', value: 'WorkbenchCcCard' },
   { label: '快捷菜单', value: 'WorkbenchQuickEntryCard' },
   { label: '我的消息', value: 'WorkbenchMessageCard' },
+  { label: '我的收藏', value: 'WorkbenchFavoriteCard' },
   { label: '指标概览', value: 'WorkbenchMetricsCard' },
 ];

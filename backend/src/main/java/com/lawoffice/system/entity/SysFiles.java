@@ -9,6 +9,8 @@ import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
 
+import java.time.LocalDateTime;
+
 @Data
 @EqualsAndHashCode(callSuper = true)
 @TableName("sys_files")
@@ -50,6 +52,10 @@ public class SysFiles extends BaseTenantEntity {
     @ExcelProperty("是否收藏")
     @Schema(description = "是否收藏")
     private String izStar;
+
+    @ExcelProperty("收藏时间")
+    @Schema(description = "收藏时间")
+    private LocalDateTime starTime;
 
     @ExcelProperty("下载次数")
     @Schema(description = "下载次数")

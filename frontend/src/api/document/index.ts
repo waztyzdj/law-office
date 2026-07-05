@@ -39,6 +39,7 @@ export interface DocumentFileInfo {
   parentId?: string;
   readCount?: number;
   sharedFlag?: boolean;
+  starTime?: string;
   storeType?: string;
   updateTime?: string;
 }
