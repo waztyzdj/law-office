@@ -3,6 +3,8 @@ import {
   definePreferencesExtension,
 } from '@vben/preferences';
 
+import { FALLBACK_HOME_PATH } from '#/constants/routes';
+
 interface WebAntdPreferencesExtension {
   defaultTableSize: number;
   enableFormFullscreen: boolean;
@@ -21,6 +23,7 @@ export const overridesPreferences = defineOverridesPreferences({
   app: {
     name: import.meta.env.VITE_APP_TITLE,
     accessMode: 'backend', // 使用后端权限控制模式，动态获取菜单
+    defaultHomePath: FALLBACK_HOME_PATH,
   },
   copyright: {
     settingShow: false, // 隐藏版权设置选项

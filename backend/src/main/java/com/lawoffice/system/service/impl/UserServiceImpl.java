@@ -60,7 +60,7 @@ public class UserServiceImpl extends BaseServiceImpl<UserMapper, User, UserVO> i
     private static final String PLATFORM_ADMIN_ROLE_CODE = "ADMIN";
     private static final String SYSTEM_TENANT_ID = "0";
     private static final String TENANT_ADMIN_ROLE_CODE_PREFIX = "ADMIN_";
-    private static final String DEFAULT_HOME_PATH = "/analytics";
+    private static final String FALLBACK_HOME_PATH = "/home/workbench";
     private static final String PASSWORD_PATTERN = "^(?=.*[a-z])(?=.*[A-Z])(?=.*\\d)(?=.*[^\\dA-Za-z]).{8,20}$";
     private static final String PHONE_PATTERN = "^1[3-9]\\d{9}$";
     private static final String EMAIL_PATTERN = "^[A-Za-z0-9+_.-]+@[A-Za-z0-9.-]+$";
@@ -1453,7 +1453,7 @@ public class UserServiceImpl extends BaseServiceImpl<UserMapper, User, UserVO> i
                 .filter(permission -> StringUtils.hasText(permission.getUrl()))
                 .toList();
         if (menuPermissions.isEmpty()) {
-            return DEFAULT_HOME_PATH;
+            return FALLBACK_HOME_PATH;
         }
 
         Map<String, List<Permission>> childrenByParentId = menuPermissions.stream()
@@ -1471,7 +1471,7 @@ public class UserServiceImpl extends BaseServiceImpl<UserMapper, User, UserVO> i
                         .map(Permission::getUrl)
                         .filter(StringUtils::hasText)
                         .findFirst()
-                        .orElse(DEFAULT_HOME_PATH));
+                        .orElse(FALLBACK_HOME_PATH));
     }
 
     private String resolveFirstOpenableMenuPath(Permission permission, Map<String, List<Permission>> childrenByParentId) {

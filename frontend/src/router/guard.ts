@@ -7,11 +7,95 @@ import { startProgress, stopProgress } from '@vben/utils';
 
 import { notification } from 'ant-design-vue';
 
+import {
+  FALLBACK_HOME_PATH,
+  isLegacyTemplateHomePath,
+} from '#/constants/routes';
+import { $t } from '#/locales';
 import { accessRoutes, coreRouteNames } from '#/router/routes';
 import { useAuthStore } from '#/store';
-import { $t } from '#/locales';
 
 import { generateAccess } from './access';
+
+interface AccessibleMenuLike {
+  children?: AccessibleMenuLike[];
+  meta?: {
+    hideInMenu?: boolean;
+  };
+  path?: string;
+  redirect?: string;
+  show?: boolean;
+}
+
+function decodeRedirectPath(path?: null | string) {
+  if (!path) {
+    return '';
+  }
+  try {
+    return decodeURIComponent(path);
+  } catch {
+    return '';
+  }
+}
+
+function isSafeHomePath(path?: string) {
+  return Boolean(path && !isLegacyTemplateHomePath(path));
+}
+
+function resolveFirstAccessibleMenuPath(menus: AccessibleMenuLike[]): string {
+  for (const menu of menus) {
+    if (menu.show === false || menu.meta?.hideInMenu) {
+      continue;
+    }
+
+    if (menu.children?.length) {
+      const childPath = resolveFirstAccessibleMenuPath(menu.children);
+      if (childPath) {
+        return childPath;
+      }
+    }
+
+    const path = menu.redirect || menu.path;
+    if (path && isSafeHomePath(path)) {
+      return path;
+    }
+  }
+  return '';
+}
+
+function resolveSafeHomePath(
+  homePath?: string,
+  accessibleMenus: AccessibleMenuLike[] = [],
+): string {
+  if (homePath && isSafeHomePath(homePath)) {
+    return homePath;
+  }
+
+  const firstMenuPath = resolveFirstAccessibleMenuPath(accessibleMenus);
+  if (firstMenuPath) {
+    return firstMenuPath;
+  }
+
+  if (isSafeHomePath(preferences.app.defaultHomePath)) {
+    return preferences.app.defaultHomePath;
+  }
+  return FALLBACK_HOME_PATH;
+}
+
+function resolveSafeRedirectPath(
+  router: Router,
+  redirectPath: string,
+  fallbackPath: string,
+) {
+  if (!redirectPath || isLegacyTemplateHomePath(redirectPath)) {
+    return fallbackPath;
+  }
+  const resolved = router.resolve(redirectPath);
+  if (resolved.name === 'FallbackNotFound' || resolved.matched.length === 0) {
+    return fallbackPath;
+  }
+  return redirectPath;
+}
 
 async function ensureAccessReady(router: Router) {
   const accessStore = useAccessStore();
@@ -36,6 +120,19 @@ async function ensureAccessReady(router: Router) {
   accessStore.setAccessMenus(accessibleMenus);
   accessStore.setAccessRoutes(accessibleRoutes);
   accessStore.setIsAccessChecked(true);
+
+  const safeHomePath = resolveSafeHomePath(
+    userInfo.homePath,
+    accessibleMenus as AccessibleMenuLike[],
+  );
+  if (userInfo.homePath !== safeHomePath) {
+    const normalizedUserInfo = {
+      ...userInfo,
+      homePath: safeHomePath,
+    };
+    userStore.setUserInfo(normalizedUserInfo);
+    return normalizedUserInfo;
+  }
 
   return userInfo;
 }
@@ -77,15 +174,18 @@ function setupCommonGuard(router: Router) {
 function setupAccessGuard(router: Router) {
   router.beforeEach(async (to, from) => {
     const accessStore = useAccessStore();
-    const userStore = useUserStore();
 
     // 基本路由，这些路由不需要进入权限拦截
     if (coreRouteNames.includes(to.name as string)) {
       if (to.path === LOGIN_PATH && accessStore.accessToken) {
-        return decodeURIComponent(
-          (to.query?.redirect as string) ||
-            userStore.userInfo?.homePath ||
-            preferences.app.defaultHomePath,
+        const userInfo = await ensureAccessReady(router);
+        return resolveSafeRedirectPath(
+          router,
+          decodeRedirectPath(to.query?.redirect as string),
+          resolveSafeHomePath(
+            userInfo.homePath,
+            accessStore.accessMenus as AccessibleMenuLike[],
+          ),
         );
       }
       if (accessStore.accessToken) {
@@ -137,9 +237,17 @@ function setupAccessGuard(router: Router) {
       (to.path === preferences.app.defaultHomePath
         ? userInfo.homePath || preferences.app.defaultHomePath
         : to.fullPath)) as string;
+    const safeRedirectPath = resolveSafeRedirectPath(
+      router,
+      decodeRedirectPath(redirectPath),
+      resolveSafeHomePath(
+        userInfo.homePath,
+        accessStore.accessMenus as AccessibleMenuLike[],
+      ),
+    );
 
     return {
-      ...router.resolve(decodeURIComponent(redirectPath)),
+      ...router.resolve(safeRedirectPath),
       replace: true,
     };
   });

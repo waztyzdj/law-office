@@ -10,6 +10,7 @@ import { resetAllStores, useAccessStore, useUserStore } from '@vben/stores';
 import { defineStore } from 'pinia';
 
 import { getUserInfoApi, loginApi, logoutApi, switchTenant } from '#/api/system';
+import { isLegacyTemplateHomePath } from '#/constants/routes';
 
 export const useAuthStore = defineStore('auth', () => {
   const accessStore = useAccessStore();
@@ -17,6 +18,13 @@ export const useAuthStore = defineStore('auth', () => {
   const router = useRouter();
 
   const loginLoading = ref(false);
+
+  function normalizeHomePath(homePath?: string) {
+    if (!homePath || isLegacyTemplateHomePath(homePath)) {
+      return '';
+    }
+    return homePath;
+  }
 
   /**
    * 异步处理登录操作
@@ -98,7 +106,7 @@ export const useAuthStore = defineStore('auth', () => {
       realName: userInfo.realName || (userInfo as any).realName,
       roles: userInfo.roles || (userInfo as any).roles || [],
       permissions: userInfo.permissions || (userInfo as any).permissions || [],
-      homePath: userInfo.homePath || preferences.app.defaultHomePath,
+      homePath: normalizeHomePath(userInfo.homePath),
       desc: userInfo.desc || (userInfo as any).desc || '',
       token: accessStore.accessToken || '',
       avatar: userInfo.avatar || (userInfo as any).avatar || '',
