@@ -30,7 +30,7 @@ const quickEntryItems = computed(() =>
 watch(
   () => props.items,
   (nextItems) => {
-    if (!props.editing) {
+    if (!props.editing || localItems.value.length === 0) {
       localItems.value = cloneItems(nextItems);
     }
   },
@@ -46,6 +46,7 @@ watch(
     }
     draggingKey.value = '';
   },
+  { immediate: true },
 );
 
 function cloneItems(items: WorkbenchCardItem[]) {
