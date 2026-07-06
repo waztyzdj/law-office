@@ -58,6 +58,12 @@ interface WorkbenchCardComponentConfig {
   componentKey: string;
 }
 
+interface WorkbenchCardContentListeners {
+  add?: () => void;
+  edit?: (item: WorkbenchCardItem) => void;
+  open?: (item: WorkbenchCardItem) => void;
+}
+
 const workbenchCardComponents: WorkbenchCardComponentConfig[] = [
   {
     cardCode: 'metrics',
@@ -177,27 +183,27 @@ const contentProps = computed<Record<string, unknown>>(() => {
   if (resolvedCard.value.cardCode === 'todo') {
     return {
       activeTab: todoActiveTab.value,
-      card: props.card,
+      card: resolvedCard.value,
       items: items.value,
     };
   }
   if (resolvedCard.value.cardCode === 'cc') {
     return {
       activeTab: ccActiveTab.value,
-      card: props.card,
+      card: resolvedCard.value,
       items: items.value,
     };
   }
   if (resolvedCard.value.cardCode === 'message') {
     return {
       activeTab: messageActiveTab.value,
-      card: props.card,
+      card: resolvedCard.value,
       items: items.value,
     };
   }
   if (resolvedCard.value.cardCode === 'favorite') {
     return {
-      card: props.card,
+      card: resolvedCard.value,
       items: items.value,
     };
   }
@@ -213,9 +219,24 @@ const contentProps = computed<Record<string, unknown>>(() => {
     };
   }
   return {
-    card: props.card,
+    card: resolvedCard.value,
     cardName: cardDisplayName.value,
     items: items.value,
+  };
+});
+const contentListeners = computed<WorkbenchCardContentListeners>(() => {
+  if (resolvedCard.value.cardCode === 'favorite') {
+    return {};
+  }
+  if (resolvedCard.value.cardCode === 'quick-entry') {
+    return {
+      add: quickEntry.handleAdd,
+      edit: quickEntry.handleEdit,
+      open: openItem,
+    };
+  }
+  return {
+    open: openItem,
   };
 });
 
@@ -271,9 +292,7 @@ function handleRefresh() {
       v-else
       ref="contentComponentRef"
       v-bind="contentProps"
-      @add="quickEntry.handleAdd"
-      @edit="quickEntry.handleEdit"
-      @open="openItem"
+      v-on="contentListeners"
     />
   </Card>
 </template>
