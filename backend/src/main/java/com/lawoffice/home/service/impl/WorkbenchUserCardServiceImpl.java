@@ -15,6 +15,8 @@ import com.lawoffice.home.vo.WorkbenchLayoutCardVO;
 import com.lawoffice.home.vo.WorkbenchLayoutVO;
 import com.lawoffice.home.vo.WorkbenchUserCardVO;
 import com.lawoffice.system.mapper.PermissionMapper;
+import com.lawoffice.system.service.ITokenService;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
@@ -25,9 +27,12 @@ import java.util.Map;
 import java.util.stream.Collectors;
 
 @Service
+@Slf4j
 public class WorkbenchUserCardServiceImpl
         extends AbstractHomeWorkbenchServiceImpl<WorkbenchUserCardMapper, WorkbenchUserCard, WorkbenchUserCardVO>
         implements IWorkbenchUserCardService {
+
+    private static final long SLOW_CARD_DATA_THRESHOLD_MS = 500L;
 
     private static final int GRID_COLUMNS = 12;
     private static final int GRID_MAX_ROWS = 100;
@@ -38,9 +43,10 @@ public class WorkbenchUserCardServiceImpl
     private final WorkbenchCardDataProviderRegistry cardDataProviderRegistry;
 
     public WorkbenchUserCardServiceImpl(PermissionMapper permissionMapper,
+            ITokenService tokenService,
             IWorkbenchCardService workbenchCardService,
             WorkbenchCardDataProviderRegistry cardDataProviderRegistry) {
-        super(permissionMapper);
+        super(permissionMapper, tokenService);
         this.workbenchCardService = workbenchCardService;
         this.cardDataProviderRegistry = cardDataProviderRegistry;
     }
@@ -129,8 +135,21 @@ public class WorkbenchUserCardServiceImpl
         if (req == null) {
             throw new IllegalArgumentException("卡片数据请求不能为空");
         }
+        long start = System.currentTimeMillis();
         WorkbenchCard card = workbenchCardService.requireAuthorizedEnabledCard(req.getCardCode(), context);
-        return cardDataProviderRegistry.requireProvider(card.getCardCode()).loadData(req, card, context);
+        long authElapsed = System.currentTimeMillis() - start;
+        long providerStart = System.currentTimeMillis();
+        WorkbenchCardDataVO data = cardDataProviderRegistry.requireProvider(card.getCardCode()).loadData(req, card, context);
+        long providerElapsed = System.currentTimeMillis() - providerStart;
+        long totalElapsed = System.currentTimeMillis() - start;
+        if (totalElapsed >= SLOW_CARD_DATA_THRESHOLD_MS) {
+            log.warn("Slow workbench card data load: cardCode={}, total={}ms, auth={}ms, provider={}ms",
+                    card.getCardCode(), totalElapsed, authElapsed, providerElapsed);
+        } else {
+            log.debug("Workbench card data load: cardCode={}, total={}ms, auth={}ms, provider={}ms",
+                    card.getCardCode(), totalElapsed, authElapsed, providerElapsed);
+        }
+        return data;
     }
 
     private List<WorkbenchUserCard> listCurrentUserCards(String tenantId, String userId) {

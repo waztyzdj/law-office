@@ -43,6 +43,16 @@ public interface IMessageService {
     PageVO<MessageInboxVO> pageCurrentNotifications(BasePageReq req, String username);
 
     /**
+     * 统计当前用户收件箱消息。
+     *
+     * @param username 当前用户账号
+     * @param readStatus 已读状态，空值表示全部
+     * @param bizType 动作业务类型，空值表示全部
+     * @return 消息数量
+     */
+    long countInbox(String username, Integer readStatus, String bizType);
+
+    /**
      * 分页查询当前用户发件箱。
      *
      * @param req 分页查询请求

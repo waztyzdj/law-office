@@ -166,6 +166,31 @@ public class MessageServiceImpl implements IMessageService {
     }
 
     @Override
+    public long countInbox(String username, Integer readStatus, String bizType) {
+        User currentUser = getActiveUserByUsername(username);
+        String tenantId = requireTenantId();
+        List<String> messageIds = null;
+        if (StringUtils.hasText(bizType)) {
+            messageIds = findMessageIdsByActionQuery(Map.of("bizType", bizType), tenantId);
+            if (messageIds.isEmpty()) {
+                return 0L;
+            }
+        }
+        LambdaQueryWrapper<SysMessageReceiver> wrapper = new LambdaQueryWrapper<>();
+        wrapper.eq(SysMessageReceiver::getReceiverId, currentUser.getId())
+                .eq(SysMessageReceiver::getTenantId, tenantId)
+                .eq(SysMessageReceiver::getDeleteFlag, 0);
+        if (readStatus != null) {
+            wrapper.eq(SysMessageReceiver::getReadStatus, readStatus);
+        }
+        if (messageIds != null) {
+            wrapper.in(SysMessageReceiver::getMessageId, messageIds);
+        }
+        Long count = receiverMapper.selectCount(wrapper);
+        return count == null ? 0L : count;
+    }
+
+    @Override
     public PageVO<MessageSentVO> pageSent(BasePageReq req, String username) {
         User sender = getActiveUserByUsername(username);
         String tenantId = requireTenantId();
@@ -1086,11 +1111,22 @@ public class MessageServiceImpl implements IMessageService {
         if (user == null || !StringUtils.hasText(user.getAvatar())) {
             return null;
         }
-        try {
-            return sysFilesService.getFileById(user.getAvatar()).getFileUrl();
-        } catch (Exception ignored) {
-            return user.getAvatar();
+        String avatar = user.getAvatar().trim();
+        if (isDirectAvatarUrl(avatar)) {
+            return avatar;
         }
+        try {
+            return sysFilesService.getFileById(avatar).getFileUrl();
+        } catch (Exception ignored) {
+            return avatar;
+        }
+    }
+
+    private boolean isDirectAvatarUrl(String avatar) {
+        return avatar.startsWith("http://")
+                || avatar.startsWith("https://")
+                || avatar.startsWith("data:")
+                || avatar.startsWith("blob:");
     }
 
     private String requireTenantId() {

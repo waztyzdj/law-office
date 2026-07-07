@@ -1,21 +1,14 @@
 package com.lawoffice.home.service.impl.card;
 
 import com.lawoffice.framework.dto.RequestContext;
-import com.lawoffice.framework.req.BasePageReq;
-import com.lawoffice.framework.result.BaseResult;
-import com.lawoffice.framework.vo.PageVO;
 import com.lawoffice.home.constant.HomeWorkbenchConstants;
 import com.lawoffice.home.entity.WorkbenchCard;
 import com.lawoffice.home.req.WorkbenchCardDataReq;
 import com.lawoffice.home.service.IWorkbenchCardDataProvider;
 import com.lawoffice.home.vo.WorkbenchCardDataVO;
+import com.lawoffice.message.constant.MessageConstants;
 import com.lawoffice.message.service.IMessageService;
-import com.lawoffice.message.vo.MessageInboxVO;
-import com.lawoffice.workflow.req.CcPageReq;
-import com.lawoffice.workflow.req.TaskPageReq;
 import com.lawoffice.workflow.service.IRuntimeService;
-import com.lawoffice.workflow.vo.CcRecordVO;
-import com.lawoffice.workflow.vo.RuntimeTaskVO;
 import org.springframework.stereotype.Component;
 
 import java.util.LinkedHashMap;
@@ -60,35 +53,19 @@ public class MetricsCardDataProvider extends AbstractWorkbenchCardDataProvider i
     }
 
     private long todoTotal(RequestContext context) {
-        TaskPageReq req = new TaskPageReq();
-        req.setPageNum(1);
-        req.setPageSize(1);
-        BaseResult<PageVO<RuntimeTaskVO>> result = runtimeService.pageTodo(req, context);
-        return totalOrZero(result);
+        return runtimeService.countTodoTasks(context);
     }
 
     private long doneTotal(RequestContext context) {
-        TaskPageReq req = new TaskPageReq();
-        req.setPageNum(1);
-        req.setPageSize(1);
-        BaseResult<PageVO<RuntimeTaskVO>> result = runtimeService.pageDone(req, context);
-        return totalOrZero(result);
+        return runtimeService.countDoneTasks(context);
     }
 
     private long ccTotal(RequestContext context) {
-        CcPageReq req = new CcPageReq();
-        req.setPageNum(1);
-        req.setPageSize(1);
-        BaseResult<PageVO<CcRecordVO>> result = runtimeService.pageCc(req, context);
-        return totalOrZero(result);
+        return runtimeService.countCcRecords(null, context);
     }
 
     private long messageTotal(RequestContext context) {
-        BasePageReq req = new BasePageReq();
-        req.setPageNum(1);
-        req.setPageSize(1);
-        PageVO<MessageInboxVO> page = messageService.pageCurrentNotifications(req, context.getUsername());
-        return total(page);
+        return messageService.countInbox(context.getUsername(), MessageConstants.READ_STATUS_UNREAD, null);
     }
 
     private Map<String, Object> metricItem(String code, String title, long value, String targetPath,

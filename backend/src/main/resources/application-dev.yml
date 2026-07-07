@@ -16,7 +16,7 @@ spring:
       # 最小连接池数量
       min-idle: 5
       # 最大连接池数量
-      max-active: 20
+      max-active: 40
       # 获取连接等待超时的时间
       max-wait: 60000
       # 配置间隔多久才进行一次检测，检测需要关闭的空闲连接，单位是毫秒
@@ -89,11 +89,11 @@ mybatis:
   type-aliases-package: com.lawoffice.entity
   configuration:
     map-underscore-to-camel-case: true
-    log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
+    log-impl: org.apache.ibatis.logging.nologging.NoLoggingImpl
 
 logging:
   level:
-    com.lawoffice: debug
-    org.springframework.web: debug
+    com.lawoffice: info
+    org.springframework.web: info
   pattern:
     console: '%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{50} - %msg%n'

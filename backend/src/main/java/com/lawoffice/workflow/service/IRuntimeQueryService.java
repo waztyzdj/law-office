@@ -69,6 +69,22 @@ public interface IRuntimeQueryService {
     BaseResult<PageVO<RuntimeTaskVO>> pageDone(TaskPageReq req, RequestContext context);
 
     /**
+     * 统计当前用户待办任务数。
+     *
+     * @param context 请求上下文
+     * @return 待办任务数
+     */
+    long countTodoTasks(RequestContext context);
+
+    /**
+     * 统计当前用户已办流程实例数。
+     *
+     * @param context 请求上下文
+     * @return 已办流程实例数
+     */
+    long countDoneTasks(RequestContext context);
+
+    /**
      * 获取任务表单。
      *
      * @param taskId 任务ID

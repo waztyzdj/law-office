@@ -14,6 +14,7 @@ import com.lawoffice.home.req.WorkbenchCardSortReq;
 import com.lawoffice.home.service.IWorkbenchCardService;
 import com.lawoffice.home.vo.WorkbenchCardVO;
 import com.lawoffice.system.mapper.PermissionMapper;
+import com.lawoffice.system.service.ITokenService;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
@@ -25,8 +26,8 @@ public class WorkbenchCardServiceImpl
         extends AbstractHomeWorkbenchServiceImpl<WorkbenchCardMapper, WorkbenchCard, WorkbenchCardVO>
         implements IWorkbenchCardService {
 
-    public WorkbenchCardServiceImpl(PermissionMapper permissionMapper) {
-        super(permissionMapper);
+    public WorkbenchCardServiceImpl(PermissionMapper permissionMapper, ITokenService tokenService) {
+        super(permissionMapper, tokenService);
     }
 
     @Override
@@ -139,7 +140,7 @@ public class WorkbenchCardServiceImpl
                 .orderByAsc("default_sort")
                 .orderByAsc("create_time");
         return baseMapper.selectList(wrapper).stream()
-                .filter(card -> hasPermission(card.getPermissionCode()))
+                .filter(card -> hasPermission(card.getPermissionCode(), context))
                 .toList();
     }
 
@@ -155,7 +156,7 @@ public class WorkbenchCardServiceImpl
         if (card == null) {
             throw new IllegalArgumentException("卡片不存在或已停用");
         }
-        if (!hasPermission(card.getPermissionCode())) {
+        if (!hasPermission(card.getPermissionCode(), context)) {
             throw new IllegalArgumentException("无权访问该卡片");
         }
         return card;

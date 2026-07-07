@@ -116,6 +116,19 @@ public class CcRuntimeServiceImpl implements ICcRuntimeService {
     }
 
     @Override
+    public long countMine(String status, RequestContext context) {
+        QueryWrapper<CcRecord> wrapper = new QueryWrapper<>();
+        wrapper.eq("tenant_id", RuntimeSupport.requireTenantId(context))
+                .eq("receiver_user_id", RuntimeSupport.requireUserId(context))
+                .eq("delete_flag", 0);
+        if (StringUtils.hasText(status)) {
+            wrapper.eq("status", status);
+        }
+        Long count = ccRecordMapper.selectCount(wrapper);
+        return count == null ? 0L : count;
+    }
+
+    @Override
     @Transactional(rollbackFor = Exception.class)
     public BaseResult<CcRecordVO> markRead(String ccRecordId, RequestContext context) {
         try {

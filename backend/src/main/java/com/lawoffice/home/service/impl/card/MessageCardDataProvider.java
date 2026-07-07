@@ -38,18 +38,28 @@ public class MessageCardDataProvider extends AbstractWorkbenchCardDataProvider i
     @Override
     public WorkbenchCardDataVO loadData(WorkbenchCardDataReq req, WorkbenchCard card, RequestContext context) {
         int fetchLimit = resolveListFetchLimit();
-        PageVO<MessageInboxVO> unreadPage = loadMessagePage(fetchLimit, MessageConstants.READ_STATUS_UNREAD, context);
-        PageVO<MessageInboxVO> readPage = loadMessagePage(fetchLimit, MessageConstants.READ_STATUS_READ, context);
-        PageVO<MessageInboxVO> urgePage = loadMessagePage(fetchLimit, MessageConstants.READ_STATUS_UNREAD,
-                URGE_BIZ_TYPE, context);
-        PageVO<MessageInboxVO> timeoutPage = loadMessagePage(fetchLimit, MessageConstants.READ_STATUS_UNREAD,
-                TIMEOUT_BIZ_TYPE, context);
+        long unreadTotal = countMessages(MessageConstants.READ_STATUS_UNREAD, null, context);
+        long readTotal = countMessages(MessageConstants.READ_STATUS_READ, null, context);
+        long urgeTotal = countMessages(MessageConstants.READ_STATUS_UNREAD, URGE_BIZ_TYPE, context);
+        long timeoutTotal = countMessages(MessageConstants.READ_STATUS_UNREAD, TIMEOUT_BIZ_TYPE, context);
+        PageVO<MessageInboxVO> unreadPage = unreadTotal > 0
+                ? loadMessagePage(fetchLimit, MessageConstants.READ_STATUS_UNREAD, context)
+                : null;
+        PageVO<MessageInboxVO> readPage = readTotal > 0
+                ? loadMessagePage(fetchLimit, MessageConstants.READ_STATUS_READ, context)
+                : null;
+        PageVO<MessageInboxVO> urgePage = urgeTotal > 0
+                ? loadMessagePage(fetchLimit, MessageConstants.READ_STATUS_UNREAD, URGE_BIZ_TYPE, context)
+                : null;
+        PageVO<MessageInboxVO> timeoutPage = timeoutTotal > 0
+                ? loadMessagePage(fetchLimit, MessageConstants.READ_STATUS_UNREAD, TIMEOUT_BIZ_TYPE, context)
+                : null;
 
         WorkbenchCardDataVO vo = emptyData(card);
-        vo.getSummary().put("unreadTotal", total(unreadPage));
-        vo.getSummary().put("readTotal", total(readPage));
-        vo.getSummary().put("urgeTotal", total(urgePage));
-        vo.getSummary().put("timeoutTotal", total(timeoutPage));
+        vo.getSummary().put("unreadTotal", unreadTotal);
+        vo.getSummary().put("readTotal", readTotal);
+        vo.getSummary().put("urgeTotal", urgeTotal);
+        vo.getSummary().put("timeoutTotal", timeoutTotal);
         List<Map<String, Object>> items = new ArrayList<>();
         items.addAll(mapMessageItems(unreadPage, "unread-message"));
         items.addAll(mapMessageItems(urgePage, "urge-message"));
@@ -57,6 +67,10 @@ public class MessageCardDataProvider extends AbstractWorkbenchCardDataProvider i
         items.addAll(mapMessageItems(readPage, "read-message"));
         vo.setItems(items);
         return vo;
+    }
+
+    private long countMessages(int readStatus, String bizType, RequestContext context) {
+        return messageService.countInbox(context.getUsername(), readStatus, bizType);
     }
 
     private PageVO<MessageInboxVO> loadMessagePage(int limit, int readStatus, RequestContext context) {

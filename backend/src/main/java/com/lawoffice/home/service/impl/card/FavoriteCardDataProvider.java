@@ -59,6 +59,7 @@ public class FavoriteCardDataProvider extends AbstractWorkbenchCardDataProvider 
 
     private PageVO<DocumentFileVO> loadFavoritePage(RequestContext context) {
         String tenantId = requireTenantId(context);
+        int fetchLimit = resolveListFetchLimit();
         DocumentAccessContext accessContext = documentAccessContextService.buildDocumentAccessContext(
                 context.getUsername(),
                 tenantId);
@@ -71,10 +72,7 @@ public class FavoriteCardDataProvider extends AbstractWorkbenchCardDataProvider 
                 .orderByDesc(SysFiles::getUpdateTime)
                 .orderByDesc(SysFiles::getCreateTime)
                 .orderByAsc(SysFiles::getFileName));
-        List<FavoriteFileEntry> favoriteFiles = resolveFavoriteFiles(starredItems, tenantId, context.getUsername());
-        List<FavoriteFileEntry> limitedFiles = favoriteFiles.stream()
-                .limit(resolveListFetchLimit())
-                .toList();
+        List<FavoriteFileEntry> limitedFiles = resolveFavoriteFiles(starredItems, tenantId, context.getUsername(), fetchLimit);
         List<DocumentFileVO> records = documentFileViewService.buildDocumentVOList(
                 limitedFiles.stream().map(FavoriteFileEntry::file).toList(),
                 accessContext);
@@ -86,13 +84,17 @@ public class FavoriteCardDataProvider extends AbstractWorkbenchCardDataProvider 
                 record.setStarTime(favoriteTime);
             }
         });
-        return new PageVO<>(records, favoriteFiles.size(), 1, resolveListFetchLimit());
+        return new PageVO<>(records, starredItems.size(), 1, fetchLimit);
     }
 
     /**
      * 收藏文件夹在工作台中不作为列表项展示，而是继承文件夹收藏时间铺开其子文件。
      */
-    private List<FavoriteFileEntry> resolveFavoriteFiles(List<SysFiles> starredItems, String tenantId, String username) {
+    private List<FavoriteFileEntry> resolveFavoriteFiles(
+            List<SysFiles> starredItems,
+            String tenantId,
+            String username,
+            int limit) {
         Map<String, FavoriteFileEntry> entries = new LinkedHashMap<>();
         Map<String, LocalDateTime> favoriteFolderTimes = new LinkedHashMap<>();
         for (SysFiles item : starredItems) {
@@ -106,9 +108,10 @@ public class FavoriteCardDataProvider extends AbstractWorkbenchCardDataProvider 
             }
             putFavoriteFile(entries, item, favoriteTime, true);
         }
-        collectFavoriteFolderFiles(entries, favoriteFolderTimes, tenantId, username);
+        collectFavoriteFolderFiles(entries, favoriteFolderTimes, tenantId, username, limit);
         return entries.values().stream()
                 .sorted(this::compareFavoriteEntry)
+                .limit(limit)
                 .toList();
     }
 
@@ -119,11 +122,12 @@ public class FavoriteCardDataProvider extends AbstractWorkbenchCardDataProvider 
             Map<String, FavoriteFileEntry> entries,
             Map<String, LocalDateTime> favoriteFolderTimes,
             String tenantId,
-            String username) {
+            String username,
+            int limit) {
         Map<String, LocalDateTime> cursor = new LinkedHashMap<>(favoriteFolderTimes);
         Set<String> visitedFolderIds = new HashSet<>(favoriteFolderTimes.keySet());
         int guard = 0;
-        while (!cursor.isEmpty() && guard++ < 20) {
+        while (!cursor.isEmpty() && guard++ < 20 && entries.size() < limit) {
             List<SysFiles> children = sysFilesMapper.selectList(Wrappers.lambdaQuery(SysFiles.class)
                     .eq(SysFiles::getTenantId, tenantId)
                     .eq(SysFiles::getCreateBy, username)
@@ -140,6 +144,9 @@ public class FavoriteCardDataProvider extends AbstractWorkbenchCardDataProvider 
                     continue;
                 }
                 putFavoriteFile(entries, child, inheritedFavoriteTime, false);
+                if (entries.size() >= limit) {
+                    break;
+                }
             }
             cursor = nextCursor;
         }

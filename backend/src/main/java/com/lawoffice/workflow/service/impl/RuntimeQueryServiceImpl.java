@@ -351,6 +351,34 @@ public class RuntimeQueryServiceImpl implements IRuntimeQueryService {
     }
 
     @Override
+    public long countTodoTasks(RequestContext context) {
+        String tenantId = requireTenantId(context);
+        String userId = requireUserId(context);
+        List<String> candidateTaskIds = listCandidateTaskIds(tenantId, userId, WorkflowConstants.Status.ACTIVE);
+        QueryWrapper<Task> wrapper = new QueryWrapper<>();
+        wrapper.eq("tenant_id", tenantId)
+                .eq("delete_flag", 0)
+                .eq("status", WorkflowConstants.Status.TODO)
+                .and(condition -> {
+                    condition.eq("assignee_user_id", userId);
+                    if (!candidateTaskIds.isEmpty()) {
+                        condition.or().in("id", candidateTaskIds);
+                    }
+                });
+        Long count = taskMapper.selectCount(wrapper);
+        return count == null ? 0L : count;
+    }
+
+    @Override
+    public long countDoneTasks(RequestContext context) {
+        return taskMapper.countDoneProcessInstances(
+                requireTenantId(context),
+                requireUserId(context),
+                WorkflowConstants.Status.CLAIMED,
+                DONE_TASK_STATUSES);
+    }
+
+    @Override
     public BaseResult<TaskFormVO> getTaskForm(String taskId, RequestContext context) {
         try {
             String tenantId = requireTenantId(context);

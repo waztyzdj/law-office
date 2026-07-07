@@ -35,12 +35,14 @@ public class TodoCardDataProvider extends AbstractWorkbenchCardDataProvider impl
     @Override
     public WorkbenchCardDataVO loadData(WorkbenchCardDataReq req, WorkbenchCard card, RequestContext context) {
         int fetchLimit = resolveListFetchLimit();
-        PageVO<RuntimeTaskVO> todoPage = loadTodoPage(fetchLimit, context);
-        PageVO<RuntimeTaskVO> donePage = loadDonePage(fetchLimit, context);
+        long todoTotal = runtimeService.countTodoTasks(context);
+        long doneTotal = runtimeService.countDoneTasks(context);
+        PageVO<RuntimeTaskVO> todoPage = todoTotal > 0 ? loadTodoPage(fetchLimit, context) : null;
+        PageVO<RuntimeTaskVO> donePage = doneTotal > 0 ? loadDonePage(fetchLimit, context) : null;
 
         WorkbenchCardDataVO vo = emptyData(card);
-        vo.getSummary().put("todoTotal", total(todoPage));
-        vo.getSummary().put("doneTotal", total(donePage));
+        vo.getSummary().put("todoTotal", todoTotal);
+        vo.getSummary().put("doneTotal", doneTotal);
         long overdue = todoPage == null || todoPage.getRecords() == null ? 0 : todoPage.getRecords().stream()
                 .filter(task -> task.getDueTime() != null && task.getDueTime().isBefore(LocalDateTime.now()))
                 .count();

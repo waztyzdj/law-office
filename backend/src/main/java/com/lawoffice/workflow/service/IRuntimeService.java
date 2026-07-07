@@ -120,6 +120,31 @@ public interface IRuntimeService {
     BaseResult<PageVO<RuntimeTaskVO>> pageDone(TaskPageReq req, RequestContext context);
 
     /**
+     * 统计当前用户待办任务数。
+     *
+     * @param context 当前请求上下文
+     * @return 待办任务数
+     */
+    long countTodoTasks(RequestContext context);
+
+    /**
+     * 统计当前用户已办流程实例数。
+     *
+     * @param context 当前请求上下文
+     * @return 已办流程实例数
+     */
+    long countDoneTasks(RequestContext context);
+
+    /**
+     * 统计当前用户收到的抄送数。
+     *
+     * @param status 抄送状态，空值表示全部
+     * @param context 当前请求上下文
+     * @return 抄送数量
+     */
+    long countCcRecords(String status, RequestContext context);
+
+    /**
      * 查询任务办理表单和当前节点字段权限。
      *
      * @param taskId 本地任务ID

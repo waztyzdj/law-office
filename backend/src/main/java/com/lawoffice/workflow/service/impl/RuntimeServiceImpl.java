@@ -117,6 +117,21 @@ public class RuntimeServiceImpl implements IRuntimeService {
     }
 
     @Override
+    public long countTodoTasks(RequestContext context) {
+        return runtimeQueryService.countTodoTasks(context);
+    }
+
+    @Override
+    public long countDoneTasks(RequestContext context) {
+        return runtimeQueryService.countDoneTasks(context);
+    }
+
+    @Override
+    public long countCcRecords(String status, RequestContext context) {
+        return ccRuntimeService.countMine(status, context);
+    }
+
+    @Override
     public BaseResult<TaskFormVO> getTaskForm(String taskId, RequestContext context) {
         return runtimeQueryService.getTaskForm(taskId, context);
     }

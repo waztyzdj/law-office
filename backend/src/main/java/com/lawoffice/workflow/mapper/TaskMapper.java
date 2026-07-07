@@ -159,4 +159,33 @@ public interface TaskMapper extends BaseMapper<Task> {
             @Param("completeTimeLe") LocalDateTime completeTimeLe,
             @Param("hasInstanceFilters") boolean hasInstanceFilters,
             @Param("orderBySql") String orderBySql);
+
+    @Select("""
+            <script>
+            select count(distinct t.process_instance_id)
+            from wf_task t
+            where t.tenant_id = #{tenantId}
+              and t.delete_flag = 0
+              and t.status in
+              <foreach collection="doneStatuses" item="status" open="(" separator="," close=")">
+                #{status}
+              </foreach>
+              and (
+                t.assignee_user_id = #{userId}
+                or exists (
+                  select 1
+                  from wf_task_candidate tc
+                  where tc.tenant_id = t.tenant_id
+                    and tc.task_id = t.id
+                    and tc.candidate_user_id = #{userId}
+                    and tc.status = #{candidateStatus}
+                    and tc.delete_flag = 0
+                )
+              )
+            </script>
+            """)
+    long countDoneProcessInstances(@Param("tenantId") String tenantId,
+            @Param("userId") String userId,
+            @Param("candidateStatus") String candidateStatus,
+            @Param("doneStatuses") List<String> doneStatuses);
 }

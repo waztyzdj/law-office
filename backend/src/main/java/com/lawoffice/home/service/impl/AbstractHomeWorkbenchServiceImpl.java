@@ -13,11 +13,12 @@ import com.lawoffice.framework.vo.BaseVO;
 import com.lawoffice.home.constant.HomeWorkbenchConstants;
 import com.lawoffice.system.entity.Permission;
 import com.lawoffice.system.mapper.PermissionMapper;
+import com.lawoffice.system.service.ITokenService;
 import com.lawoffice.util.EntityFillUtils;
-import org.apache.shiro.SecurityUtils;
-import org.apache.shiro.subject.Subject;
 import org.springframework.util.StringUtils;
 
+import java.util.HashSet;
+import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 
@@ -30,9 +31,11 @@ abstract class AbstractHomeWorkbenchServiceImpl<M extends BaseMapper<E>, E exten
     private static final int MAX_PAGE_SIZE = 100;
 
     protected final PermissionMapper permissionMapper;
+    private final ITokenService tokenService;
 
-    protected AbstractHomeWorkbenchServiceImpl(PermissionMapper permissionMapper) {
+    protected AbstractHomeWorkbenchServiceImpl(PermissionMapper permissionMapper, ITokenService tokenService) {
         this.permissionMapper = permissionMapper;
+        this.tokenService = tokenService;
     }
 
     protected String requireTenantId(RequestContext context) {
@@ -115,20 +118,18 @@ abstract class AbstractHomeWorkbenchServiceImpl<M extends BaseMapper<E>, E exten
         }
     }
 
-    protected boolean hasPermission(String permissionCode) {
+    protected boolean hasPermission(String permissionCode, RequestContext context) {
         if (!StringUtils.hasText(permissionCode)) {
             return true;
         }
-        try {
-            Subject subject = SecurityUtils.getSubject();
-            return subject != null && subject.isPermitted(permissionCode);
-        } catch (Exception e) {
+        if (context == null || !StringUtils.hasText(context.getUsername())) {
             return false;
         }
+        return resolvePermissionCodes(context).contains(permissionCode);
     }
 
-    protected boolean hasMenuAccess(String menuId, String explicitPermissionCode) {
-        if (StringUtils.hasText(explicitPermissionCode) && !hasPermission(explicitPermissionCode)) {
+    protected boolean hasMenuAccess(String menuId, String explicitPermissionCode, RequestContext context) {
+        if (StringUtils.hasText(explicitPermissionCode) && !hasPermission(explicitPermissionCode, context)) {
             return false;
         }
         if (!StringUtils.hasText(menuId)) {
@@ -141,7 +142,17 @@ abstract class AbstractHomeWorkbenchServiceImpl<M extends BaseMapper<E>, E exten
         if (permission == null || permission.getDeleteFlag() == null || permission.getDeleteFlag() != 0) {
             return false;
         }
-        return !StringUtils.hasText(permission.getPerms()) || hasPermission(permission.getPerms());
+        return !StringUtils.hasText(permission.getPerms()) || hasPermission(permission.getPerms(), context);
+    }
+
+    private Set<String> resolvePermissionCodes(RequestContext context) {
+        if (context.getPermissionCodes() != null) {
+            return context.getPermissionCodes();
+        }
+        List<String> permissions = tokenService.getPermissionsFromRedis(context.getUsername());
+        Set<String> permissionCodes = new HashSet<>(permissions == null ? List.of() : permissions);
+        context.setPermissionCodes(permissionCodes);
+        return permissionCodes;
     }
 
     protected void requireActiveMenu(String menuId) {

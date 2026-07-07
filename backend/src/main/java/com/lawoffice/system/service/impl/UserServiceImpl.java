@@ -2368,12 +2368,23 @@ public class UserServiceImpl extends BaseServiceImpl<UserMapper, User, UserVO> i
         if (!StringUtils.hasText(avatar)) {
             return avatar;
         }
+        String normalizedAvatar = avatar.trim();
+        if (isDirectAvatarUrl(normalizedAvatar)) {
+            return normalizedAvatar;
+        }
         try {
-            return sysFilesService.getFileById(avatar).getFileUrl();
+            return sysFilesService.getFileById(normalizedAvatar).getFileUrl();
         } catch (RuntimeException e) {
             log.warn("生成头像访问地址失败: {}", e.getMessage());
-            return avatar;
+            return normalizedAvatar;
         }
+    }
+
+    private boolean isDirectAvatarUrl(String avatar) {
+        return avatar.startsWith("http://")
+                || avatar.startsWith("https://")
+                || avatar.startsWith("data:")
+                || avatar.startsWith("blob:");
     }
 
     /**

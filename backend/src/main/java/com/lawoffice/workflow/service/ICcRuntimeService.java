@@ -25,6 +25,15 @@ public interface ICcRuntimeService {
     BaseResult<PageVO<CcRecordVO>> pageMine(CcPageReq req, RequestContext context);
 
     /**
+     * 统计当前用户收到的抄送记录。
+     *
+     * @param status 抄送状态，空值表示全部
+     * @param context 请求上下文
+     * @return 抄送记录数
+     */
+    long countMine(String status, RequestContext context);
+
+    /**
      * 将当前用户收到的一条抄送记录标记为已读。
      *
      * @param ccRecordId 抄送记录ID

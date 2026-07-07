@@ -15,6 +15,7 @@ import com.lawoffice.home.service.IWorkbenchQuickEntryService;
 import com.lawoffice.home.vo.WorkbenchQuickEntryListVO;
 import com.lawoffice.home.vo.WorkbenchQuickEntryVO;
 import com.lawoffice.system.mapper.PermissionMapper;
+import com.lawoffice.system.service.ITokenService;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
@@ -32,8 +33,8 @@ public class WorkbenchQuickEntryServiceImpl
     private static final String LEGACY_WORKSPACE_ENTRY_CODE = "workspace";
     private static final String LEGACY_WORKSPACE_ENTRY_NAME = "工作台";
 
-    public WorkbenchQuickEntryServiceImpl(PermissionMapper permissionMapper) {
-        super(permissionMapper);
+    public WorkbenchQuickEntryServiceImpl(PermissionMapper permissionMapper, ITokenService tokenService) {
+        super(permissionMapper, tokenService);
     }
 
     @Override
@@ -104,7 +105,7 @@ public class WorkbenchQuickEntryServiceImpl
         WorkbenchQuickEntryListVO vo = new WorkbenchQuickEntryListVO();
         vo.setEntries(entries.stream()
                 .filter(entry -> !isLegacySystemWorkspaceEntry(entry))
-                .filter(entry -> hasMenuAccess(entry.getMenuId(), entry.getPermissionCode()))
+                .filter(entry -> hasMenuAccess(entry.getMenuId(), entry.getPermissionCode(), context))
                 .sorted(Comparator.comparing(WorkbenchQuickEntry::getSortNo, Comparator.nullsLast(Integer::compareTo))
                         .thenComparing(WorkbenchQuickEntry::getEntryCode))
                 .map(this::toVO)
@@ -164,7 +165,7 @@ public class WorkbenchQuickEntryServiceImpl
         entry.setStatus(defaultStatus(trimToNull(req.getStatus())));
         entry.setConfigJson(normalizeConfigJson(req.getConfigJson(), req.getConfig(), "快捷菜单扩展配置"));
 
-        validateEntry(entry, systemEntry);
+        validateEntry(entry, systemEntry, context);
         validateUniqueEntryCode(entry);
         fillCreateOrUpdate(entry, context, create);
         if (create) {
@@ -193,7 +194,7 @@ public class WorkbenchQuickEntryServiceImpl
     /**
      * 快捷菜单保存时统一校验类型、菜单有效性和权限，避免用户通过接口保存无权访问的入口。
      */
-    private void validateEntry(WorkbenchQuickEntry entry, boolean systemEntry) {
+    private void validateEntry(WorkbenchQuickEntry entry, boolean systemEntry, RequestContext context) {
         requireText(entry.getEntryCode(), "入口编码不能为空");
         requireText(entry.getEntryName(), "入口名称不能为空");
         requireText(entry.getEntryType(), "入口类型不能为空");
@@ -215,7 +216,7 @@ public class WorkbenchQuickEntryServiceImpl
                 && !StringUtils.hasText(entry.getMenuId())) {
             throw new IllegalArgumentException("个人内部菜单必须从已授权菜单中选择");
         }
-        if (!systemEntry && !hasMenuAccess(entry.getMenuId(), entry.getPermissionCode())) {
+        if (!systemEntry && !hasMenuAccess(entry.getMenuId(), entry.getPermissionCode(), context)) {
             throw new IllegalArgumentException("无权添加该快捷菜单");
         }
     }
