@@ -5,6 +5,11 @@ import type {
   WorkbenchLayoutCard,
 } from '#/api/home/workbench';
 import type { CSSProperties } from 'vue';
+import type {
+  WorkbenchQuickEntryActionPayload,
+  WorkbenchQuickEntryDraftChange,
+  WorkbenchQuickEntrySortSavePayload,
+} from '../types';
 
 import { computed, onBeforeUnmount, ref, watch } from 'vue';
 
@@ -47,6 +52,7 @@ const props = defineProps<{
   cardStates: Record<string, CardState | undefined>;
   cards: WorkbenchLayoutCard[];
   editable?: boolean;
+  quickEntryDraftChange?: WorkbenchQuickEntryDraftChange;
 }>();
 
 const emit = defineEmits<{
@@ -54,9 +60,9 @@ const emit = defineEmits<{
   layoutChange: [cards: WorkbenchLayoutCard[]];
   openMessageItem: [payload: { card: WorkbenchLayoutCard; item: WorkbenchCardItem }];
   openWorkflowItem: [payload: { card: WorkbenchLayoutCard; item: WorkbenchCardItem }];
-  quickEntryAdd: [];
-  quickEntryEdit: [item: WorkbenchCardItem];
-  quickEntrySortSave: [items: WorkbenchCardItem[]];
+  quickEntryAdd: [payload: WorkbenchQuickEntryActionPayload];
+  quickEntryEdit: [payload: WorkbenchQuickEntryActionPayload];
+  quickEntrySortSave: [payload: WorkbenchQuickEntrySortSavePayload];
   refresh: [card: WorkbenchLayoutCard];
 }>();
 
@@ -368,9 +374,10 @@ onBeforeUnmount(() => {
         :editing="editable"
         :error="cardStates[card.cardCode]?.error"
         :loading="cardStates[card.cardCode]?.loading"
+        :quick-entry-draft-change="quickEntryDraftChange"
         @open-message-item="$emit('openMessageItem', $event)"
         @open-workflow-item="$emit('openWorkflowItem', $event)"
-        @quick-entry-add="$emit('quickEntryAdd')"
+        @quick-entry-add="$emit('quickEntryAdd', $event)"
         @quick-entry-edit="$emit('quickEntryEdit', $event)"
         @quick-entry-sort-save="$emit('quickEntrySortSave', $event)"
         @refresh="$emit('refresh', $event)"

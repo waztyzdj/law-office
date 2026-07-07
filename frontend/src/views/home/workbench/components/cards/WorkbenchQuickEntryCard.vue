@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import type { WorkbenchCardItem } from '#/api/home/workbench';
 import type { CSSProperties } from 'vue';
+import type { WorkbenchQuickEntryDraftChange } from '../../types';
 
 import { computed, ref, watch } from 'vue';
 
@@ -11,6 +12,7 @@ import { Popconfirm } from 'ant-design-vue';
 import { getWorkbenchItemConfig } from '../../utils/workbenchCardFormatters';
 
 const props = defineProps<{
+  draftChange?: WorkbenchQuickEntryDraftChange;
   editing?: boolean;
   items: WorkbenchCardItem[];
 }>();
@@ -49,6 +51,16 @@ watch(
   { immediate: true },
 );
 
+watch(
+  () => props.draftChange?.seq,
+  () => {
+    if (!props.editing || !props.draftChange) {
+      return;
+    }
+    upsertDraftItem(props.draftChange.item);
+  },
+);
+
 function cloneItems(items: WorkbenchCardItem[]) {
   return items.map((item) => ({ ...item }));
 }
@@ -60,6 +72,23 @@ function reset() {
 
 function getCurrentItems() {
   return cloneItems(localItems.value);
+}
+
+function upsertDraftItem(item: WorkbenchCardItem) {
+  const targetKey = getQuickEntryKey(item);
+  if (!targetKey) {
+    return;
+  }
+  const targetIndex = localItems.value.findIndex(
+    (candidate) => getQuickEntryKey(candidate) === targetKey,
+  );
+  if (targetIndex >= 0) {
+    localItems.value = localItems.value.map((candidate, index) =>
+      index === targetIndex ? { ...candidate, ...item } : candidate,
+    );
+    return;
+  }
+  localItems.value = [...localItems.value, { ...item }];
 }
 
 function getQuickEntryKey(item: WorkbenchCardItem) {

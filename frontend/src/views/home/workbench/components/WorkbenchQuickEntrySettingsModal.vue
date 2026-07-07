@@ -104,6 +104,8 @@ const builtinCommonMenus: BuiltinMenuOption[] = [
 ];
 
 const props = defineProps<{
+  deferSave?: boolean;
+  entries?: WorkbenchQuickEntryInfo[];
   open: boolean;
   record?: WorkbenchQuickEntryInfo;
 }>();
@@ -111,6 +113,7 @@ const props = defineProps<{
 const emit = defineEmits<{
   'update:open': [value: boolean];
   success: [];
+  submit: [entry: WorkbenchQuickEntryInfo];
 }>();
 
 const accessStore = useAccessStore();
@@ -190,12 +193,26 @@ watch(
   },
 );
 
+watch(
+  () => props.entries,
+  () => {
+    if (props.open && props.deferSave) {
+      entries.value = cloneEntries(props.entries ?? []);
+    }
+  },
+  { deep: true },
+);
+
 function close() {
   emit('update:open', false);
 }
 
 async function prepareOpen() {
-  await loadEntries();
+  if (props.deferSave) {
+    entries.value = cloneEntries(props.entries ?? []);
+  } else {
+    await loadEntries();
+  }
   if (!props.open) {
     return;
   }
@@ -426,6 +443,10 @@ async function loadEntries() {
   entries.value = result.entries || [];
 }
 
+function cloneEntries(sourceEntries: WorkbenchQuickEntryInfo[]) {
+  return sourceEntries.map((entry) => ({ ...entry }));
+}
+
 function handleCancel() {
   resetForm();
   close();
@@ -504,7 +525,7 @@ async function handleSave() {
 
   saving.value = true;
   try {
-    await saveCurrentWorkbenchQuickEntry({
+    const payload: WorkbenchQuickEntryInfo = {
       config: { color: formState.color },
       entryName: validValues.entryName,
       entryType: formState.entryType,
@@ -522,7 +543,14 @@ async function handleSave() {
           : undefined,
       sortNo: formState.sortNo,
       status: 'enabled',
-    });
+    };
+    if (props.deferSave) {
+      emit('submit', payload);
+      resetForm();
+      close();
+      return;
+    }
+    await saveCurrentWorkbenchQuickEntry(payload);
     message.success(formState.id ? '快捷菜单已更新' : '快捷菜单已添加');
     resetForm();
     close();

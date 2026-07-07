@@ -7,7 +7,10 @@ import type {
 import type { Component } from 'vue';
 import type {
   WorkbenchCardOpenPayload,
+  WorkbenchQuickEntryActionPayload,
+  WorkbenchQuickEntryDraftChange,
   WorkbenchQuickEntryExpose,
+  WorkbenchQuickEntrySortSavePayload,
 } from '../types';
 
 import { computed, ref } from 'vue';
@@ -41,14 +44,15 @@ const props = defineProps<{
   error?: string;
   editing?: boolean;
   loading?: boolean;
+  quickEntryDraftChange?: WorkbenchQuickEntryDraftChange;
 }>();
 
 const emit = defineEmits<{
   openMessageItem: [payload: WorkbenchCardOpenPayload];
   openWorkflowItem: [payload: WorkbenchCardOpenPayload];
-  quickEntryAdd: [];
-  quickEntryEdit: [item: WorkbenchCardItem];
-  quickEntrySortSave: [items: WorkbenchCardItem[]];
+  quickEntryAdd: [payload: WorkbenchQuickEntryActionPayload];
+  quickEntryEdit: [payload: WorkbenchQuickEntryActionPayload];
+  quickEntrySortSave: [payload: WorkbenchQuickEntrySortSavePayload];
   refresh: [card: WorkbenchLayoutCard];
 }>();
 
@@ -161,9 +165,9 @@ const {
 });
 const quickEntry = useWorkbenchCardQuickEntry({
   items,
-  onAdd: () => emit('quickEntryAdd'),
-  onEdit: (item) => emit('quickEntryEdit', item),
-  onSortSave: (nextItems) => emit('quickEntrySortSave', nextItems),
+  onAdd: (payload) => emit('quickEntryAdd', payload),
+  onEdit: (payload) => emit('quickEntryEdit', payload),
+  onSortSave: (payload) => emit('quickEntrySortSave', payload),
   quickEntryCardRef: contentComponentRef,
 });
 const cardActions = useWorkbenchCardActions({
@@ -209,6 +213,7 @@ const contentProps = computed<Record<string, unknown>>(() => {
   }
   if (resolvedCard.value.cardCode === 'quick-entry') {
     return {
+      draftChange: props.quickEntryDraftChange,
       editing: quickEntry.editMode.value,
       items: items.value,
     };

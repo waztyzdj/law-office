@@ -29,6 +29,22 @@ export interface WorkbenchCardOpenPayload {
   item: WorkbenchCardItem;
 }
 
+export interface WorkbenchQuickEntryActionPayload {
+  draft: boolean;
+  item?: WorkbenchCardItem;
+  items: WorkbenchCardItem[];
+}
+
+export interface WorkbenchQuickEntryDraftChange {
+  item: WorkbenchCardItem;
+  seq: number;
+}
+
+export interface WorkbenchQuickEntrySortSavePayload {
+  items: WorkbenchCardItem[];
+  onSaved: () => void;
+}
+
 export interface WorkbenchQuickEntryExpose {
   getCurrentItems?: () => WorkbenchCardItem[];
   reset?: () => void;
