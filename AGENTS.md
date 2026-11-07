@@ -10,6 +10,11 @@
 - When a change touches both frontend and backend, follow both frontend and backend rules.
 - When a task involves database fields, enum values, status codes, permissions, menus, or field meanings, check `sql/建表脚本.sql` first and keep frontend, backend, SQL, and docs consistent.
 
+### Reading Boundary
+
+- This file is the single entry point for repository AI instructions. Read only the scoped files required by the task; do not recursively follow every cross-reference.
+- `frontend/AGENTS.md`, `backend/AGENTS.md`, and `docs/07-quality/coding-standards.md` are scoped rule sets, not prerequisites for one another. A reference to another file means “keep it consistent when the task requires it,” not “read that file and repeat this workflow.”
+
 ## Required Workflow
 
 1. Use `rg` / `rg --files` to find similar existing code before editing.
