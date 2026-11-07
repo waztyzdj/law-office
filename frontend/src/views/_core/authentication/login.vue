@@ -11,6 +11,7 @@ import { useAuthStore } from '#/store';
 defineOptions({ name: 'Login' });
 
 const authStore = useAuthStore();
+const loginSubtitle = import.meta.env.VITE_APP_LOGIN_SUBTITLE;
 
 const formSchema = computed((): VbenFormSchema[] => {
   return [
@@ -49,6 +50,7 @@ const formSchema = computed((): VbenFormSchema[] => {
   <AuthenticationLogin
     :form-schema="formSchema"
     :loading="authStore.loginLoading"
+    :sub-title="loginSubtitle"
     :show-code-login="false"
     :show-qrcode-login="false"
     :show-register="false"

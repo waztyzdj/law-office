@@ -46,6 +46,7 @@ import MessageDetailDrawer from '#/views/message/components/MessageDetailDrawer.
 
 const NOTIFICATION_PAGE_SIZE = 5;
 const NOTIFICATION_POLL_INTERVAL = 30_000;
+const appEnName = import.meta.env.VITE_APP_EN_TITLE;
 const MESSAGE_NOTIFICATION_UPDATED_EVENT =
   'lawoffice:message-notifications-updated';
 const MESSAGE_NOTIFICATION_REFRESH_EVENT =
@@ -528,6 +529,14 @@ watch(
 
 <template>
   <BasicLayout @clear-preferences-and-logout="handleLogout">
+    <template #logo-text>
+      <div class="flex flex-col leading-tight">
+        <span>{{ preferences.app.name }}</span>
+        <span class="text-center text-[10px] font-normal tracking-wide opacity-75">
+          {{ appEnName }}
+        </span>
+      </div>
+    </template>
     <template #user-dropdown>
       <LockModal
         v-if="preferences.widget.lockScreen"
